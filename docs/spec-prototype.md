@@ -133,7 +133,7 @@ ToolResult =
   3. 画素の指標では、外した物体の画素を、その物体の側の配列から除く（棟と画素は同じ決定で扱う）。
   4. 外した数を出す（`excluded_edge_objects` = 縁に接する数 + 重なりで外した数。内訳は `excluded_edge_detail`）。
 - 分割: 12 枚を、`tiles` の並び順の前半 6 枚（調整用）と後半 6 枚（評価用）に分ける。倍率（1.0/1.5/2.0）と閾値（0.3〜0.7）は**調整用だけ**で選び、評価用と全体を別に報告する。選んだ値は `run.json.params`。
-- `eval.json`: `{reference, split:{tune:[area_id], holdout:[area_id]}, sweep:[{scale,threshold,tune_object_f1,...}], chosen:{scale,threshold}, holdout:{pixel:{...}, object:{...}}, tune:{...}, per_area:[...], excluded_edge_objects:{reference,prediction}, new_building_recall:null, notes:[...]}`。`new_building_recall` は手ラベルが無いので **null**（UI は「未測定」と表示）。
+- `eval.json`: `{reference, split:{tune:[area_id], holdout:[area_id]}, sweep:[{scale,threshold,tune_object_f1,...}], chosen:{scale,threshold,selected_by}, holdout:{pixel:{...}, object:{...}}, tune:{...}, overall:{...}, per_area:[...], excluded_edge_objects:{reference,prediction}, excluded_edge_by_split:{...}, reference_detail:{...}, protocol:{year,...}, new_building_recall:null, notes:[...]}`。`overall` は 12 地区の合計の指標（`tune`・`holdout` と同じ形）、`excluded_edge_by_split` は縁の除外の数を調整用・評価用・全体に分けたもの、`protocol` は評価の取り決め（評価に使った写真の年 `year`、縁の除外の下限 `edge_overlap_min` など）、`reference_detail` は参照の素性。`new_building_recall` は手ラベルが無いので **null**（UI は「未測定」と表示）。
 - **任意項目**（追加のみ。既存の項目の形は変えない。読む側は、知らない項目を無視する）:
   - `excluded_edge_detail`: `{overall|tune|holdout: {reference:{touching_edge, overlapping_excluded_prediction}, prediction:{touching_edge, overlapping_excluded_reference}}}`。`excluded_edge_objects`・`excluded_edge_by_split` の内訳（足すと一致する）。
   - `year_compare`: 同じ参照・同じ設定（調整用で選んだ倍率・閾値）で、もう一方の年の写真の抽出を測った指標。`{selected_on_year:2018, compare_year:2023, setting:{scale,threshold}, by_year:{"2018":{tune,holdout,overall}, "2023":{tune,holdout,overall}}}`（各 `tune`・`holdout`・`overall` は `{pixel:{...}, object:{...}}`）。選択には使わない。評価の年 `protocol.year` は 2018 のまま、比べる年を `protocol.compare_year` に書く。
@@ -151,6 +151,10 @@ ToolResult =
 - 地図: 地理院タイルを直接読む（標準地図・2018 年の写真 `nendophoto2018`・2023 年の写真 `nendophoto2023`。帯の外・範囲外のタイルが 404 でも崩れない。出典の表示）。解析した 12 地区の枠を描く。候補のポリゴンを 3 分類の色（色だけに頼らず、形・線種・凡例でも区別）で描き、クリックで詳細。
 - 詳細（ドロワー）: 2018・2023 の切り出し画像を並べる（`/api/candidates/{id}/image`）、分類のバッジと平易な説明、根拠の数字（`evidence`）、「地図で見る」。
 - `/accuracy`: `/api/metrics` の数字。調整用／評価用の区別、「新築の再現率: 未測定」、閾値は未検証の初期値であることを書く。
+  - 見出しの数字（物体単位 F1・画素 IoU）には、**どの年の写真で測った値か**を明記する（`protocol.year`。無ければ 2018）。「再現率」は、「建物の抽出の再現率（基盤地図情報に対する値）」と「新築の再現率（未測定）」を、必ず修飾して書き分ける。
+  - `year_compare` があれば、もう一方の年の写真での値と、年で比べる表を出す。無い・形が違うときは、その部分を出さず、画面は落ちない。
+  - 限界欄に、`existing_absent_in_2018` から描く「2018 年の写真での見落とし」（既存の建物のうち、2018 年の抽出が何も見ていない割合。手ラベルの代わりにならない）、参照が写真より古い可能性（推定）と物体単位の適合率が合成値であること、年ごとの再現率の違い（数字だけ。原因は書かない）を載せる。数字はデータから描き、手書きにしない。
+  - 評価の内部のキー名（`pixel_iou` など）は、日本語の見出しにする。
 - `/about`: 使い方・3 分類の意味・限界（写真が無い期間・2018 年は帯状の範囲だけ・タイルの縁・誤検出の可能性）・出典と規約（地理院タイル、基盤地図情報、モデル `giswqs/whu-building-unetplusplus-efficientnet-b4`＝Apache-2.0・学習データ WHU の利用条件は不明）。「変化の当たり（衛星）」は未実装と書く。
 - ブラウザから API へは、同じオリジンの `/api/*`（Next の rewrites。転送先は実行時の環境変数 `API_URL`）。
 - 技術: Next.js（最新の安定版を、版を固定して）、React、TypeScript strict、Node 24、`output: "standalone"`。地図は Leaflet か MapLibre GL JS（版を固定。選んだ理由を 1 行）。`npm ci` で入れる（ロックファイルをコミット対象に含める）。
