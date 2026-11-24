@@ -59,7 +59,7 @@ npx -y -p node@24 -- sh -c 'API_URL=http://127.0.0.1:8599 PORT=3500 npm run dev'
 npx -y -p node@24 -- sh -c 'API_URL=http://127.0.0.1:8599 PORT=3500 HOSTNAME=127.0.0.1 npm start'
 ```
 
-`npm start` は `dev/start.mjs` を通す。standalone 出力（`.next/standalone/server.js`）には `.next/static`（CSS・JS）と `public`（アイコン）が入らないので、起動の前にそれらを `.next/standalone/` の下へ写す（`server.js` だけを実行すると、HTML は返っても CSS・JS が 404 になる）。Docker の `prebuilt`／`runtime` は Dockerfile の COPY で同じことをしている。
+`npm start` は `dev/start.ts` を通す（Node 24 の型除去でそのまま実行する。型は `npm run typecheck` が見る）。standalone 出力（`.next/standalone/server.js`）には `.next/static`（CSS・JS）と `public`（アイコン）が入らないので、起動の前にそれらを `.next/standalone/` の下へ写す（`server.js` だけを実行すると、HTML は返っても CSS・JS が 404 になる）。Docker の `prebuilt`／`runtime` は Dockerfile の COPY で同じことをしている。
 
 `MOCK_RUN_KIND=real` でバナーの無い状態、チャットに「エラーを起こして」と送ると 500（エラー表示の確認用）。
 

@@ -9,22 +9,23 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** static と public を standalone の下へ写し、server.js のパスを返す。ビルドが無ければ例外 */
-export function prepareStandalone(root) {
+export function prepareStandalone(root: string): string {
   const server = join(root, '.next', 'standalone', 'server.js');
   if (!existsSync(server)) {
     throw new Error('.next/standalone/server.js がありません。先に npm run build を実行してください。');
   }
-  for (const [from, to] of [
+  const copies: [from: string, to: string][] = [
     [join(root, '.next', 'static'), join(root, '.next', 'standalone', '.next', 'static')],
     [join(root, 'public'), join(root, '.next', 'standalone', 'public')],
-  ]) {
+  ];
+  for (const [from, to] of copies) {
     if (existsSync(from)) cpSync(from, to, { recursive: true, force: true });
   }
   return server;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  let server;
+  let server: string;
   try {
     server = prepareStandalone(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
   } catch (e) {
@@ -32,6 +33,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(1);
   }
   const child = spawn(process.execPath, [server], { stdio: 'inherit', env: process.env });
-  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => child.kill(sig));
+  const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+  for (const sig of signals) process.on(sig, () => child.kill(sig));
   child.on('exit', (code, signal) => process.exit(code ?? (signal ? 0 : 1)));
 }
