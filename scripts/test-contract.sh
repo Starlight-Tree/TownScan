@@ -3,7 +3,7 @@
 # 使い方: scripts/test-contract.sh [python|go] [pytest の引数...]   例: scripts/test-contract.sh python -k chat -x
 #   対象（省略時は python）: 契約を満たすことを確かめる API の実装。
 #     python  いまの API（backend/ のイメージの runtime）。
-#     go      Go の API（api/）。api/Dockerfile がまだ無いので、「未対応」と出して終わる（終了コード 2）。api/ ができたら、下の「対象」の節が使う。
+#     go      Go の API（api/）。既定はローカルの docunavi-dev でビルドして alpine に載せる（GO_IMAGE_BUILD=local。取得なし）。api/Dockerfile を使うなら GO_IMAGE_BUILD=dockerfile。
 #
 # やること（どの対象でも同じ。API のコードは、対象のイメージの中だけ。検査は HTTP だけで叩く）:
 #   1. イメージを作る: 検査を流すイメージ（contract/Dockerfile。pytest・PyJWT・Pillow だけで、アプリのコードは無い）、
@@ -36,7 +36,8 @@ esac
 PYTEST_ARGS=("$@")
 
 # ---- 名前・値（townscan-contract-* だけを作り、消す） ----
-PREFIX=townscan-contract
+# 同時に複数本流すときは、CONTRACT_PREFIX を変える（コンテナ・ネットワーク・ボリューム・イメージの名前の頭。前回の残りの片付けも、この名前のものだけ）
+PREFIX="${CONTRACT_PREFIX:-townscan-contract}"
 NET="$PREFIX-net"
 DB="$PREFIX-db"
 API="$PREFIX-api"
@@ -70,10 +71,27 @@ case "$TARGET" in
     TARGET_IMAGE="$PREFIX-api-go"
     if [ ! -f api/Dockerfile ]; then
       echo "未対応: 対象 go は、まだ流せません（Go の API。api/Dockerfile がありません）。" >&2
-      echo "        docs/decisions/0005-api-in-go.md の順序で api/ を作ったあと、この対象が使えます（api/Dockerfile の runtime ターゲットを使います）。" >&2
       exit 2
     fi
-    target_build() { docker build --quiet --target runtime -t "$TARGET_IMAGE" api >/dev/null; }
+    # GO_IMAGE_BUILD=local（既定）: ローカルにある docunavi-dev（Go 1.26.10）でバイナリを作り、ローカルの alpine に載せる（イメージの取得なし。モジュールは townscan-gomodcache から、ネットワークなし）。
+    # GO_IMAGE_BUILD=dockerfile: api/Dockerfile の runtime ターゲットを使う（golang・distroless の取得の承認が済んでから）。
+    case "${GO_IMAGE_BUILD:-local}" in
+      dockerfile) target_build() { docker build --quiet --target runtime -t "$TARGET_IMAGE" api >/dev/null; } ;;
+      local)
+        target_build() {
+          local out; out="$(mktemp -d "${TMPDIR:-/tmp}/townscan-contract-go.XXXXXX")"
+          docker run --rm --user "$(id -u):$(id -g)" --memory 1g --network none \
+            -e HOME=/tmp -e GOCACHE=/gocache -e GOMODCACHE=/gomod -e GOTOOLCHAIN=local -e GOPROXY=off -e CGO_ENABLED=0 \
+            -v townscan-gomodcache:/gomod -v tsgo-gobuildcache:/gocache -v "$PWD/api:/src:ro" -v "$out:/out" -w /src \
+            --entrypoint /usr/local/go/bin/go docunavi-dev build -trimpath -ldflags='-s -w' -o /out/api ./cmd/api \
+            || { rm -rf "$out"; echo "Go のビルドに失敗しました" >&2; return 1; }
+          printf 'FROM alpine:latest\nCOPY api /api\nUSER 65532:65532\nENTRYPOINT ["/api"]\n' > "$out/Dockerfile"
+          docker build --quiet -t "$TARGET_IMAGE" "$out" >/dev/null || { rm -rf "$out"; return 1; }
+          rm -rf "$out"
+        }
+        ;;
+      *) echo "GO_IMAGE_BUILD は local か dockerfile です（実際: ${GO_IMAGE_BUILD}）" >&2; exit 2 ;;
+    esac
     ;;
 esac
 

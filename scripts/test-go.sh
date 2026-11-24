@@ -23,9 +23,11 @@ UTIL_IMG=alpine:latest       # ボリュームの所有者の設定だけに使�
 PG_IMG=postgres:17
 MODCACHE=townscan-gomodcache
 BUILDCACHE=tsgo-gobuildcache
-DB=tsgo-test-db
-NET=tsgo-test-net
-RUNNER=tsgo-test-go
+# 同時に複数本流すときは、TSGO_TEST_PREFIX を変える（コンテナ・ネットワークの名前の頭。前回の残りの片付けも、この名前のものだけ）
+TSGO_TEST_PREFIX="${TSGO_TEST_PREFIX:-tsgo-test}"
+DB="$TSGO_TEST_PREFIX-db"
+NET="$TSGO_TEST_PREFIX-net"
+RUNNER="$TSGO_TEST_PREFIX-go"
 UIDGID="$(id -u):$(id -g)"
 
 for img in "$GO_IMG" "$UTIL_IMG" "$PG_IMG"; do
