@@ -12,8 +12,10 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
+import jwt_tokens
 import synthetic
-from app.config import Settings
+from app import jwt_auth
+from app.config import AuthConfig, Settings
 from app.db import apply_schema
 from app.load import read_run_dir, write_run
 from app.main import create_app
@@ -61,8 +63,8 @@ def loaded(conn):
     return parsed
 
 
-def make_client(db_url: str, tiles: Path) -> TestClient:
-    app = create_app(Settings(database_url=db_url, tiles_dir=tiles))
+def make_client(db_url: str, tiles: Path, auth: AuthConfig | None = None) -> TestClient:
+    app = create_app(Settings(database_url=db_url, tiles_dir=tiles, auth=auth))
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -77,4 +79,30 @@ def client(db_url, tiles_dir, conn, loaded):
 def empty_client(db_url, tiles_dir, conn):
     """データが 1 件も無い API。"""
     with make_client(db_url, tiles_dir) as c:
+        yield c
+
+
+@pytest.fixture
+def auth_config() -> AuthConfig:
+    """テスト用のログイン設定（jwt_tokens の発行元・JWKS の URL・対象）。"""
+    return AuthConfig(issuer=jwt_tokens.ISSUER, jwks_url=jwt_tokens.JWKS_URL, audience=jwt_tokens.AUDIENCE)
+
+
+@pytest.fixture
+def jwks_fetches(monkeypatch) -> list[str]:
+    """画面のサーバー（Better Auth）の代わり。JWKS の取得を、テスト用の鍵を返す関数に差し替える（取りに行った URL が、返すリストに残る）。"""
+    fetches: list[str] = []
+
+    def fake_fetch(url: str) -> dict:
+        fetches.append(url)
+        return jwt_tokens.jwks_document()
+
+    monkeypatch.setattr(jwt_auth, "fetch_jwks_document", fake_fetch)
+    return fetches
+
+
+@pytest.fixture
+def me_client(db_url, tiles_dir, conn, loaded, auth_config, jwks_fetches):
+    """ログインを設定した API（合成データつき。JWKS はテスト用の鍵）。"""
+    with make_client(db_url, tiles_dir, auth=auth_config) as c:
         yield c

@@ -1,5 +1,6 @@
 -- TownScan のスキーマ（Postgres 17。拡張なし）。何度流しても同じになる形（IF NOT EXISTS）。
 -- api の起動時とローダーの実行時に適用する（app/db.py の apply_schema。アドバイザリロックで同時実行を直列にする）。
+-- ログイン（Better Auth）の表は auth.sql。同じ仕組みで、このファイルのあとに、同じトランザクションで流す。
 --
 -- 仕様（docs/spec-prototype.md §4.3）からの違いは 1 点だけ: areas・candidates の主キーを (run_id, id) にした。
 -- id は run ごとに同じ値（z18-x-y、c-x-y-n）になるので、id 単独の主キーでは run を複数持てない。

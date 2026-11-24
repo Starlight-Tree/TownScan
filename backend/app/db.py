@@ -12,7 +12,12 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 
 log = logging.getLogger("townscan")
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
+DB_DIR = Path(__file__).resolve().parent.parent / "db"
+SCHEMA_PATH = DB_DIR / "schema.sql"
+# ログイン（web 側の Better Auth）の表。api が作り、web が読み書きする。schema.sql と同じく、何度流しても同じ（IF NOT EXISTS）
+AUTH_SCHEMA_PATH = DB_DIR / "auth.sql"
+# 適用する順。同じトランザクションで流す（途中で失敗したら、どちらも入らない）
+SCHEMA_PATHS = (SCHEMA_PATH, AUTH_SCHEMA_PATH)
 # 同時に流れても（api の起動とローダー）スキーマ適用が競合しないための鍵
 _SCHEMA_LOCK_KEY = 704_218_001
 
@@ -31,10 +36,13 @@ def make_pool(database_url: str, timeout: float = 10) -> ConnectionPool:
 
 
 def apply_schema(conn: psycopg.Connection) -> None:
-    sql = SCHEMA_PATH.read_text(encoding="utf-8")
+    """schema.sql と auth.sql を、1 つのトランザクションで流す。どちらも冪等（既存の表・行は変えない）なので、すでにあるボリュームにも、起動のたびに流してよい。
+    SQL の誤りは例外のまま出す（起動を止める）。"""
+    sqls = [path.read_text(encoding="utf-8") for path in SCHEMA_PATHS]
     with conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (_SCHEMA_LOCK_KEY,))
-        conn.execute(sql)
+        for sql in sqls:
+            conn.execute(sql)
 
 
 def wait_and_apply_schema(pool: ConnectionPool, attempts: int = 20, delay: float = 1.5) -> None:

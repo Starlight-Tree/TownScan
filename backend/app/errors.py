@@ -27,11 +27,12 @@ _STATUS_MESSAGES = {
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, headers: dict[str, str] | None = None):
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.headers = headers  # 応答に足すヘッダー（401 の WWW-Authenticate など）
 
 
 def error_body(code: str, message: str, **extra) -> dict:
@@ -41,7 +42,7 @@ def error_body(code: str, message: str, **extra) -> dict:
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError):
-        return JSONResponse(error_body(exc.code, exc.message), status_code=exc.status)
+        return JSONResponse(error_body(exc.code, exc.message), status_code=exc.status, headers=exc.headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException):

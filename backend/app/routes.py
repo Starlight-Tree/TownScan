@@ -12,11 +12,14 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import queries
+from .auth import NO_STORE_HEADERS, current_identity
 from .chat import service as chat_service
+from .chat.gemini_model import LLM_UNAVAILABLE_MESSAGE, LlmUnavailable
 from .chat.tools import image_url
 from .errors import ApiError
 from .explanations import explanation
 from .imaging import DEFAULT_SIZE, MAX_SIZE, MIN_SIZE, YEARS, TileUnavailable, render_candidate_image, tile_file
+from .jwt_auth import Identity
 from .provenance import SOURCE_ACCURACY, provenance
 
 log = logging.getLogger("townscan")
@@ -53,6 +56,8 @@ def health(request: Request):
         "run": None,
         "counts": {"areas": 0, "candidates": 0, "buildings": 0},
     }
+    if settings.llm_provider == "gemini":
+        body["llm_model"] = settings.gemini_model  # モデル名は出してよい（キーは出さない）
     try:
         with request.app.state.pool.connection() as conn:
             run = queries.current_run(conn)
@@ -64,6 +69,13 @@ def health(request: Request):
         body.update(status="error", db="error")
         return JSONResponse(body, status_code=503)
     return body
+
+
+@router.get("/api/me")
+def me(identity: Identity = Depends(current_identity)):
+    """ログイン中の人（Bearer の JWT を検証した結果）。無い・不正・期限切れは 401、認証が未設定・鍵を取れないときは 503。
+    アカウントのロジックの受け口で、ほかの入口はログインを要求しない。DB は使わない。"""
+    return JSONResponse(identity.as_dict(), headers=NO_STORE_HEADERS)
 
 
 @router.get("/api/areas")
@@ -182,4 +194,10 @@ def chat(body: ChatRequest, request: Request, conn: psycopg.Connection = Depends
     if last.role != "user" or not last.content.strip():
         raise ApiError(422, "validation_error", "最後のメッセージは、空でない user のメッセージである必要があります")
     messages = [m.model_dump() for m in body.messages]
-    return chat_service.answer(conn, request.app.state.registry, messages)
+    try:
+        return chat_service.answer(conn, request.app.state.registry, messages, request.app.state.llm)
+    except LlmUnavailable as exc:
+        # 実 LLM が使えないとき。模擬には切り替えない。ログと応答に出すのは、失敗の種類・HTTP のステータス・Google の理由の定数だけ
+        # （キー・URL・応答の本文は入れない）。frontend は {error:{code,message}} の message を「送信できませんでした」に出して、再送を出す
+        log.warning("LLM が応答できませんでした: 種別=%s HTTP=%s 理由=%s", exc.kind, exc.status, exc.reason)
+        raise ApiError(502, "llm_unavailable", LLM_UNAVAILABLE_MESSAGE) from None
