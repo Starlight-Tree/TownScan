@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # 検査をまとめて流す。CI（.github/workflows/ci.yml）と同じ入口。仕様: docs/spec-prototype.md §8（E1〜E4）
-# 使い方: scripts/verify.sh [repo|pipeline|backend|frontend|all]（省略時は all）
+# 使い方: scripts/verify.sh [repo|pipeline|backend|contract|frontend|all]（省略時は all）
 #   repo      版の整合・設定・構文・リンク。軽く、どこでも流せる。
 #   pipeline  pipeline/tests の単体テスト（pytest）。.python-version と同じ版の Python と、requirements.txt の依存が要る。
 #             見つからなければ、開発コンテナの venv（~/.venvs/townscan）でテストを流す（ホストから devcontainer exec）。
 #   backend   scripts/test-backend.sh（使い捨ての Postgres で pytest）。Docker が要る。開発コンテナの中では Docker が無いので流せない。
+#   contract  scripts/test-contract.sh python（API の契約の検査 contract/。使い捨ての Postgres と API を起動して HTTP で叩く）。Docker が要る。コンテナの中では流せない。
 #   frontend  frontend の npm ci → npm run verify（型検査・lint・テスト・next build）。Node 24 が要る。
 #             Node が 24 でなければ npx で Node 24 を得る。コンテナの中では流さない（Docker VM の空きメモリーが少ない。仕様 §2）。
 # 流せる環境が無い段（docker が無い・依存が入っていない・コンテナの中など）は、合格にせず「未実行（理由）」と出して失敗扱いにする。
@@ -105,6 +106,16 @@ check_backend() {
   fi
 }
 
+check_contract() {
+  if ! command -v docker >/dev/null 2>&1 || ! command -v openssl >/dev/null 2>&1; then
+    skip "contract（API の契約の検査）" "docker か openssl が無い。使い捨ての Postgres と API を docker で起動する。ホストか CI で流す"
+  elif ! docker info >/dev/null 2>&1; then
+    skip "contract（API の契約の検査）" "Docker が動いていない"
+  else
+    run "contract（API の契約の検査・使い捨ての Postgres と API）" bash scripts/test-contract.sh python
+  fi
+}
+
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true; }
 
 # Node $1 で npm ci → npm run verify（型検査 → lint → テスト → next build）。サブシェルなので cd は呼び出し元に残らない
@@ -134,14 +145,15 @@ run_stage() { # run_stage <名前> <ディレクトリ> <段の関数> — デ�
   if [ -d "$dir" ]; then "$fn"; else report+=("未実行 ${name}（${dir} がまだ無い）"); fi
 }
 
-usage() { echo "使い方: $0 [repo|pipeline|backend|frontend|all]" >&2; exit 2; }
+usage() { echo "使い方: $0 [repo|pipeline|backend|contract|frontend|all]" >&2; exit 2; }
 [ "$#" -le 1 ] || usage
-case "$target" in repo|pipeline|backend|frontend|all) ;; *) usage ;; esac
+case "$target" in repo|pipeline|backend|contract|frontend|all) ;; *) usage ;; esac
 
 selected() { [ "$target" = all ] || [ "$target" = "$1" ]; }
 if selected repo; then run "repo（版の整合・設定・構文・リンク）" check_repo; fi
 if selected pipeline; then run_stage "pipeline" pipeline check_pipeline; fi
 if selected backend; then run_stage "backend" backend check_backend; fi
+if selected contract; then run_stage "contract" contract check_contract; fi
 if selected frontend; then run_stage "frontend" frontend check_frontend; fi
 
 printf '%s\n' "${report[@]}"
