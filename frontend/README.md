@@ -16,6 +16,8 @@ cd frontend
 npx -y -p node@24 -- sh -c 'npm ci && npm run verify'   # 型検査 → lint → テスト → next build
 ```
 
+`next build` は、書体 Inter を Google Fonts（fonts.googleapis.com・fonts.gstatic.com）からビルド時に取得する（`next/font/google`。JobNavi・DocuNavi と同じ）。ビルドの環境は外部に出られること。実行時には出ない。
+
 ## 画面を確かめる（スタブ API）
 
 ```sh

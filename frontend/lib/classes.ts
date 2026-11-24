@@ -4,6 +4,9 @@ import type { CandidateClass, CandidateReason, RefusalReason } from './api-types
 export interface ClassInfo {
   label: string;
   short: string;
+  /** 色の CSS 変数の名前。値は app/globals.css にだけある（ライト・ダークで違う。TS には色を書かない） */
+  cssVar: string;
+  /** CSS・SVG の style に渡す参照（`var(--class-new)`）。地図の線は、lib/theme-colors.ts の readCssColor(cssVar) で実際の値を読む */
   color: string;
   /** SVG の stroke-dasharray。undefined は実線 */
   dash: string | undefined;
@@ -17,7 +20,8 @@ export const CLASS_INFO: Record<CandidateClass, ClassInfo> = {
   confirmed_new: {
     label: '新規出現（旧写真に無い）',
     short: '新規出現',
-    color: '#C2410C',
+    cssVar: '--class-new',
+    color: 'var(--class-new)',
     dash: undefined,
     shape: 'circle',
     fillOpacity: 0.38,
@@ -28,7 +32,8 @@ export const CLASS_INFO: Record<CandidateClass, ClassInfo> = {
   existing_omission: {
     label: '既存の描き漏れ（旧写真に既にある）',
     short: '既存の描き漏れ',
-    color: '#1D5FD1',
+    cssVar: '--class-omit',
+    color: 'var(--class-omit)',
     dash: '7 5',
     shape: 'square',
     fillOpacity: 0.2,
@@ -39,7 +44,8 @@ export const CLASS_INFO: Record<CandidateClass, ClassInfo> = {
   uncertain: {
     label: '判定保留',
     short: '判定保留',
-    color: '#7C3AED',
+    cssVar: '--class-unc',
+    color: 'var(--class-unc)',
     dash: '1.5 5',
     shape: 'triangle',
     fillOpacity: 0.1,

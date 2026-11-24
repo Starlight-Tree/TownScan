@@ -149,7 +149,7 @@ function DetailBody({ detail, onShowOnMap }: { detail: CandidateDetail; onShowOn
                   {text}
                   {f.kind !== 'bool' && (
                     <span className="bar bar--mini evidence__bar" aria-hidden="true">
-                      <span className="bar__fill" style={{ width: `${Math.min(100, Math.max(0, Number(raw) * 100))}%`, background: 'var(--brand)' }} />
+                      <span className="bar__fill" style={{ width: `${Math.min(100, Math.max(0, Number(raw) * 100))}%`, background: 'var(--primary)' }} />
                     </span>
                   )}
                 </dd>

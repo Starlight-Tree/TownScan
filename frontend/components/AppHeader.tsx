@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useHealth } from './HealthProvider';
+import { ThemeSwitch } from './ThemeSwitch';
 
 const NAV = [
   { href: '/', label: 'チャットと地図' },
@@ -36,9 +37,12 @@ export function AppHeader() {
             );
           })}
         </nav>
-        <div className="app-header__status" aria-live="polite">
-          {health?.llm === 'mock' && <span className="pill pill--warn">模擬モデルで応答しています</span>}
-          {health && health.llm !== 'mock' && <span className="pill">モデル: {health.llm}</span>}
+        <div className="app-header__tools">
+          <div className="app-header__status" aria-live="polite">
+            {health?.llm === 'mock' && <span className="pill pill--warn">模擬モデルで応答しています</span>}
+            {health && health.llm !== 'mock' && <span className="pill">モデル: {health.llm}</span>}
+          </div>
+          <ThemeSwitch />
         </div>
       </header>
       {synthetic && (

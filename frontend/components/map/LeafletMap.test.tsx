@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { CandidateFeature } from '../../lib/api-types';
@@ -14,6 +14,7 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete document.documentElement.dataset.theme;
 });
 
 function feature(id: string, cls: CandidateFeature['properties']['class'], dx: number): CandidateFeature {
@@ -150,5 +151,133 @@ describe('Leaflet の地図', () => {
     const host = container.querySelector('.leaflet-host')!;
     unmount();
     expect(host.querySelector('.leaflet-pane')).toBeNull();
+  });
+});
+
+// jsdom には CSS が無く、変数は空になる。テーマごとの値を返す getComputedStyle に差し替えて、Leaflet に渡る色を確かめる
+const THEME_VALUES: Record<'light' | 'dark', Record<string, string>> = {
+  light: {
+    '--class-new': '#c2410c',
+    '--class-omit': '#047857',
+    '--class-unc': '#9c27b0',
+    '--map-casing': '#ffffff',
+    '--map-frame': '#111827',
+    '--map-select': '#facc15',
+    '--map-highlight': '#fde047',
+  },
+  dark: {
+    '--class-new': '#ff8a57',
+    '--class-omit': '#34d399',
+    '--class-unc': '#e879f9',
+    '--map-casing': '#0d1014',
+    '--map-frame': '#e6e8eb',
+    '--map-select': '#facc15',
+    '--map-highlight': '#fde047',
+  },
+};
+
+function stubThemeStyles() {
+  const original = window.getComputedStyle.bind(window);
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element, pseudo?: string | null) => {
+    if (el !== document.documentElement) return original(el, pseudo);
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    return { getPropertyValue: (name: string) => THEME_VALUES[theme][name] ?? '' } as unknown as CSSStyleDeclaration;
+  });
+}
+
+const strokes = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('.leaflet-overlay-pane path')).map((p) => p.getAttribute('stroke'));
+
+describe('地図の色（テーマ）', () => {
+  it('線・塗り・縁は、CSS の変数から読んだ値で描く（TS に色の値を持たない）', () => {
+    stubThemeStyles();
+    const { container } = render(<LeafletMap {...props()} />);
+    const s = strokes(container);
+    // 候補 3 件の本線（3 分類の色）、縁（--map-casing）、地区の枠（--map-frame）
+    expect(s).toEqual(expect.arrayContaining(['#c2410c', '#047857', '#9c27b0', '#ffffff', '#111827']));
+    expect(container.querySelectorAll('.leaflet-overlay-pane path[fill="#c2410c"]')).toHaveLength(1);
+  });
+
+  it('変数が読めない環境でも、var(--…) をそのまま渡して落ちない', () => {
+    const { container } = render(<LeafletMap {...props()} />);
+    expect(strokes(container)).toEqual(expect.arrayContaining(['var(--class-new)', 'var(--class-omit)', 'var(--class-unc)', 'var(--map-casing)']));
+  });
+
+  it('テーマを切り替えると、線・塗り・縁・地区の枠を、新しいテーマの値で描き直す', async () => {
+    stubThemeStyles();
+    const { container } = render(<LeafletMap {...props()} />);
+    expect(strokes(container)).toContain('#c2410c');
+    act(() => {
+      document.documentElement.dataset.theme = 'dark';
+    });
+    await waitFor(() => expect(strokes(container)).toContain('#ff8a57'));
+    const dark = strokes(container);
+    expect(dark).toEqual(expect.arrayContaining(['#ff8a57', '#34d399', '#e879f9', '#0d1014', '#e6e8eb']));
+    expect(dark).not.toContain('#c2410c');
+    expect(dark).not.toContain('#ffffff');
+    expect(dark).not.toContain('#111827');
+    // 描き直しても、本数は増えも減りもしない
+    expect(container.querySelectorAll('.leaflet-overlay-pane path')).toHaveLength(8);
+
+    act(() => {
+      delete document.documentElement.dataset.theme;
+    });
+    await waitFor(() => expect(strokes(container)).toContain('#c2410c'));
+  });
+
+  it('OS の設定が変わったとき（システムのまま追従しているとき）も、描き直す', async () => {
+    stubThemeStyles();
+    let listener: (() => void) | null = null;
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: (_type: string, fn: () => void) => {
+        listener = fn;
+      },
+      removeEventListener: () => {
+        listener = null;
+      },
+    }));
+    const { container, unmount } = render(<LeafletMap {...props()} />);
+    expect(listener).not.toBeNull();
+    expect(strokes(container)).toContain('#c2410c');
+    // OS がダークに変わると、CSS が変数の値を替える。ここでは、getComputedStyle の返す値を替えて再現する
+    document.documentElement.dataset.theme = 'dark';
+    await waitFor(() => expect(strokes(container)).toContain('#ff8a57'));
+    unmount();
+    expect(listener).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('選んだ候補には黄色の輪を足し、外すと取り除く。強調は別の黄色。輪は専用の pane（輪郭より下）に描く', () => {
+    stubThemeStyles();
+    const { container, rerender } = render(<LeafletMap {...props()} />);
+    const overlay = () => container.querySelectorAll('.leaflet-overlay-pane path');
+    const ring = () => container.querySelectorAll('.leaflet-ring-pane path');
+    const ringStrokes = () => Array.from(ring()).map((p) => p.getAttribute('stroke'));
+    expect(overlay()).toHaveLength(8); // 普通の候補は縁と本線の 2 本だけ
+    expect(ring()).toHaveLength(0);
+
+    rerender(<LeafletMap {...props({ selectedId: 'c-1-2-1', highlightIds: new Set(['c-1-2-3']) })} />);
+    expect(overlay()).toHaveLength(8); // 輪は輪郭の pane に入らない（追加の順に依らず、輪郭の下に固定される）
+    expect(ring()).toHaveLength(2);
+    const pane = container.querySelector<HTMLElement>('.leaflet-ring-pane')!;
+    expect(Number(pane.style.zIndex)).toBeLessThan(400); // 輪郭の pane（overlayPane = 400）より下
+    expect(ringStrokes()).toContain('#facc15'); // 選んだ候補
+    expect(ringStrokes()).toContain('#fde047'); // 強調した候補
+
+    rerender(<LeafletMap {...props()} />);
+    expect(overlay()).toHaveLength(8);
+    expect(ring()).toHaveLength(0);
+    expect(ringStrokes()).not.toContain('#facc15');
+  });
+
+  it('ツールチップに色を直接指定しない（テーマの CSS に従う。文字として組む作りも変えない）', () => {
+    const { container } = render(<LeafletMap {...props({ features: [] })} />);
+    const frame = Array.from(container.querySelectorAll<SVGPathElement>('.leaflet-overlay-pane path.leaflet-interactive')).at(-1)!;
+    fireEvent.mouseOver(frame, { clientX: 100, clientY: 100 });
+    const tip = container.querySelector('.leaflet-tooltip');
+    expect(tip).not.toBeNull();
+    expect(tip!.getAttribute('style') ?? '').not.toMatch(/background|color/);
   });
 });

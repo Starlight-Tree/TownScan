@@ -27,7 +27,7 @@ function SyntheticChip({ kind }: { kind: string }) {
 }
 
 function barColor(key: string): string {
-  return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--brand)';
+  return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--primary)';
 }
 
 // ---- 件数 ----
@@ -155,7 +155,7 @@ export function CompareCard({ result }: { result: CompareResult }) {
   const max = Math.max(1, ...result.items.flatMap((i) => Object.entries(i.counts).filter(([k]) => k !== 'total').map(([, v]) => v)));
   const columns = [
     ...CLASS_ORDER.map((k) => ({ key: k as string, label: CLASS_INFO[k].short, color: CLASS_INFO[k].color })),
-    ...[...extraKeys].map((k) => ({ key: k, label: k, color: 'var(--brand)' })),
+    ...[...extraKeys].map((k) => ({ key: k, label: k, color: 'var(--primary)' })),
   ];
   return (
     <section className="result-card" aria-label={result.title}>

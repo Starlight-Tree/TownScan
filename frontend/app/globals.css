@@ -1,29 +1,142 @@
-/* TownScan: たたき台のスタイル。色・余白は変数にまとめる。ライトのみ */
+/* TownScan: たたき台のスタイル。配色・テーマ・書体は JobNavi・DocuNavi と同じ仕組み（変数の名前と値は JobNavi の app/globals.css にそろえている）。
+   色は、この先頭の変数の定義だけに書く。本体の規則は var(--…) だけを使い、色（#xxxxxx・rgb()・rgba()）を直書きしない（lib/theme.test.ts が落とす）。
+   半透明は color-mix()、影は --shadow で作る */
 :root {
-  color-scheme: light;
-  --bg: #f4f5f2;
+  color-scheme: light dark; /* 手動で選んだときは、下の data-theme が上書きする */
+
+  /* 配色は JobNavi・DocuNavi と同じ（無彩色に近い灰色の地に、青を 1 色だけ）。変数の名前は、JobNavi のまま */
+  --bg: #f6f7f9;
   --surface: #ffffff;
-  --soft: #eef2ef;
-  --border: #d9ddd8;
-  --border-strong: #8a948d;
-  --text: #1b2421;
-  --muted: #55615b;
-  --brand: #0f5c4d;
-  --brand-dark: #0a3f35;
-  --brand-soft: #e3efe9;
-  --focus: #0b63ce;
-  --new: #c2410c;
-  --omit: #1d5fd1;
-  --unc: #7c3aed;
+  --surface-muted: #eef0f3;
+  --border: #e1e4e9;
+  --border-soft: #eceef1;
+  --text: #1f2328;
+  --muted: #5c6470;
+  --faint: #6a717c;
+  --primary: #2c4fcf;
+  --primary-dark: #1f3bab;
+  --tag-bg: #e9eefc;
+  --tag-text: #1f3bab;
+  --accent: #d9480f;
+  --focus: #c2610c;
+  --error: #b3261e;
+  --error-text: #7a1717;
+  --error-bg: #fdecec;
+  --error-border: #f0a8a8;
+  --on-primary: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #8a919b;
+  --danger: #a32020;
+  --shadow: rgba(15, 18, 22, 0.14);
+  --radius: 12px;
+  /* 欧文は Inter、日本語は Noto Sans JP の可変フォント（どちらも app/layout.tsx が読み込む）。読み込み前・失敗時は、OS の標準書体 */
+  --font: var(--font-inter), 'Noto Sans JP Variable', system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
+
+  /* ここから TownScan 固有。3 分類の色（文字にも図形にも使うので、--surface に対して 4.5:1 以上。主色の青と紛れないよう、橙・青緑・紫にした）。
+     色だけに頼らず、線の種類と形でも区別する（lib/classes.ts。凡例・印・地図の線）。値は lib/classes.ts から var() で参照する */
+  --class-new: #c2410c; /* 新規出現（橙・実線・円） */
+  --class-omit: #047857; /* 既存の描き漏れ（青緑・破線・四角） */
+  --class-unc: #9c27b0; /* 判定保留（紫・点線・三角） */
+  /* 警告の表示（模擬モデル・合成データ・結果なし）。--warn-strong-* と --warn-accent は、合成データのバナーのように、特に目立たせる所 */
   --warn-bg: #fff1dc;
   --warn-border: #f0c98f;
   --warn-text: #7a3b00;
-  --error-bg: #fdecec;
-  --error-border: #e8a0a0;
-  --error-text: #8a1c1c;
-  --radius: 12px;
-  --font: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans CJK JP', Meiryo, system-ui, sans-serif;
+  --warn-strong-bg: #ffe9b8;
+  --warn-strong-border: #e0a73a;
+  --warn-accent: #c26a00;
+  /* 地図の上の線・印。背景が航空写真なので、色だけでなく「縁取り」で見せる。--map-casing は、候補の線・印の下に敷く縁（線の色の反対側。ライトは白、ダークは黒に近い色）。
+     --map-frame は地区の枠の線と、選択した印の外の輪。--map-select・--map-highlight は、選択・強調の輪（黄色。写真の上で目立つので、ライトとダークで同じ） */
+  --map-casing: #ffffff;
+  --map-frame: #111827;
+  --map-select: #facc15;
+  --map-highlight: #fde047;
 }
+
+/* ダークの値は、OS 追従（手動でライトを選んでいない間）と、手動でダークを選んだとき（data-theme）の 2 か所に、同じ内容を書く。CSS では共有できないので、変えるときは両方（theme.test.ts が一致を確かめる）。
+   ダークの --primary は明るい青（文字・枠・リンクの色）。その上の文字は --on-primary（暗い色）。--primary-dark は、ダークでは「ホバーで明るく」の値 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #15171b;
+    --surface: #1b1d21;
+    --surface-muted: #22252a;
+    --border: #2a2e35;
+    --border-soft: #22252a;
+    --text: #e6e8eb;
+    --muted: #9aa1ab;
+    --faint: #8a919b;
+    --primary: #8aa2ff;
+    --primary-dark: #a9baff;
+    --tag-bg: #232a45;
+    --tag-text: #c9d4ff;
+    --accent: #ff8a57;
+    --focus: #f2a65a;
+    --error: #ff8a80;
+    --error-text: #ffd5d9;
+    --error-bg: #3a1c20;
+    --error-border: #8f3a44;
+    --on-primary: #101319;
+    --input-bg: #15171b;
+    --input-border: #6a717c;
+    --danger: #ff8a80;
+    --shadow: rgba(0, 0, 0, 0.55);
+    --class-new: #ff8a57;
+    --class-omit: #34d399;
+    --class-unc: #e879f9;
+    --warn-bg: #3a2a12;
+    --warn-border: #8a6a2a;
+    --warn-text: #ffd9a0;
+    --warn-strong-bg: #4a3210;
+    --warn-strong-border: #b8862d;
+    --warn-accent: #f0a64a;
+    --map-casing: #0d1014;
+    --map-frame: #e6e8eb;
+    --map-select: #facc15;
+    --map-highlight: #fde047;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #15171b;
+  --surface: #1b1d21;
+  --surface-muted: #22252a;
+  --border: #2a2e35;
+  --border-soft: #22252a;
+  --text: #e6e8eb;
+  --muted: #9aa1ab;
+  --faint: #8a919b;
+  --primary: #8aa2ff;
+  --primary-dark: #a9baff;
+  --tag-bg: #232a45;
+  --tag-text: #c9d4ff;
+  --accent: #ff8a57;
+  --focus: #f2a65a;
+  --error: #ff8a80;
+  --error-text: #ffd5d9;
+  --error-bg: #3a1c20;
+  --error-border: #8f3a44;
+  --on-primary: #101319;
+  --input-bg: #15171b;
+  --input-border: #6a717c;
+  --danger: #ff8a80;
+  --shadow: rgba(0, 0, 0, 0.55);
+  --class-new: #ff8a57;
+  --class-omit: #34d399;
+  --class-unc: #e879f9;
+  --warn-bg: #3a2a12;
+  --warn-border: #8a6a2a;
+  --warn-text: #ffd9a0;
+  --warn-strong-bg: #4a3210;
+  --warn-strong-border: #b8862d;
+  --warn-accent: #f0a64a;
+  --map-casing: #0d1014;
+  --map-frame: #e6e8eb;
+  --map-select: #facc15;
+  --map-highlight: #fde047;
+}
+
+/* ブラウザー側の部品（スクロールバー・フォーム）の配色も、選んだテーマに合わせる */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 
 *,
 *::before,
@@ -63,11 +176,11 @@ ol {
 }
 
 a {
-  color: var(--brand);
+  color: var(--primary);
 }
 
 a:hover {
-  color: var(--brand-dark);
+  color: var(--primary-dark);
 }
 
 button,
@@ -80,7 +193,7 @@ select {
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
-  background: var(--soft);
+  background: var(--surface-muted);
   border-radius: 4px;
   padding: 0 4px;
   overflow-wrap: anywhere;
@@ -108,8 +221,8 @@ code {
   left: 8px;
   top: -64px;
   z-index: 3000;
-  background: var(--brand);
-  color: #fff;
+  background: var(--primary);
+  color: var(--on-primary);
   padding: 10px 16px;
   border-radius: 8px;
   text-decoration: none;
@@ -192,13 +305,13 @@ code {
 }
 
 .nav-link:hover {
-  background: var(--soft);
+  background: var(--surface-muted);
   color: var(--text);
 }
 
 .nav-link[aria-current='page'] {
-  background: var(--brand-soft);
-  color: var(--brand-dark);
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-weight: 700;
 }
 
@@ -206,13 +319,32 @@ code {
   min-height: 28px;
 }
 
+/* ヘッダーの右端: 状態の表示と、テーマの切り替え（JobNavi と同じ部品）。狭いと、まとめて次の行へ折り返す */
+.app-header__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  margin-left: auto;
+}
+
+/* テーマの切り替え（ライト / ダーク / システム）。JobNavi の .theme-switch と同じ規則。ヘッダーでは、アイコンの名前（aria-label・title）で足りるので、見出しの文字は出さない */
+.theme-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.theme-switch-label { font-size: 13px; color: var(--muted); }
+.theme-switch-options { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.theme-switch-option { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.theme-switch-option:hover { color: var(--text); }
+.theme-switch-option[aria-pressed='true'] { background: var(--tag-bg); color: var(--tag-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
+.app-header .theme-switch-label { display: none; }
+
 .pill {
   display: inline-block;
   font-size: 12px;
   line-height: 1.5;
   padding: 3px 12px;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
 }
@@ -233,18 +365,18 @@ code {
 .pill--year {
   padding: 0 10px;
   font-size: 12px;
-  background: var(--brand-soft);
-  border-color: var(--brand);
-  color: var(--brand-dark);
+  background: var(--tag-bg);
+  border-color: var(--primary);
+  color: var(--tag-text);
   font-weight: 700;
 }
 
 .pill--mark {
   padding: 0 8px;
   font-size: 11px;
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
 }
 
 .banner {
@@ -258,10 +390,10 @@ code {
 }
 
 .banner--synthetic {
-  background: #ffe9b8;
-  border-color: #e0a73a;
-  color: #5c2d00;
-  border-left: 8px solid #c26a00;
+  background: var(--warn-strong-bg);
+  border-color: var(--warn-strong-border);
+  color: var(--warn-text);
+  border-left: 8px solid var(--warn-accent);
 }
 
 .banner--error {
@@ -271,7 +403,7 @@ code {
 }
 
 p.banner {
-  border: 1px solid #e0a73a;
+  border: 1px solid var(--warn-strong-border);
   border-radius: 10px;
   margin: 12px 0;
 }
@@ -285,16 +417,16 @@ p.banner {
   min-height: 44px;
   padding: 0 16px;
   border-radius: 8px;
-  border: 1px solid var(--brand);
+  border: 1px solid var(--primary);
   background: var(--surface);
-  color: var(--brand);
+  color: var(--primary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--brand-soft);
+  background: var(--tag-bg);
 }
 
 .btn:disabled {
@@ -303,12 +435,12 @@ p.banner {
 }
 
 .btn--primary {
-  background: var(--brand);
-  color: #fff;
+  background: var(--primary);
+  color: var(--on-primary);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--brand-dark);
+  background: var(--primary-dark);
 }
 
 .btn--small {
@@ -322,10 +454,15 @@ p.banner {
 .select {
   min-height: 44px;
   padding: 0 12px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--input-bg);
+  color: var(--text);
   font-size: 15px;
+}
+
+.input::placeholder {
+  color: var(--faint);
 }
 
 .input {
@@ -341,7 +478,7 @@ p.banner {
   min-height: 44px;
   padding: 8px 14px;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--input-border);
   background: var(--surface);
   font-size: 14px;
   text-align: left;
@@ -349,8 +486,8 @@ p.banner {
 }
 
 .chip:hover:not(:disabled) {
-  background: var(--brand-soft);
-  border-color: var(--brand);
+  background: var(--tag-bg);
+  border-color: var(--primary);
 }
 
 .chip:disabled {
@@ -369,16 +506,16 @@ p.banner {
   min-height: 44px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--input-border);
   background: var(--surface);
   font-size: 13px;
   cursor: pointer;
 }
 
 .seg-btn[aria-pressed='true'] {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
   font-weight: 700;
 }
 
@@ -395,7 +532,7 @@ p.banner {
 .legend input {
   width: 18px;
   height: 18px;
-  accent-color: var(--brand);
+  accent-color: var(--primary);
 }
 
 /* ---- 画面 `/` ---- */
@@ -491,8 +628,8 @@ p.banner {
 .msg--user {
   align-self: flex-end;
   max-width: 88%;
-  background: var(--brand);
-  color: #fff;
+  background: var(--primary);
+  color: var(--on-primary);
   border-radius: 12px 12px 2px 12px;
   padding: 10px 14px;
   overflow-wrap: anywhere;
@@ -500,7 +637,7 @@ p.banner {
 
 .msg--failed {
   /* 色だけに頼らず、破線の枠でも「未送信」を示す。不透明度は下げない（文字の対比を保つ） */
-  outline: 2px dashed var(--error-border);
+  outline: 2px dashed var(--error);
   outline-offset: 2px;
 }
 
@@ -549,7 +686,7 @@ p.banner {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--brand);
+  background: var(--primary);
   animation: blink 1.2s infinite ease-in-out;
 }
 
@@ -595,13 +732,13 @@ p.banner {
 
 .welcome__lead {
   font-size: 14px;
-  color: #3c4742;
+  color: var(--muted);
 }
 
 .welcome__facts {
   display: grid;
   gap: 8px;
-  background: var(--soft);
+  background: var(--surface-muted);
   border-radius: 10px;
   padding: 12px 14px;
   font-size: 13px;
@@ -695,7 +832,7 @@ p.banner {
   font-size: 40px;
   font-weight: 700;
   line-height: 1.1;
-  color: var(--brand);
+  color: var(--primary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -732,7 +869,7 @@ p.banner {
 .bar {
   display: block;
   height: 14px;
-  background: var(--soft);
+  background: var(--surface-muted);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -764,21 +901,21 @@ p.banner {
   text-align: left;
   font-weight: 700;
   padding: 8px 10px;
-  background: var(--soft);
+  background: var(--surface-muted);
 }
 
 .data-table th,
 .data-table td {
   text-align: left;
   padding: 7px 10px;
-  border-top: 1px solid #e3e7e2;
+  border-top: 1px solid var(--border-soft);
   vertical-align: middle;
   white-space: nowrap;
 }
 
 .data-table thead th {
   border-top: 0;
-  background: var(--soft);
+  background: var(--surface-muted);
   color: var(--muted);
   font-weight: 500;
 }
@@ -811,7 +948,7 @@ p.banner {
 }
 
 .data-table tr.is-chosen td {
-  background: var(--brand-soft);
+  background: var(--tag-bg);
   font-weight: 700;
 }
 
@@ -863,7 +1000,7 @@ p.banner {
 
 .metric-tile--none {
   border-style: dashed;
-  border-color: var(--border-strong);
+  border-color: var(--input-border);
 }
 
 .metric-tile__label {
@@ -933,7 +1070,7 @@ p.banner {
   min-height: 32px;
   display: flex;
   align-items: center;
-  color: var(--brand);
+  color: var(--primary);
   font-weight: 500;
 }
 
@@ -944,7 +1081,7 @@ p.banner {
   background: var(--bg);
   border-radius: 8px;
   padding: 10px 12px;
-  color: #3c4742;
+  color: var(--muted);
   line-height: 1.7;
 }
 
@@ -997,7 +1134,7 @@ p.banner {
 .cand-image__frame {
   position: relative;
   aspect-ratio: 1;
-  background: var(--soft);
+  background: var(--surface-muted);
   border-radius: 8px;
   overflow: hidden;
   display: flex;
@@ -1006,7 +1143,7 @@ p.banner {
 }
 
 .cand-image__frame[data-state='loading'] {
-  background: linear-gradient(90deg, var(--soft), #e4eae6, var(--soft));
+  background: linear-gradient(90deg, var(--surface-muted), var(--border), var(--surface-muted));
 }
 
 .cand-image__frame img {
@@ -1027,8 +1164,8 @@ p.banner {
   position: absolute;
   left: 8px;
   top: 8px;
-  background: #1b2421;
-  color: #fff;
+  background: var(--text);
+  color: var(--bg);
   font-size: 12px;
   padding: 1px 10px;
   border-radius: 999px;
@@ -1074,7 +1211,7 @@ p.banner {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #dfe5e1;
+  background: var(--surface-muted);
 }
 
 .leaflet-host {
@@ -1083,19 +1220,74 @@ p.banner {
   z-index: 0;
 }
 
-.leaflet-container {
+.leaflet-host:focus-visible {
+  outline-offset: -3px; /* 外側に描くと、親の overflow: hidden に切られて見えない。内側へ描く */
+}
+
+/* leaflet.css は、このファイルより後に読み込まれることがある。色と書体を確実に効かせるため、Leaflet 既定と同じ強さのセレクターは使わない */
+.leaflet-host.leaflet-container {
   font-family: var(--font);
+  background: var(--surface-muted); /* タイルが届くまでの地の色。Leaflet 既定の灰色を、テーマに合わせる */
 }
 
 .leaflet-control-attribution {
   font-size: 12px !important;
-  background: rgba(255, 255, 255, 0.92) !important;
-  color: #1b2421;
+  background: color-mix(in srgb, var(--surface) 92%, transparent) !important;
   padding: 2px 8px !important;
 }
 
-.leaflet-control-attribution a {
-  color: var(--brand);
+.leaflet-container .leaflet-control-attribution {
+  color: var(--text);
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: var(--primary);
+}
+
+/* Leaflet 既定の部品（拡大縮小ボタン・ツールチップ）は、白地に黒文字の直書き。テーマに追従させる。
+   leaflet.css との読み込み順に左右されないよう、セレクターを一段重くしてある */
+.leaflet-container .leaflet-bar.leaflet-control {
+  border-color: var(--border);
+  box-shadow: 0 1px 5px var(--shadow);
+}
+
+.leaflet-container .leaflet-bar a {
+  background-color: var(--surface);
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+
+.leaflet-container .leaflet-bar a:hover,
+.leaflet-container .leaflet-bar a:focus {
+  background-color: var(--surface-muted);
+}
+
+.leaflet-container .leaflet-bar a.leaflet-disabled {
+  background-color: var(--surface-muted);
+  color: var(--faint);
+}
+
+.leaflet-container .leaflet-tooltip {
+  background-color: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+.leaflet-container .leaflet-tooltip-top::before {
+  border-top-color: var(--border);
+}
+
+.leaflet-container .leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--border);
+}
+
+.leaflet-container .leaflet-tooltip-left::before {
+  border-left-color: var(--border);
+}
+
+.leaflet-container .leaflet-tooltip-right::before {
+  border-right-color: var(--border);
 }
 
 .map-placeholder {
@@ -1117,7 +1309,7 @@ p.banner {
   margin: 0;
   max-width: min(320px, calc(100% - 24px));
   padding: 6px 10px 8px;
-  background: rgba(255, 255, 255, 0.96);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 12px;
@@ -1160,7 +1352,7 @@ p.banner {
 .map-note {
   pointer-events: auto;
   max-width: 100%;
-  background: rgba(255, 255, 255, 0.96);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 4px 12px;
@@ -1187,7 +1379,7 @@ p.banner {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 13px;
-  color: #3c4742;
+  color: var(--muted);
 }
 
 .map-status__hint {
@@ -1212,7 +1404,7 @@ p.banner {
   display: flex;
   align-items: center;
   font-weight: 500;
-  color: var(--brand);
+  color: var(--primary);
 }
 
 .cand-list__items {
@@ -1239,7 +1431,7 @@ p.banner {
 }
 
 .cand-list__item:hover {
-  background: var(--brand-soft);
+  background: var(--tag-bg);
 }
 
 .cand-list__area {
@@ -1275,9 +1467,9 @@ p.banner {
   height: 18px;
   margin: 2px;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--c) 40%, #fff);
+  background: color-mix(in srgb, var(--c) 40%, var(--map-casing));
   border: 3px solid var(--c);
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px var(--map-casing);
 }
 
 .cand-dot--circle {
@@ -1294,22 +1486,22 @@ p.banner {
   box-shadow: none;
   background: var(--c);
   clip-path: polygon(50% 4%, 96% 92%, 4% 92%);
-  filter: drop-shadow(0 0 1px #fff);
+  filter: drop-shadow(0 0 1px var(--map-casing));
 }
 
 .cand-dot.is-highlight {
-  box-shadow: 0 0 0 3px #fde047, 0 0 0 5px #1b2421;
+  box-shadow: 0 0 0 3px var(--map-highlight), 0 0 0 5px var(--map-frame);
 }
 
 .cand-dot.is-selected {
-  box-shadow: 0 0 0 4px #facc15, 0 0 0 6px #1b2421;
+  box-shadow: 0 0 0 4px var(--map-select), 0 0 0 6px var(--map-frame);
   transform: scale(1.25);
 }
 
 .cand-dot--triangle.is-highlight,
 .cand-dot--triangle.is-selected {
   box-shadow: none;
-  filter: drop-shadow(0 0 3px #facc15) drop-shadow(0 0 3px #facc15);
+  filter: drop-shadow(0 0 3px var(--map-select)) drop-shadow(0 0 3px var(--map-select));
 }
 
 .cand-marker:focus-visible {
@@ -1328,8 +1520,8 @@ p.banner {
   flex-direction: column;
   width: min(440px, 100vw);
   background: var(--surface);
-  border-left: 1px solid var(--border-strong);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px var(--shadow);
   animation: slide-in 0.18s ease-out;
 }
 
@@ -1398,7 +1590,7 @@ p.banner {
 .drawer__p--reason {
   margin-top: 6px;
   padding: 8px 12px;
-  background: var(--soft);
+  background: var(--surface-muted);
   border-radius: 8px;
 }
 
@@ -1424,7 +1616,7 @@ p.banner {
   align-items: center;
   padding: 8px 12px;
   font-size: 13px;
-  border-top: 1px solid #e3e7e2;
+  border-top: 1px solid var(--border-soft);
 }
 
 .evidence__row:first-child {
@@ -1471,7 +1663,7 @@ p.banner {
 
 .page__lead {
   font-size: 15px;
-  color: #3c4742;
+  color: var(--muted);
 }
 
 .page__p {

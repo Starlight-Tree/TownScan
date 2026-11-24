@@ -1,9 +1,6 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClassSwatch } from '../../components/ClassBadge';
 import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
-
-export const metadata: Metadata = { title: 'このアプリについて' };
 
 export default function AboutPage() {
   return (
