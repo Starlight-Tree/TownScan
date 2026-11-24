@@ -1,0 +1,6 @@
+difftest
+**/*_test.go
+*.md
+Dockerfile
+.dockerignore
+.gitignore
