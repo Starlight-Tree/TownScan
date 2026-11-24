@@ -34,11 +34,11 @@ python tests/synthetic.py --out DIR [--tiles DIR]  # 合成データ（kind=synt
 
 ## 実 LLM（Gemini。任意）
 
-既定は模擬モデル。`.env` に `LLM_PROVIDER=gemini` と `GEMINI_API_KEY=<Google AI Studio の無料キー。自分で書く>` を足して api を作り直すと（`compose.yaml` が `.env` から渡す）、チャットの「どのツールを呼ぶか」と「結果の説明文」を Gemini（function calling）が作る。決定の理由・データの扱いは [../docs/decisions/0003-llm-provider.md](../docs/decisions/0003-llm-provider.md)、契約は [../docs/spec-prototype.md](../docs/spec-prototype.md) の §2.2・§4.5。
+既定は模擬モデル。`.env` に `LLM_PROVIDER=gemini` を足し、`GEMINI_API_KEY`（Google AI Studio の無料キー。自分で置く）を Infisical に登録して（Infisical を使わないときは `.env` に書く。[ADR 0004](../docs/decisions/0004-secrets-infisical.md)）api を作り直すと（`compose.yaml` が環境変数で渡す）、チャットの「どのツールを呼ぶか」と「結果の説明文」を Gemini（function calling）が作る。決定の理由・データの扱いは [../docs/decisions/0003-llm-provider.md](../docs/decisions/0003-llm-provider.md)、契約は [../docs/spec-prototype.md](../docs/spec-prototype.md) の §2.2・§4.5。
 
 - 実装は `app/chat/gemini_model.py`（HTTP は標準ライブラリの `urllib`。依存は増やさない）。`service.answer` が、`app.state.llm`（`gemini` のときだけ作る窓口）があれば Gemini、無ければ模擬を使う。結果（`results`・`tool_calls`）は、どちらも `ToolRegistry` が DB から作る。
 - 数字・件数・座標は LLM に書かせない: 返答文は同じ `guard_numbers` を通り、結果に無い数字を含む文は安全なテンプレートに替わる。`refuse` の `message` も、年（2018・2023）以外の数字を含むと固定の文に替える。
-- 上限: モデルへの往復は最大 4 回・ツール呼び出しは最大 6 件・1 回の呼び出しの待ちは 20 秒（接続・受信の段階ごと）。チャット 1 回の要求の全体には 27 秒の期限があり、各呼び出しの待ちは残りの期限を超えない（Next.js の転送の既定の待ち 30 秒より前に、API が 502 を返すため）。超える・キー無効・429・5xx・壊れた応答は、模擬に切り替えず **HTTP 502**（`error.code = llm_unavailable`）。ログに出るのは、失敗の種類・HTTP のステータス・Google の理由の定数だけ（キー・URL・本文は出ない）。
+- 上限: モデルへの往復は最大 4 回・ツール呼び出しは最大 6 件・1 回の呼び出しの待ちは 20 秒（接続・受信の段階ごと）。チャット 1 回の要求の全体には 27 秒の期限があり、各呼び出しの待ちは残りの期限を超えない（各呼び出しが渡した待ちの内に終わる場合、Next.js の転送の既定の待ち 30 秒より前に、API が 502 を返す。少しずつ届く応答は、呼び出しの途中では切らない）。超える・キー無効・429・5xx・壊れた応答は、模擬に切り替えず **HTTP 502**（`error.code = llm_unavailable`）。ログに出るのは、失敗の種類・HTTP のステータス・Google の理由の定数だけ（キー・URL・本文は出ない）。
 - 再試行: 一時的な失敗（HTTP 5xx・タイムアウト・接続エラー）だけ、チャット 1 回の要求につき最大 1 回（往復ごとではない）、1 秒待ってやり直す。4xx（429 を含む）・壊れた応答はやり直さない（無料枠の上限は、待っても直らない）。やり直したことも、種別つきでログに残る。残りの期限が短い（待ったあとに 5 秒未満）ときは、やり直さない。
 - キーは、URL でなくヘッダー `x-goog-api-key` で送り、repr・ログ・例外・`/api/health` に出さない。`/api/health` の `llm` は `mock`／`gemini`、`gemini` のときだけ `llm_model` が付く。
 - テスト（`tests/test_gemini.py`・`tests/test_config.py`）は、偽の HTTP（`GeminiClient` の `send`、`post_json` の下の `_OPENER`）だけを使う。**実 API は呼ばない。実 API での動作は未確認**（キーが入ったあとに、手で確かめる）。
