@@ -1,0 +1,14 @@
+# ビルドの文脈に入れない（prebuilt が使う .next/standalone と .next/static だけは入れる）
+node_modules
+.next/*
+!.next/standalone
+!.next/static
+.git
+.env
+.env.*
+*.log
+tsconfig.tsbuildinfo
+next-env.d.ts
+coverage
+Dockerfile
+.dockerignore
