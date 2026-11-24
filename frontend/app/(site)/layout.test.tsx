@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { health, jsonResponse } from '../../tests/fixtures';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/about', useRouter: () => ({ push: vi.fn() }), redirect: vi.fn() }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/accuracy', useRouter: () => ({ push: vi.fn() }), redirect: vi.fn() }));
 
 const jar = vi.hoisted(() => ({ names: [] as string[] }));
 vi.mock('next/headers', () => ({
@@ -55,13 +55,14 @@ describe('(site) の枠', () => {
     await screen.findAllByText('模擬モデルで応答しています');
   });
 
-  it('サイドパネルに、ブランド・3 つのページ・開閉のボタンがある。いまのページ（/about）に aria-current', async () => {
+  it('サイドパネルに、ブランド・2 つのページ・開閉のボタンがある。いまのページ（/accuracy）に aria-current', async () => {
     await show();
     const side = screen.getByRole('complementary');
     expect(within(side).getByRole('link', { name: 'TownScan' })).toHaveAttribute('href', '/');
     expect(within(side).getByRole('link', { name: 'チャットと地図' })).toHaveAttribute('href', '/');
     expect(within(side).getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('href', '/accuracy');
-    expect(within(side).getByRole('link', { name: 'このアプリについて' })).toHaveAttribute('aria-current', 'page');
+    expect(within(side).getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
+    expect(within(side).queryByRole('link', { name: 'このアプリについて' })).not.toBeInTheDocument();
     expect(within(side).getByRole('button', { name: 'サイドパネルを閉じる' })).toBeInTheDocument();
     // DocuNavi と同じ位置の「新しい会話」（NewConversationProvider が枠に入っている）
     expect(within(side).getByRole('button', { name: '新しい会話' })).toBeInTheDocument();

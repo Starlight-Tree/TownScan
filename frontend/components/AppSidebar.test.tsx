@@ -15,7 +15,6 @@ vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname, useRouter: 
 const items: SidebarItem[] = [
   { href: '/', label: 'チャットと地図', icon: 'chat' },
   { href: '/accuracy', label: 'このアプリの精度', icon: 'accuracy' },
-  { href: '/about', label: 'このアプリについて', icon: 'about' },
 ];
 const setup = (pathname: string, props: Partial<Parameters<typeof AppSidebar>[0]> = {}) => {
   nav.pathname = pathname;
@@ -60,7 +59,7 @@ describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', ()
   });
 
   it('ほかのページ（チャットが無い）では、ホームへ移る', async () => {
-    nav.pathname = '/about';
+    nav.pathname = '/accuracy';
     render(
       <NewConversationProvider>
         <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items} />
@@ -78,13 +77,13 @@ describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', ()
 });
 
 describe('AppSidebar', () => {
-  it('ロゴ・3 つの行き先・下部の中身を出す（名前は、画面に出さない文字で持つ）', () => {
+  it('ロゴ・2 つの行き先・下部の中身を出す（名前は、画面に出さない文字で持つ）', () => {
     setup('/');
     const menu = screen.getByRole('navigation', { name: '主なページ' });
     expect(within(menu).getByRole('link', { name: 'TownScan' })).toHaveAttribute('href', '/');
     expect(within(menu).getByRole('link', { name: 'チャットと地図' })).toHaveAttribute('href', '/');
     expect(within(menu).getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('href', '/accuracy');
-    expect(within(menu).getByRole('link', { name: 'このアプリについて' })).toHaveAttribute('href', '/about');
+    expect(within(menu).queryByRole('link', { name: 'このアプリについて' })).not.toBeInTheDocument();
     expect(screen.getByText('下部の中身')).toBeInTheDocument();
     // 名前は、ホバーで出るツールチップの文字にもなる
     expect(screen.getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('data-tip', 'このアプリの精度');
@@ -94,7 +93,7 @@ describe('AppSidebar', () => {
 
   it('各項目に、アイコン（線画の SVG。読み上げの対象にしない）がある', () => {
     setup('/');
-    for (const name of ['チャットと地図', 'このアプリの精度', 'このアプリについて']) {
+    for (const name of ['チャットと地図', 'このアプリの精度']) {
       const svg = screen.getByRole('link', { name }).querySelector('svg');
       expect(svg, name).not.toBeNull();
       expect(svg).toHaveAttribute('aria-hidden', 'true');
@@ -111,7 +110,6 @@ describe('AppSidebar', () => {
   it.each([
     ['/', 'チャットと地図'],
     ['/accuracy', 'このアプリの精度'],
-    ['/about', 'このアプリについて'],
   ])('%s では、「%s」だけに aria-current を付ける', (pathname, label) => {
     setup(pathname);
     const current = screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page');
@@ -197,14 +195,14 @@ describe('AppSidebar', () => {
     it('ページが変わっても（pathname が変わって描画し直しても）、開閉の状態は変わらない', async () => {
       const { rerender } = setup('/');
       await userEvent.click(screen.getByRole('button', { name: 'サイドパネルを閉じる' }));
-      nav.pathname = '/about';
+      nav.pathname = '/accuracy';
       rerender(
         <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items}>
           <p>下部の中身</p>
         </AppSidebar>,
       );
       expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'false');
-      expect(screen.getByRole('link', { name: 'このアプリについて' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
     });
   });
 });

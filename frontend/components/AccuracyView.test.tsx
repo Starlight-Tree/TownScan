@@ -16,6 +16,22 @@ afterEach(() => {
 });
 
 describe('/accuracy', () => {
+  it('「このアプリについて」の中身だった限界と出典・規約は、この画面にある（写真が無い期間・未実装・地理院タイル・基盤地図情報・モデルの規約）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(metrics));
+    render(<AccuracyView />);
+    const limits = await screen.findByRole('region', { name: '既知の限界' });
+    expect(limits).toHaveTextContent('写真が無い期間');
+    expect(limits).toHaveTextContent('2024 年以降に建った建物は、写真が無いので確かめられません');
+    expect(limits).toHaveTextContent('未実装のもの');
+    expect(limits).toHaveTextContent('Google Earth Engine');
+    const sources = screen.getByRole('region', { name: '出典と規約' });
+    expect(sources).toHaveTextContent('地理院タイル');
+    expect(sources).toHaveTextContent('基盤地図情報');
+    expect(sources).toHaveTextContent('giswqs/whu-building-unetplusplus-efficientnet-b4');
+    expect(sources).toHaveTextContent('Apache-2.0');
+    expect(sources).toHaveTextContent('機械学習などに大量に使うことの扱いは未確認');
+  });
+
   it('調整用と評価用を分けて出し、新築の再現率は「未測定」、閾値は未検証の初期値と書く', async () => {
     fetchMock.mockResolvedValue(jsonResponse(metrics));
     render(<AccuracyView />);

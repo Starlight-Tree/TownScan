@@ -945,11 +945,6 @@ p.banner {
   gap: 8px;
 }
 
-.chat__footnote {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.6;
-}
 
 .msg {
   font-size: 14px;
@@ -1081,14 +1076,6 @@ p.banner {
   color: var(--muted);
 }
 
-.welcome__caution {
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-border);
-  color: var(--warn-text);
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 13px;
-}
 
 .welcome__actions {
   display: flex;
@@ -1143,6 +1130,10 @@ p.banner {
 
 /* 分類の意味（components/chat/ClassGuide.tsx）。最初の画面では常に出し、回答のカードでは折りたたむ。
    色だけに頼らず、分類の印（形・線）と名前に、1 行の説明を並べる */
+.welcome__more { margin-top: 0.75rem; }
+.welcome__more > summary { cursor: pointer; color: var(--muted); font-size: 0.875rem; padding: 0.25rem 0; }
+.welcome__more[open] > summary { margin-bottom: 0.5rem; }
+
 .welcome__classes {
   display: flex;
   flex-direction: column;

@@ -5,7 +5,6 @@ import { ApiError, postChat } from '../../lib/api';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { useHealth } from '../HealthProvider';
 import { useRegisterNewConversation } from '../NewConversation';
 import { AnswerScope } from './AnswerScope';
 import { TILE_SIDE_TEXT } from './area-scale';
@@ -80,7 +79,6 @@ export function ChatPanel({ actions }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   // 再送する中身と、画面上のどの発言か（失敗の印をつけ外しするため）
   const retryRef = useRef<{ messages: ChatRequestMessage[]; entryId: string } | null>(null);
-  const { state: health } = useHealth();
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -189,8 +187,6 @@ export function ChatPanel({ actions }: Props) {
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault();
   };
-
-  const llm = health.status === 'ready' ? health.data.llm : null;
 
   return (
     <section className="chat" aria-label="チャット">
@@ -303,10 +299,6 @@ export function ChatPanel({ actions }: Props) {
           送信
         </button>
       </form>
-      <p className="chat__footnote">
-        {llm === 'mock' ? '模擬モデルで応答しています。' : llm ? `モデル: ${llm}。` : ''}
-        数字・件数・座標は、ツールの結果をそのまま出しています。
-      </p>
     </section>
   );
 }
@@ -318,36 +310,7 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
     <div className="welcome">
       <h2 className="welcome__title">熊本市中心部の変化を、写真と会話で調べる</h2>
       <p className="welcome__lead">
-        熊本市中心部の航空写真（2018 年と 2023 年）から、<b>新しく現れた建物の候補</b>を棟ごとに見つけています。質問すると、件数・表・地図・写真を、根拠つきで返します。
-      </p>
-      <dl className="welcome__facts">
-        <div>
-          <dt>対象</dt>
-          <dd>
-            {areas.length > 0
-              ? `熊本市中心部の ${areas.length} 地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`
-              : `熊本市中心部の地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`}
-          </dd>
-        </div>
-        <div>
-          <dt>地区の名前</dt>
-          <dd>タイルの中心にある住所の名前です。丁目や区の全体を数えた値ではありません。</dd>
-        </div>
-        <div>
-          <dt>比較</dt>
-          <dd>2018 年と 2023 年の航空写真</dd>
-        </div>
-        <div>
-          <dt>出典</dt>
-          <dd>国土地理院（地理院タイル・基盤地図情報）</dd>
-        </div>
-      </dl>
-      <div className="welcome__classes">
-        <span className="suggest-block__label">見つけた候補は、次の 3 つの分類に分けています（3 つの合計が、候補の数です）</span>
-        <ClassDefinitions />
-      </div>
-      <p className="welcome__caution">
-        ここに出るのは、新築の<b>候補</b>です。写真から機械が見つけたもので、新築と断定するものではありません。
+        熊本市中心部の航空写真（2018 年と 2023 年）から、<b>新しく現れた建物の候補</b>を棟ごとに見つけています（新築と断定するものではありません）。質問すると、件数・表・地図・写真を、根拠つきで返します。
       </p>
       <div className="welcome__actions">
         <button type="button" className="btn" onClick={onShowMap}>
@@ -366,18 +329,47 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
           ))}
         </ul>
       </div>
-      <div className="suggest-block suggest-block--refuse">
-        <span className="suggest-block__label">範囲外の質問は、断って理由を返します</span>
-        <ul className="suggest-list">
-          {OUT_OF_SCOPE_SUGGESTIONS.map((s) => (
-            <li key={s}>
-              <button type="button" className="chip" onClick={() => onPick(s)}>
-                {s}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <details className="welcome__more">
+        <summary>くわしく（対象・分類・出典・範囲外の質問）</summary>
+        <dl className="welcome__facts">
+          <div>
+            <dt>対象</dt>
+            <dd>
+              {areas.length > 0
+                ? `熊本市中心部の ${areas.length} 地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`
+                : `熊本市中心部の地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`}
+            </dd>
+          </div>
+          <div>
+            <dt>地区の名前</dt>
+            <dd>タイルの中心にある住所の名前です。丁目や区の全体を数えた値ではありません。</dd>
+          </div>
+          <div>
+            <dt>比較</dt>
+            <dd>2018 年と 2023 年の航空写真</dd>
+          </div>
+          <div>
+            <dt>出典</dt>
+            <dd>国土地理院（地理院タイル・基盤地図情報）</dd>
+          </div>
+        </dl>
+        <div className="welcome__classes">
+          <span className="suggest-block__label">見つけた候補は、次の 3 つの分類に分けています（3 つの合計が、候補の数です）</span>
+          <ClassDefinitions />
+        </div>
+        <div className="suggest-block suggest-block--refuse">
+          <span className="suggest-block__label">範囲外の質問は、断って理由を返します</span>
+          <ul className="suggest-list">
+            {OUT_OF_SCOPE_SUGGESTIONS.map((s) => (
+              <li key={s}>
+                <button type="button" className="chip" onClick={() => onPick(s)}>
+                  {s}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
     </div>
   );
 }

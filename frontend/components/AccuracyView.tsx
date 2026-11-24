@@ -73,6 +73,7 @@ function AccuracyContent() {
       )}
       {state.status === 'ready' && <MetricsBody m={state.data} />}
       <Limits m={state.status === 'ready' ? state.data : undefined} />
+      <Sources />
     </div>
   );
 }
@@ -443,11 +444,33 @@ function PerAreaTable({ rows, year }: { rows: Array<Record<string, unknown>>; ye
   );
 }
 
+/** 出典と規約（このアプリのデータの出どころ。地図の出典表示とあわせて、ここにまとめる） */
+function Sources() {
+  return (
+    <section className="panel" aria-labelledby="h-sources">
+      <h2 id="h-sources" className="panel__title">出典と規約</h2>
+      <ul className="plain-list">
+        <li><b>地図・写真</b>: 国土地理院「地理院タイル」（標準地図、年度別の写真 <code>nendophoto2018</code>・<code>nendophoto2023</code>）。出典を地図に表示しています。</li>
+        <li><b>建物データ（評価の正解）</b>: 国土地理院「基盤地図情報」の建築物の外周（2018 年 10 月版）。</li>
+        <li>
+          <b>建物抽出モデル</b>: <code>giswqs/whu-building-unetplusplus-efficientnet-b4</code>（Apache-2.0）。学習に使われたデータセット（WHU）の利用条件は、確認できていません。
+        </li>
+        <li>地理院タイルを機械学習などに大量に使うことの扱いは未確認です。公開する前に、規約を確かめます。</li>
+      </ul>
+    </section>
+  );
+}
+
 function Limits({ m }: { m?: MetricsResponse }) {
   return (
     <section className="panel" aria-labelledby="h-limits">
       <h2 id="h-limits" className="panel__title">既知の限界</h2>
       <div className="limits-grid">
+        <div>
+          <b>写真が無い期間</b>
+          <br />
+          使える年は 2018 年と 2023 年です。2024 年以降に建った建物は、写真が無いので確かめられません。
+        </div>
         <div>
           <b>撮影月が不明</b>
           <br />
@@ -477,6 +500,11 @@ function Limits({ m }: { m?: MetricsResponse }) {
           <b>対象範囲</b>
           <br />
           熊本市中心部の 12 地区と、2018・2023 年の写真だけです。
+        </div>
+        <div>
+          <b>未実装のもの</b>
+          <br />
+          衛星の「変化の当たり」（Google Earth Engine）、屋根の太陽光パネル、人による確認・確定、公開は、まだありません。
         </div>
         <AbsentLimit m={m} />
         <ReferenceLimit />

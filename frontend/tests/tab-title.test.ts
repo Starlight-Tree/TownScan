@@ -9,7 +9,6 @@ import { metadata } from '../app/layout';
 
 const PAGES: Array<[string, () => Promise<Record<string, unknown>>]> = [
   ['/', () => import('../app/(site)/page')],
-  ['/about', () => import('../app/(site)/about/page')],
   ['/accuracy', () => import('../app/(site)/accuracy/page')],
   ['/login', () => import('../app/(auth)/login/page')],
 ];

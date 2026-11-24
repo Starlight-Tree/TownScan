@@ -12,7 +12,6 @@ import { currentUser, displayName } from '../../lib/session';
 const ITEMS: readonly SidebarItem[] = [
   { href: '/', label: 'チャットと地図', icon: 'chat' },
   { href: '/accuracy', label: 'このアプリの精度', icon: 'accuracy' },
-  { href: '/about', label: 'このアプリについて', icon: 'about' },
 ];
 
 /**

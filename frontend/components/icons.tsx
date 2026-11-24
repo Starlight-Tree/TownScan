@@ -70,7 +70,7 @@ export function PlusIcon() {
 }
 
 /** 帯の行き先のアイコン。サーバーの layout からは、この名前（文字列）で渡す。 */
-export type NavIconName = 'chat' | 'accuracy' | 'about';
+export type NavIconName = 'chat' | 'accuracy';
 
 /** 「チャットと地図」（吹き出し。DocuNavi の「チャット」と同じ絵）。 */
 function ChatIcon() {
@@ -92,20 +92,8 @@ function AccuracyIcon() {
   );
 }
 
-/** 「このアプリについて」（円の中の i）。 */
-function AboutIcon() {
-  return (
-    <Line size={20}>
-      <circle cx="10" cy="10" r="7.2" />
-      <path d="M10 9.2v4.3" />
-      <path d="M10 6.5h.01" />
-    </Line>
-  );
-}
-
 export function NavIcon({ name }: { name: NavIconName }) {
   if (name === 'accuracy') return <AccuracyIcon />;
-  if (name === 'about') return <AboutIcon />;
   return <ChatIcon />;
 }
 

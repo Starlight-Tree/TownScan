@@ -14,7 +14,7 @@ describe('(auth) の枠（ログインの画面）', () => {
     const header = screen.getByRole('banner');
     expect(within(header).getByRole('link', { name: '← チャットと地図' })).toHaveAttribute('href', '/');
     expect(within(header).getByRole('group', { name: 'テーマ' })).toBeInTheDocument();
-    // ほかの行き先（精度・このアプリについて）は、ここには出さない
+    // ほかの行き先（精度）は、ここには出さない
     expect(within(header).queryByRole('link', { name: 'このアプリの精度' })).not.toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main');
     expect(within(screen.getByRole('main')).getByText('ログインの中身')).toBeInTheDocument();

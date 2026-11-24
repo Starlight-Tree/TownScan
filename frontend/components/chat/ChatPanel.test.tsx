@@ -854,12 +854,29 @@ describe('最初の画面: 地区の大きさ・分類の意味・「候補」�
     }
   });
 
-  it('注意書きの「候補」は、3 分類の合計の意味。「新規出現の候補」（1 分類だけに読める言い方）にしない', () => {
+  it('「候補」は 3 分類の合計の意味で、新築と断定しない。最初の画面は短く、くわしいことは「くわしく」の中（閉じた状態）', () => {
     setup();
-    const caution = document.querySelector('.welcome__caution') as HTMLElement;
-    expect(caution).toHaveTextContent('ここに出るのは、新築の候補です。');
-    expect(caution).toHaveTextContent('新築と断定するものではありません');
-    expect(caution).not.toHaveTextContent('新規出現');
+    const lead = document.querySelector('.welcome__lead') as HTMLElement;
+    expect(lead).toHaveTextContent('新しく現れた建物の候補');
+    expect(lead).toHaveTextContent('新築と断定するものではありません');
+    expect(lead).not.toHaveTextContent('新規出現');
+    expect(document.querySelector('.welcome__caution')).toBeNull(); // 大きな注意書きの枠は出さない
     expect(screen.getByText(/3 つの合計が、候補の数です/)).toBeInTheDocument();
+    const more = document.querySelector('details.welcome__more') as HTMLDetailsElement;
+    expect(more).not.toBeNull();
+    expect(more.open).toBe(false);
+    // 最初に見えるのは、見出し・説明・地図のボタン・質問の例。対象・分類・出典・範囲外の質問は、くわしくの中
+    expect(more).toContainElement(screen.getByText('対象'));
+    expect(more).toContainElement(screen.getByText(/次の 3 つの分類に分けています/));
+    expect(more).toContainElement(screen.getByText('範囲外の質問は、断って理由を返します'));
+    expect(more).not.toContainElement(screen.getByRole('button', { name: '解析した地区を地図で見る' }));
+    expect(more).not.toContainElement(screen.getByText('まず、こんな質問から'));
+  });
+
+  it('入力欄の下に、モデル名や「ツールの結果をそのまま」の注記を出さない（モデルの印はサイドパネル・上の横帯に 1 か所）', () => {
+    setup();
+    expect(document.querySelector('.chat__footnote')).toBeNull();
+    expect(screen.queryByText(/模擬モデルで応答しています/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ツールの結果をそのまま出しています/)).not.toBeInTheDocument();
   });
 });
