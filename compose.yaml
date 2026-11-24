@@ -1,0 +1,107 @@
+# TownScan のローカル実行（Postgres 17 + FastAPI + Next.js）。仕様: docs/spec-prototype.md §2
+#   scripts/dev-up.sh                # 起動（.env の作成・frontend のビルド・up・healthy 待ち・実データの読み込みまで）
+#   http://127.0.0.1:3500            # 画面（web）
+#   http://127.0.0.1:8500/api/docs   # API の仕様（FastAPI の自動文書）
+# ポートは 127.0.0.1 だけに公開する。他のローカルのサービス（JobNavi 3200/8200、ShopOrder 3400/8400、DocuNavi 5433）と重ねない。変えない。
+# db は公開しない。Docker VM の空きが少ない（約 0.5 GB）ため、mem_limit を付けてある（db 256m・api 512m・web 512m）。
+name: townscan
+
+services:
+  db:
+    image: postgres:17
+    container_name: townscan-db
+    labels:
+      local.ui.group: "App-TownScan"
+    mem_limit: 256m
+    environment:
+      POSTGRES_DB: townscan
+      POSTGRES_USER: townscan
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD が未設定です。scripts/dev-up.sh を実行して .env を作ってください}"
+    # 小さいデータなので、共有メモリーを絞る（mem_limit の中に収めるため）
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+    volumes:
+      - townscan-pgdata:/var/lib/postgresql/data
+    networks:
+      - backend-net
+    healthcheck:
+      # -h 127.0.0.1: 初回の初期化中の一時サーバー（ソケットだけ待ち受ける）を、起動済みと見なさないため
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U townscan -d townscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      target: runtime
+    container_name: townscan-api
+    labels:
+      local.ui.group: "App-TownScan"
+    mem_limit: 512m
+    environment:
+      # パスワードは英数字だけ（scripts/dev-up.sh が作る 16 進の乱数）。URL にそのまま入れる
+      DATABASE_URL: "postgresql://townscan:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD が未設定です}@db:5432/townscan"
+      TILES_DIR: /data/townscan/tiles
+      # mock 以外は起動時にエラー（実モデルは承認後）
+      LLM_PROVIDER: "${LLM_PROVIDER:-mock}"
+    volumes:
+      # 写真タイルと pipeline の出力（読み取り専用）。無いと Docker が root 所有で作るので、scripts/dev-up.sh が先に作る
+      - ./data/townscan:/data/townscan:ro
+    ports:
+      - "127.0.0.1:8500:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - frontend-net
+      - backend-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      # prebuilt: ホストで作った .next/standalone を載せるだけ（Docker VM のメモリーが少ないのでこちらが既定）
+      # runtime : イメージの中で npm ci と next build まで行う（メモリーに余裕のある環境・CI 用）
+      target: "${WEB_TARGET:-prebuilt}"
+    container_name: townscan-web
+    labels:
+      local.ui.group: "App-TownScan"
+    mem_limit: 512m
+    environment:
+      # /api/* の転送先（実行時に読む）
+      API_URL: "http://api:8000"
+      # コンテナの HOSTNAME（コンテナ ID）のままだと、127.0.0.1 で待ち受けない
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:3500:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - frontend-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+networks:
+  frontend-net: {}
+  # db と api をつなぐ。外へは出られない
+  backend-net:
+    internal: true
+
+volumes:
+  townscan-pgdata: {}

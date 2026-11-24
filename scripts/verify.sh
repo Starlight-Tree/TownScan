@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
-# 検査をまとめて流す。CI（.github/workflows/ci.yml）と同じ入口。
-# 使い方: scripts/verify.sh [repo|backend|frontend|all]（省略時は all）
-# 段が無い（コードがまだ無い）ものは「未実行」と出す。合格と区別するため、未実行は成功に数えない。
+# 検査をまとめて流す。CI（.github/workflows/ci.yml）と同じ入口。仕様: docs/spec-prototype.md §8（E1〜E4）
+# 使い方: scripts/verify.sh [repo|pipeline|backend|frontend|all]（省略時は all）
+#   repo      版の整合・設定・構文・リンク。軽く、どこでも流せる。
+#   pipeline  pipeline/tests の単体テスト（pytest）。.python-version と同じ版の Python と、requirements.txt の依存が要る。
+#             見つからなければ、開発コンテナの venv（~/.venvs/townscan）でテストを流す（ホストから devcontainer exec）。
+#   backend   scripts/test-backend.sh（使い捨ての Postgres で pytest）。Docker が要る。開発コンテナの中では Docker が無いので流せない。
+#   frontend  frontend の npm ci → npm run verify（型検査・lint・テスト・next build）。Node 24 が要る。
+#             Node が 24 でなければ npx で Node 24 を得る。コンテナの中では流さない（Docker VM の空きメモリーが少ない。仕様 §2）。
+# 流せる環境が無い段（docker が無い・依存が入っていない・コンテナの中など）は、合格にせず「未実行（理由）」と出して失敗扱いにする。
+# 段のディレクトリがまだ無いものだけは、「未実行」と出すが失敗には数えない（コードがまだ無いだけ）。
+# 環境変数（どれも省略できる）:
+#   TOWNSCAN_PYTHON            pipeline の検査に使う python（依存入り）。省略時は ~/.venvs/townscan → python3 → python の順に探す
+#   TOWNSCAN_VENV              開発コンテナの venv（既定 ~/.venvs/townscan）
+#   VERIFY_ALLOW_CONTAINER=1   frontend をコンテナの中でも流す（Docker VM に空きメモリーがあると確かめたときだけ）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -54,19 +65,84 @@ if errors:
 PY
 }
 
-run_stage() { # run_stage <名前> <ディレクトリ> — コードがまだ無い段は「未実行」
-  local name="$1" dir="$2"
-  if [ -d "$dir" ]; then
-    report+=("未実行 $name（$dir はあるが、検査がまだ配線されていない。配線するまで合格と見なさない）"); failed=1
+skip() { # skip <名前> <理由> — 環境が無くて流せない段。合格にせず、失敗扱いにする（偽の合格を作らない）
+  report+=("未実行 ${1}（${2}）"); failed=1
+}
+
+in_container() { [ -f /.dockerenv ] || [ -n "${REMOTE_CONTAINERS:-}" ]; }
+
+# pipeline: 依存（requirements.txt）が入っていて、版が .python-version と同じ Python なら終了コード 0
+PIPELINE_PROBE='import sys, numpy, PIL, shapely, pyproj, rasterio, pytest; sys.exit(sys.version_info[:2] != tuple(map(int, open(".python-version").read().split(".")[:2])))'
+
+check_pipeline() {
+  local py="" c
+  for c in "${TOWNSCAN_PYTHON:-}" "${TOWNSCAN_VENV:-$HOME/.venvs/townscan}/bin/python" python3 python; do
+    if [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 && "$c" -c "$PIPELINE_PROBE" >/dev/null 2>&1; then py="$c"; break; fi
+  done
+  if [ -n "$py" ]; then
+    run "pipeline（単体テスト）" "$py" -m pytest pipeline/tests -q -p no:cacheprovider
+  elif command -v devcontainer >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+    # ホスト: 開発コンテナの venv で流す（CLAUDE.md の運用。コンテナは起動済みであること。ここでは起動しない）
+    local venv_py='~/.venvs/townscan/bin/python'  # コンテナの中で展開する
+    if devcontainer exec --workspace-folder . bash -lc "$venv_py -c \"\$0\"" "$PIPELINE_PROBE" >/dev/null 2>&1; then
+      run "pipeline（単体テスト・開発コンテナの中）" \
+        devcontainer exec --workspace-folder . bash -lc "$venv_py -m pytest pipeline/tests -q -p no:cacheprovider"
+    else
+      skip "pipeline（単体テスト）" "開発コンテナで依存を確かめられなかった。townscan-devcontainer が起動していない、venv が無い、依存が足りない、のどれか。コンテナの中で scripts/setup-dev.sh を流す"
+    fi
   else
-    report+=("未実行 $name（$dir がまだ無い）")
+    skip "pipeline（単体テスト）" "Python $(cat .python-version) と requirements.txt の依存が見つからず、devcontainer・docker も無い。scripts/setup-dev.sh か pip install -r requirements.txt"
   fi
 }
 
-case "$target" in repo|backend|frontend|all) ;; *) echo "使い方: $0 [repo|backend|frontend|all]" >&2; exit 2 ;; esac
-[[ "$target" =~ ^(repo|all)$ ]] && run "repo（版の整合・設定・構文・リンク）" check_repo
-[[ "$target" =~ ^(backend|all)$ ]] && run_stage "backend" backend
-[[ "$target" =~ ^(frontend|all)$ ]] && run_stage "frontend" frontend
+check_backend() {
+  if ! command -v docker >/dev/null 2>&1 || ! command -v openssl >/dev/null 2>&1; then
+    skip "backend（pytest・使い捨ての Postgres）" "docker か openssl が無い。DB のテストは docker で使い捨ての Postgres を起動する。ホストか CI で流す"
+  elif ! docker info >/dev/null 2>&1; then
+    skip "backend（pytest・使い捨ての Postgres）" "Docker が動いていない"
+  else
+    run "backend（pytest・使い捨ての Postgres）" bash scripts/test-backend.sh
+  fi
+}
+
+node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true; }
+
+# Node $1 で npm ci → npm run verify（型検査 → lint → テスト → next build）。サブシェルなので cd は呼び出し元に残らない
+check_frontend_cmd() (
+  cd frontend || exit 1
+  if [ "$(node_major)" = "$1" ]; then
+    npm ci && npm run verify
+  else
+    npx -y -p "node@$1" -- sh -c 'npm ci && npm run verify'
+  fi
+)
+
+check_frontend() {
+  local name="frontend（型検査・lint・テスト・next build）" want
+  want="$(cut -d. -f1 .node-version)"
+  if in_container && [ "${VERIFY_ALLOW_CONTAINER:-0}" != 1 ]; then
+    skip "$name" "コンテナの中では流さない。Docker VM の空きメモリーが少なく、next build で他のコンテナが落ちる恐れがある（仕様 §2 参照）。ホストで scripts/verify.sh frontend を流す"
+  elif [ "$(node_major)" = "$want" ] || command -v npx >/dev/null 2>&1; then
+    run "$name" check_frontend_cmd "$want"
+  else
+    skip "$name" "Node ${want} も npx も無い。CI は setup-node、ホストは npx -y -p node@${want} で得る"
+  fi
+}
+
+run_stage() { # run_stage <名前> <ディレクトリ> <段の関数> — ディレクトリが無い（コードがまだ無い）段は、未実行と出して失敗には数えない
+  local name="$1" dir="$2" fn="$3"
+  if [ -d "$dir" ]; then "$fn"; else report+=("未実行 ${name}（${dir} がまだ無い）"); fi
+}
+
+usage() { echo "使い方: $0 [repo|pipeline|backend|frontend|all]" >&2; exit 2; }
+[ "$#" -le 1 ] || usage
+case "$target" in repo|pipeline|backend|frontend|all) ;; *) usage ;; esac
+
+selected() { [ "$target" = all ] || [ "$target" = "$1" ]; }
+if selected repo; then run "repo（版の整合・設定・構文・リンク）" check_repo; fi
+if selected pipeline; then run_stage "pipeline" pipeline check_pipeline; fi
+if selected backend; then run_stage "backend" backend check_backend; fi
+if selected frontend; then run_stage "frontend" frontend check_frontend; fi
 
 printf '%s\n' "${report[@]}"
 exit "$failed"
