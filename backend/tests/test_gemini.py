@@ -601,7 +601,7 @@ def test_a_request_with_a_retry_never_runs_past_the_deadline():
         client.generate({"contents": []})
     assert caught.value.kind == "timeout" and len(fake.requests) == 2
     assert clock.now - start == gemini_model.REQUEST_DEADLINE_SECONDS == 27.0
-    # つまり、最悪でも、Next.js の転送の待ち（既定 30 秒）より前に、API が 502 を返せる
+    # つまり、各呼び出しが渡した待ちの内に終わる限り、最悪でも、Next.js の転送の待ち（既定 30 秒）より前に、API が 502 を返せる
 
 
 @pytest.mark.parametrize("slow, retried", [

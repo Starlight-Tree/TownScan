@@ -118,7 +118,7 @@ class Settings:
         if self.llm_provider == "gemini":
             # 起動時に止める（実行中に初めて失敗するより早い）。キーの値は、どの文にも入れない
             if not self.gemini_api_key:
-                raise ConfigError("LLM_PROVIDER=gemini には GEMINI_API_KEY が要ります。GEMINI_API_KEY を .env に書いてください")
+                raise ConfigError("LLM_PROVIDER=gemini には GEMINI_API_KEY が要ります（Infisical に登録したなら infisical run 経由で api を作り直す。使わないなら .env に書く）")
             if not _GEMINI_KEY_PATTERN.fullmatch(self.gemini_api_key):
                 raise ConfigError("GEMINI_API_KEY の形が正しくありません（空白・改行・全角文字を含まない 1 行の文字列にしてください）")
             if not _GEMINI_MODEL_PATTERN.fullmatch(self.gemini_model):

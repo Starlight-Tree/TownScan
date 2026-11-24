@@ -49,7 +49,7 @@ def test_llm_defaults_to_mock_without_gemini_settings():
 @pytest.mark.parametrize("key", ["", "   "])
 def test_gemini_without_a_key_fails_at_startup_with_a_clear_japanese_message(key):
     s = Settings.from_env({**DB_ENV, "LLM_PROVIDER": "gemini", "GEMINI_API_KEY": key})
-    with pytest.raises(ConfigError, match="GEMINI_API_KEY を .env に書いてください"):
+    with pytest.raises(ConfigError, match="GEMINI_API_KEY が要ります"):
         create_app(s)
 
 
