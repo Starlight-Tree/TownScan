@@ -1,0 +1,49 @@
+{
+	"name": "TownScan",
+	// P0 は単一コンテナ（アプリの db・api・frontend は、段が進んだら Compose へ移す。docs/plan.md の P3）。
+	// Docker のソケットは渡さない。Docker が要る作業（compose の起動・再ビルド）はホストで行う。
+	"build": { "dockerfile": "Dockerfile" },
+	"remoteUser": "vscode",
+	"workspaceFolder": "/workspaces/TownScan",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/TownScan,type=bind,consistency=cached",
+	"runArgs": ["--name", "townscan-devcontainer", "--init", "--label", "local.ui.group=Devcontainers"],
+	// ホストで、コンテナの作成の前に実行される。専用ボリューム（無ければ作る。既にあれば何もしない）。
+	"initializeCommand": "docker volume create townscan-claude-config >/dev/null",
+	// Node は .node-version、Python は .python-version と同じ（版の基準はその 2 ファイル）。
+	"features": {
+		"ghcr.io/devcontainers/features/node:2": { "version": "24" },
+		"ghcr.io/devcontainers/features/python:1": { "version": "3.13" }
+	},
+	"mounts": [
+		// このプロジェクト専用。Claude Code の認証情報・履歴が、他のプロジェクトと混ざらない。
+		"source=townscan-claude-config,target=/home/vscode/.claude,type=volume",
+		// dev の中のコード（依存の導入スクリプトや、注入された指示に従う Claude）が、ホストで承認なしに動くファイルを書き換えられないよう、
+		// 次の 3 つは読み取り専用で重ねる。変更はホストで行う。
+		//   .devcontainer      : initializeCommand（ホストで実行される）
+		//   .git/hooks         : ホストの git が実行する
+		//   .claude/settings.json : ホストの Claude Code が読む（許可・フックの定義）
+		"source=${localWorkspaceFolder}/.devcontainer,target=/workspaces/TownScan/.devcontainer,type=bind,readonly",
+		"source=${localWorkspaceFolder}/.git/hooks,target=/workspaces/TownScan/.git/hooks,type=bind,readonly",
+		"source=${localWorkspaceFolder}/.claude/settings.json,target=/workspaces/TownScan/.claude/settings.json,type=bind,readonly"
+	],
+	"containerEnv": {
+		"TZ": "Asia/Tokyo",
+		"CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+	},
+	// 専用ボリュームは、新規作成直後は root 所有になりうるので、vscode が書けるようにする。
+	"postCreateCommand": {
+		"claude-volume": "sudo chown -R vscode:vscode /home/vscode/.claude",
+		"tools": "for t in python node npm git curl; do command -v $t >/dev/null || echo missing: $t >&2; done; python --version; node --version"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"anthropic.claude-code",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"mhutchie.git-graph",
+				"ms-ceintl.vscode-language-pack-ja"
+			]
+		}
+	}
+}

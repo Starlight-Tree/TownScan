@@ -1,0 +1,37 @@
+# 依存・ビルド生成物
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# 認証情報・環境変数
+.env
+.env.*
+!.env.example
+
+# 画像・地理データ（大きく、再配布できない規約のものがある。取得手順だけを docs/ に書く）
+data/
+*.tif
+*.tiff
+*.geojson.gz
+
+# 学習済みモデル・実験の出力
+models/
+runs/
+
+# DB のバックアップ
+backups/
+*.dump
+
+# OS
+.DS_Store
+
+# Claude Code のローカル設定（個人用。コミットしない）
+.claude/settings.local.json
+.claude/settings.json.bak-*
+
+# ローカルの作業メモ（個人用。コミットしない）
+/.dev-local/

@@ -1,0 +1,15 @@
+affine==3.0.1
+attrs==26.1.0
+certifi==2026.11.20
+click==8.5.1
+iniconfig==2.3.1
+numpy==2.5.5
+packaging==26.4
+pillow==13.0.0
+pluggy==1.7.0
+Pygments==2.21.0
+pyparsing==3.3.3
+pyproj==3.8.0
+pytest==9.2.0
+rasterio==1.5.2
+shapely==2.2.0

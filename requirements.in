@@ -1,0 +1,8 @@
+# 直接の依存（版は requirements.txt に固定する。scripts/setup-dev.sh が requirements.txt から入れる）。
+# 地理空間と画像。学習用の重い依存（torch など）は、P5 で使うと決めてから足す（Mac の Docker は GPU が使えない）。
+numpy
+pillow
+shapely
+pyproj
+rasterio
+pytest

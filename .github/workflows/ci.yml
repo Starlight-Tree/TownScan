@@ -1,0 +1,24 @@
+# main へのプッシュと PR で、scripts/verify.sh を流す。外部 API は呼ばない。デプロイは含まない。
+# backend・frontend の段は、コードを足すとき（docs/plan.md の P3 以降）に、verify.sh と一緒にここへ足す。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: scripts/verify.sh repo
