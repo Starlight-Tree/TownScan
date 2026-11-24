@@ -232,3 +232,62 @@ describe('「条件を解除」とフォーカス', () => {
     expect(strip().querySelector('.summary-strip__target')).toHaveFocus();
   });
 });
+
+describe('帯の高さが動かない（「全 m 件のうち…」と「条件を解除」は、出ないときも場所を取る）', () => {
+  const scope = () => strip().querySelector<HTMLElement>('.summary-strip__scope')!;
+  const reset = () => strip().querySelector<HTMLElement>('.summary-strip__reset')!;
+
+  it('絞り込みが無いときも、2 つの要素は描いてある。hidden で、読み上げにもフォーカスにも出ない（文は空）', () => {
+    setup();
+    expect(scope()).toHaveAttribute('hidden');
+    expect(scope()).toBeEmptyDOMElement();
+    expect(reset()).toHaveAttribute('hidden');
+    expect(screen.queryByRole('button', { name: '条件を解除' })).not.toBeInTheDocument();
+    expect(within(strip()).queryByText(/表示中/)).not.toBeInTheDocument();
+  });
+
+  it('2 つの要素は、「対象」と同じ先頭の行（.summary-strip__head）にあり、分類の件数（チェックボックス）より前。Tab の順も見た目の順', () => {
+    setup({ ...ALL_FILTER, areaId: 'b' });
+    const head = strip().querySelector('.summary-strip__head')!;
+    expect(Array.from(head.children).map((c) => c.className.split(' ').find((n) => n.startsWith('summary-strip__')))).toEqual([
+      'summary-strip__target',
+      'summary-strip__scope',
+      'summary-strip__reset',
+    ]);
+    const counts = within(strip()).getByRole('group', { name: /表示する分類/ });
+    expect(head.compareDocumentPosition(counts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(head).not.toContainElement(counts);
+  });
+
+  it('分類を外す・地区を選ぶ・解除で、同じ要素の hidden と文が替わる。要素は増えも減りもしない（帯の行の数が変わらない）', () => {
+    const all = new Set<CandidateClass>(['confirmed_new', 'existing_omission', 'uncertain']);
+    const onFilterChange = vi.fn();
+    const view = (filter: MapFilter) => <SummaryStrip areas={areas} filter={filter} onFilterChange={onFilterChange} />;
+    const { rerender } = render(view({ areaId: '', classes: all }));
+    const [s0, r0] = [scope(), reset()];
+
+    rerender(view({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new', 'uncertain']) })); // 分類を 1 つ外す
+    expect(scope()).toBe(s0);
+    expect(reset()).toBe(r0);
+    expect(s0).not.toHaveAttribute('hidden');
+    expect(s0).toHaveTextContent('全 1,219 件のうち、表示中 1,212 件');
+    expect(r0).not.toHaveAttribute('hidden');
+    expect(screen.getByRole('button', { name: '条件を解除' })).toBe(r0);
+
+    rerender(view({ areaId: 'b', classes: all })); // 地区だけを選ぶ（分類は全部）: 解除は出て、「全 m 件のうち…」は出ない
+    expect(scope()).toBe(s0);
+    expect(s0).toHaveAttribute('hidden');
+    expect(s0).toBeEmptyDOMElement();
+    expect(r0).not.toHaveAttribute('hidden');
+
+    rerender(view({ areaId: '', classes: all })); // 解除
+    expect(reset()).toBe(r0);
+    expect(r0).toHaveAttribute('hidden');
+  });
+
+  it('対象の地区の件数が分からないとき（一覧が届く前）は、「全 m 件のうち…」を出さない（数字を作らない）。場所は保つ', () => {
+    setup({ areaId: 'zzz', classes: new Set<CandidateClass>(['uncertain']) });
+    expect(scope()).toHaveAttribute('hidden');
+    expect(scope()).toBeEmptyDOMElement();
+  });
+});

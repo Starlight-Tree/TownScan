@@ -82,21 +82,23 @@ describe('候補の詳細（結果領域の「写真の比較」に埋め込む�
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('閉じても（外した・切り替えたとき）、元の場所へフォーカスを戻さない（元の場所を覚えていない）', () => {
+    it('外れて（外した・切り替えた）フォーカスが body に落ちても、元の場所へ戻さない（元の場所を覚えていない）', () => {
       fetchMock.mockResolvedValue(jsonResponse(detail));
       const opener = document.createElement('button');
       const other = document.createElement('button');
       document.body.append(opener, other);
       opener.focus(); // 開く前に、ここにフォーカスがあった
       const { unmount } = render(<CandidateDrawer candidateId="c-1-2-1" onClose={() => {}} onShowOnMap={() => {}} autoFocus={false} />);
-      other.focus(); // そのあと、利用者が別の所へ移った
+      other.focus(); // そのあと、利用者が別の所へ移り、
+      other.remove(); // その要素が消えて、フォーカスが body に落ちた
+      expect(document.activeElement).toBe(document.body);
       unmount();
-      expect(other).toHaveFocus(); // opener へ引き戻さない
+      expect(opener).not.toHaveFocus(); // opener へ引き戻さない
+      expect(document.activeElement).toBe(document.body);
       opener.remove();
-      other.remove();
     });
 
-    it('autoFocus が true のときは、同じ手順で、閉じると元の場所へ戻す（対照）', () => {
+    it('autoFocus が true のときは、同じ手順（フォーカスが body に落ちた）で、外れると元の場所へ戻す（対照）', () => {
       fetchMock.mockResolvedValue(jsonResponse(detail));
       const opener = document.createElement('button');
       const other = document.createElement('button');
@@ -104,8 +106,23 @@ describe('候補の詳細（結果領域の「写真の比較」に埋め込む�
       opener.focus();
       const { unmount } = render(<CandidateDrawer candidateId="c-1-2-1" onClose={() => {}} onShowOnMap={() => {}} />);
       other.focus();
+      other.remove();
+      expect(document.activeElement).toBe(document.body);
       unmount();
       expect(opener).toHaveFocus();
+      opener.remove();
+    });
+
+    it('autoFocus が true でも、外れるとき、フォーカスが別の所にあるなら、元の場所へ引き戻さない（いまのフォーカスを奪わない）', () => {
+      fetchMock.mockResolvedValue(jsonResponse(detail));
+      const opener = document.createElement('button');
+      const other = document.createElement('button');
+      document.body.append(opener, other);
+      opener.focus();
+      const { unmount } = render(<CandidateDrawer candidateId="c-1-2-1" onClose={() => {}} onShowOnMap={() => {}} />);
+      other.focus(); // 見えない間に、利用者が別の所（地図の印・チャットの入力欄など）へ移った
+      unmount();
+      expect(other).toHaveFocus();
       opener.remove();
       other.remove();
     });
@@ -224,6 +241,83 @@ describe('候補の詳細（結果領域の「写真の比較」に埋め込む�
       await userEvent.click(screen.getByRole('button', { name: '閉じる' }));
       expect(onClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  describe('focusNonce（同じ詳細が開いているときに、もう一度「開く」を押した合図）', () => {
+    const open = (nonce: number | undefined, autoFocus?: boolean) => (
+      <CandidateDrawer candidateId="c-1-2-1" autoFocus={autoFocus} focusNonce={nonce} onClose={() => {}} onShowOnMap={() => {}} />
+    );
+
+    it('増えると、見出しへフォーカスを移す。マウントしたときの値と、同じ値のままの再描画では移さない', () => {
+      fetchMock.mockResolvedValue(jsonResponse(detail));
+      const outside = document.createElement('input');
+      document.body.append(outside);
+      outside.focus();
+      const { rerender } = render(open(3, false));
+      expect(outside).toHaveFocus(); // マウントしたときの値（3）は、合図に数えない
+      rerender(open(3, false));
+      expect(outside).toHaveFocus();
+      rerender(open(4, false));
+      expect(screen.getByRole('heading', { name: '候補の詳細' })).toHaveFocus();
+      outside.remove();
+    });
+
+    it('合図で移したあと、「閉じる」で閉じると、押したボタン（合図の前にフォーカスがあった所）へ戻る', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(detail));
+      const button = document.createElement('button');
+      document.body.append(button);
+      const { rerender } = render(open(0, false));
+      button.focus(); // ユーザーが押した「開く」ボタン
+      rerender(open(1, false));
+      expect(screen.getByRole('heading', { name: '候補の詳細' })).toHaveFocus();
+      await userEvent.click(screen.getByRole('button', { name: '閉じる' }));
+      expect(button).toHaveFocus();
+      button.remove();
+    });
+
+    it('フォーカスがすでに詳細の中にあるときの合図は、戻し先を詳細の中の要素にしない', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(detail));
+      const button = document.createElement('button');
+      document.body.append(button);
+      button.focus();
+      const { rerender } = render(open(0)); // 開いたとき、button が戻し先
+      await screen.findByRole('button', { name: '地図で見る' });
+      screen.getByRole('button', { name: '地図で見る' }).focus();
+      rerender(open(1));
+      await userEvent.click(screen.getByRole('button', { name: '閉じる' }));
+      expect(button).toHaveFocus();
+      button.remove();
+    });
+  });
+
+  it('閉じるとき、覚えた戻し先が文書から消えていたら、タブへ移す（body に落とさない）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(detail));
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          {!open && (
+            <button type="button" onClick={() => setOpen(true)}>
+              開く
+            </button>
+          )}
+          <div role="tablist">
+            <button type="button" role="tab" id="tab-photos" aria-selected="true" aria-controls="panel-photos">
+              写真の比較
+            </button>
+          </div>
+          <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos">
+            {open && <CandidateDrawer candidateId="c-1-2-1" onClose={() => setOpen(false)} onShowOnMap={() => {}} />}
+          </div>
+        </>
+      );
+    }
+    render(<Host />);
+    // 押した「開く」ボタンは、開くと外れる（戻し先が文書に無い）
+    await userEvent.click(screen.getByRole('button', { name: '開く' }));
+    expect(screen.getByRole('heading', { name: '候補の詳細' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: '閉じる' }));
+    expect(screen.getByRole('tab', { name: '写真の比較' })).toHaveFocus();
   });
 
   it('読み込み中の表示 → 詳細', async () => {

@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAreas, getCandidatesGeoJson } from '../lib/api';
 import type { AreaSummary, BBox, CandidateDetail, CandidateFeature, ToolResult } from '../lib/api-types';
 import { AreasProvider } from '../lib/areas-context';
-import { featureBBox, nextNonce, type MapFocus } from '../lib/map-config';
+import { featureBBox, nextNonce, scopeBBox, type MapFocus } from '../lib/map-config';
 import {
   ALL_FILTER,
+  areaScopeIds,
   filterFromResults,
+  isWellFormedResult,
   RESULT_VIEW_LABELS,
   viewForResults,
   widenFilterFor,
@@ -46,6 +48,8 @@ function PhotosEmptyState() {
 
 interface PhotosPanelProps {
   selected: Selection | null;
+  /** ユーザーが「開く」ボタンを押すたびに +1。同じ候補の詳細がすでに開いているときも、見出しへフォーカスを移す合図になる */
+  focusNonce: number;
   /** 「写真の比較」を見ているか（結果領域のいまの画面が写真の比較か） */
   visible: boolean;
   onClose: () => void;
@@ -59,7 +63,7 @@ interface PhotosPanelProps {
  * 一度見えた詳細は、別のタブへ替えても保つ（外すと、戻したときに取り直す）。選んだ候補が替わったら、新しい候補は、また見えるまでマウントしない。
  * 見えたときにマウントするので、詳細の「フォーカスを移すか」（autoFocus）も、見えた時点の選び方で決まる
  */
-function PhotosPanel({ selected, visible, onClose, onShowOnMap, onLoaded }: PhotosPanelProps) {
+function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLoaded }: PhotosPanelProps) {
   const id = selected?.id ?? null;
   // 詳細を見せた候補の id。見えているあいだは選択に追いつき、見えていないあいだは、同じ候補なら保ち、別の候補（または選択なし）なら外す。
   // 描画の中で、自分の state だけを直す（React が、この描画をやり直す。効果で直すと、見えた直後の 1 描画だけ遅れる）
@@ -75,6 +79,7 @@ function PhotosPanel({ selected, visible, onClose, onShowOnMap, onLoaded }: Phot
       key={selected.id}
       candidateId={selected.id}
       autoFocus={selected.focus}
+      focusNonce={focusNonce}
       onClose={onClose}
       onShowOnMap={onShowOnMap}
       onLoaded={onLoaded}
@@ -88,6 +93,8 @@ export function HomeClient() {
   const candQ = useAsync(loadFeatures);
   const [selected, setSelected] = useState<Selection | null>(null);
   const selectedId = selected?.id ?? null;
+  // ユーザーが押したボタン（チャットの「詳細」・一覧・「写真を比べる」）で詳細を開くたびに +1。すでに同じ候補の詳細が開いていて、マウントし直されないときも、見出しへ移す合図にする
+  const [focusNonce, setFocusNonce] = useState(0);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [highlightIds, setHighlightIds] = useState<ReadonlySet<string>>(NO_IDS);
   // 詳細を開いたとき、地図の候補データにまだ形が無ければ、詳細が届いてから寄せる
@@ -108,8 +115,13 @@ export function HomeClient() {
   const byId = useMemo(() => new Map((features ?? []).map((f) => [f.properties.id, f])), [features]);
   // 返答待ちの通信の途中で届く操作（answered・focusMap）が、古い byId を読まないように、最新のものを控える
   const byIdRef = useRef(byId);
+  // 「地図で見る」が、いまの絞り込み・地区の一覧を読めるように（コールバックを、絞り込みが替わるたびに作り直さない）
+  const filterRef = useRef(filter);
+  const areasRef = useRef(areas);
   useEffect(() => {
     byIdRef.current = byId;
+    filterRef.current = filter;
+    areasRef.current = areas;
   });
 
   /**
@@ -170,6 +182,7 @@ export function HomeClient() {
   const openCandidate = useCallback(
     (id: string) => {
       selectCandidate(id, true);
+      setFocusNonce((n) => n + 1);
       switchView('photos');
     },
     [selectCandidate, switchView],
@@ -192,6 +205,7 @@ export function HomeClient() {
   const comparePhotos = useCallback(
     (id: string) => {
       setSelected({ id, focus: true });
+      setFocusNonce((n) => n + 1);
       switchView('photos');
     },
     [switchView],
@@ -215,7 +229,8 @@ export function HomeClient() {
     (results: ToolResult[]) => {
       const next = viewForResults(results.map((r) => r.type));
       if (next) switchView(next);
-      const nextFilter = filterFromResults(results);
+      // 回答の「対象・条件」の行（AnswerScope）と同じ前処理: 壊れた結果（filter の無い count）は、条件なしと読まず、飛ばす
+      const nextFilter = filterFromResults(results.filter(isWellFormedResult));
       if (nextFilter) setFilter(nextFilter);
       // ChatPanel は、地図の表示（focusMap）のあとにこれを呼ぶ。上の絞り込みの置き換えで、強調した候補がまた隠れないように、広げ直す
       for (const r of results) if (r.type === 'map_focus' && Array.isArray(r.candidate_ids)) revealInFilter(r.candidate_ids);
@@ -231,9 +246,14 @@ export function HomeClient() {
   const showView = useCallback(
     (next: ResultView, nextFilter?: MapFilter) => {
       if (nextFilter) setFilter(nextFilter);
+      // 地図を見せるときは、その条件の地区（なければ全地区）が収まる範囲へ寄せる。地図がすでに出ていて拡大・移動したあとでも、押して何も変わらない、をなくす
+      if (next === 'map') {
+        const box = scopeBBox(areasRef.current, areaScopeIds(nextFilter ?? filterRef.current));
+        if (box) fitTo(box, []);
+      }
       switchView(next);
     },
-    [switchView],
+    [fitTo, switchView],
   );
 
   const chatActions = useMemo<ChatActions>(
@@ -296,12 +316,14 @@ export function HomeClient() {
                 filter={filter}
                 onFilterChange={setFilter}
                 onComparePhotos={comparePhotos}
+                onClearSelection={closeDrawer}
               />
             ),
-            chart: <AreaChartView areas={areas} filter={filter} onFilterChange={setFilter} />,
+            chart: <AreaChartView areas={areas} filter={filter} onFilterChange={setFilter} onShowMap={() => showView('map')} />,
             photos: (
               <PhotosPanel
                 selected={selected}
+                focusNonce={focusNonce}
                 visible={view === 'photos'}
                 onClose={closeDrawer}
                 onShowOnMap={showOnMap}

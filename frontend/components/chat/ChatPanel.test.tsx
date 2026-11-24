@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AreaSummary, ChatResponse } from '../../lib/api-types';
 import { AreasProvider } from '../../lib/areas-context';
-import { areas, compare, count, countWards, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
+import { areas, compare, count, countWards, detectionImage, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
+import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
 import { ChatPanel, SUGGESTIONS } from './ChatPanel';
 import type { ChatActions } from './types';
 
@@ -327,7 +328,7 @@ describe('新しい会話', () => {
 
 describe('最初の画面（説明・サンプルの質問）', () => {
   const threeAreas: AreaSummary[] = ['a', 'b', 'c'].map((id) => ({ ...areas[0]!, id, name: `地区 ${id}` }));
-  const FACT = (n: string) => `熊本市中心部の${n}地区（1 地区 = 地理院タイル 1 枚）`;
+  const FACT = (n: string) => `熊本市中心部の${n}地区（1 地区 = 地理院タイル 1 枚 = 約 130 m 四方）`;
 
   it('対象の地区数は、読み込んだ地区の数から出す。読み込み前は数を伏せる', () => {
     const actions = makeActions();
@@ -613,5 +614,208 @@ describe('回答の対象・条件の行: 最後の条件（右の絞り込み�
     const scope = await screen.findByRole('group', { name: scopeName });
     expect(within(scope).getByText('地区', { selector: 'dt' }).nextElementSibling).toHaveTextContent('中央区');
     expect(within(scope).getByText('分類', { selector: 'dt' }).nextElementSibling).toHaveTextContent('すべて');
+  });
+});
+
+describe('長い回答が届いたあとのスクロール位置（質問か回答の先頭が見える）', () => {
+  /** jsdom にはレイアウトが無い。チャット欄の高さ・全体の高さ・発言の位置と高さを決める */
+  const VIEW = 400;
+  const BOTTOM = 2000;
+  const log = () => screen.getByRole('log');
+
+  type Box = { top: number; height: number };
+  function layout(boxes: { log: Box; question: Box; answer: Box }) {
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(BOTTOM);
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(VIEW);
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const entry = this.getAttribute('data-entry');
+      const box = entry === 'assistant' ? boxes.answer : entry === 'user' ? boxes.question : this.getAttribute('role') === 'log' ? boxes.log : { top: 0, height: 0 };
+      // 本物のブラウザと同じく、発言の画面上の位置は、チャット欄のスクロール量の分だけ上へ動く
+      const scrolled = entry ? (this.closest('[role="log"]')?.scrollTop ?? 0) : 0;
+      const top = box.top - scrolled;
+      return { top, height: box.height, bottom: top + box.height, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+  }
+
+  it('欄より長い回答は、いちばん下まで送らず、質問の先頭が見える位置に合わせる（結論の最初の文が隠れない）', async () => {
+    // 枠の上端 50。質問は、中身の先頭から 700px 下、回答はその 54px 下から 900px の高さ（欄の 400px を超える）
+    layout({ log: { top: 50, height: VIEW }, question: { top: 750, height: 40 }, answer: { top: 804, height: 900 } });
+    fetchMock.mockResolvedValue(jsonResponse(reply('長い回答です', [table])));
+    const { input } = setup();
+    await userEvent.type(input(), '一覧{Enter}');
+    await screen.findByText('長い回答です');
+    expect(log().scrollTop).toBe(700);
+  });
+
+  it('質問が長い（欄の 3 分の 1 を超える）ときは、回答の先頭に合わせる', async () => {
+    layout({ log: { top: 50, height: VIEW }, question: { top: 750, height: 300 }, answer: { top: 1064, height: 900 } });
+    fetchMock.mockResolvedValue(jsonResponse(reply('長い回答です', [table])));
+    const { input } = setup();
+    await userEvent.type(input(), '一覧{Enter}');
+    await screen.findByText('長い回答です');
+    expect(log().scrollTop).toBe(1014);
+  });
+
+  it('欄に収まる短い回答は、これまでどおり、いちばん下', async () => {
+    layout({ log: { top: 50, height: VIEW }, question: { top: 750, height: 40 }, answer: { top: 804, height: 120 } });
+    fetchMock.mockResolvedValue(jsonResponse(reply('短い回答です')));
+    const { input } = setup();
+    await userEvent.type(input(), 'こんにちは{Enter}');
+    await screen.findByText('短い回答です');
+    expect(log().scrollTop).toBe(BOTTOM);
+  });
+
+  it('返答を待つ間（調べています…）は、質問と待ち表示が見えるいちばん下。回答が届いたら、長ければ質問の先頭へ', async () => {
+    layout({ log: { top: 50, height: VIEW }, question: { top: 750, height: 40 }, answer: { top: 804, height: 900 } });
+    let resolve!: (r: Response) => void;
+    fetchMock.mockReturnValue(new Promise<Response>((r) => (resolve = r)));
+    const { input } = setup();
+    await userEvent.type(input(), '一覧{Enter}');
+    await screen.findByText(/調べています/);
+    expect(log().scrollTop).toBe(BOTTOM);
+    resolve(jsonResponse(reply('長い回答です', [table])));
+    await screen.findByText('長い回答です');
+    expect(log().scrollTop).toBe(700);
+  });
+
+  it('失敗のときは、いちばん下（エラーと「もう一度送る」が見える）', async () => {
+    layout({ log: { top: 50, height: VIEW }, question: { top: 750, height: 40 }, answer: { top: 804, height: 900 } });
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: 'mock_failure', message: 'だめでした' } }, 500));
+    const { input } = setup();
+    await userEvent.type(input(), '一覧{Enter}');
+    await screen.findByRole('alert');
+    expect(log().scrollTop).toBe(BOTTOM);
+  });
+});
+
+describe('キーボードの操作: 押したボタンが消えても、フォーカスが入力欄へ戻る', () => {
+  const input = () => screen.getByRole('textbox', { name: '質問を入力' });
+
+  it('最初の画面の質問の例を Enter で選ぶと、入力欄へフォーカスが移る（body に落ちない）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('精度です')));
+    setup();
+    const chip = screen.getByRole('button', { name: 'このアプリの精度は？' });
+    chip.focus();
+    await userEvent.keyboard('{Enter}');
+    await screen.findByText('精度です');
+    expect(document.activeElement).not.toBe(document.body);
+    expect(input()).toHaveFocus();
+  });
+
+  it('マウスで押しても同じ（次の質問をすぐ打てる）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('精度です')));
+    setup();
+    await userEvent.click(screen.getByRole('button', { name: 'このアプリの精度は？' }));
+    await screen.findByText('精度です');
+    expect(input()).toHaveFocus();
+  });
+
+  it('会話の下の質問の例（小さいほう）を押したときも、入力欄へ', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
+    setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('答えです');
+    const compact = within(screen.getByLabelText('質問の例')).getByRole('button', { name: SUGGESTIONS[1]! });
+    compact.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(input()).toHaveFocus();
+  });
+
+  it('「新しい会話」を Enter で押すと、ボタンが消えても、入力欄へフォーカスが移る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
+    setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('答えです');
+    const reset = screen.getByRole('button', { name: '新しい会話' });
+    reset.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: '新しい会話' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(input()).toHaveFocus();
+  });
+
+  it('指で触る端末（pointer: coarse）では、画面のキーボードを開かないよう、入力欄へ移さない', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)', media: query, addEventListener() {}, removeEventListener() {} }));
+    fetchMock.mockResolvedValue(jsonResponse(reply('精度です')));
+    setup();
+    await userEvent.click(screen.getByRole('button', { name: 'このアプリの精度は？' }));
+    await screen.findByText('精度です');
+    expect(input()).not.toHaveFocus();
+  });
+});
+
+describe('同じ文を 2 回出さない（本文とカード）', () => {
+  it('範囲外・見つからない: 本文と同じお断りの文は、カードには出さない（見出しと「代わりの質問」は出す）', async () => {
+    const gone = { ...refusal, reason: 'no_data' as const, message: 'その候補は見つかりません。', suggestions: ['このアプリの精度は？'] };
+    fetchMock.mockResolvedValue(jsonResponse(reply(gone.message, [gone])));
+    const { input } = setup();
+    await userEvent.type(input(), 'c-000000-000000-9 の写真を見せて{Enter}');
+    await screen.findByRole('note', { name: '該当するデータがありません' });
+    expect(screen.getAllByText('その候補は見つかりません。')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'このアプリの精度は？' })).toBeInTheDocument();
+  });
+
+  it('範囲外: 12 地区の列挙のような長い文も、1 回だけ', async () => {
+    const long = { ...refusal, message: '「渋谷」は、解析した地区に含まれていません。解析した地区は、薄場一丁目、本荘五丁目 です。' };
+    fetchMock.mockResolvedValue(jsonResponse(reply(long.message, [long])));
+    const { input } = setup();
+    await userEvent.type(input(), '渋谷の新築は？{Enter}');
+    await screen.findByRole('note', { name: 'この質問は範囲外です' });
+    expect(screen.getAllByText(long.message)).toHaveLength(1);
+  });
+
+  it('写真の回答: 本文の中の説明（caption）は、カードでは繰り返さない。カードの写真・分類の印・詳細は出す', async () => {
+    const body = `候補 c-1-2-1 の写真を、2018 年と 2023 年で並べます。${detectionImage.caption}`;
+    fetchMock.mockResolvedValue(jsonResponse(reply(body, [detectionImage])));
+    const { input } = setup();
+    await userEvent.type(input(), 'いちばん大きい候補の写真を見せて{Enter}');
+    const card = await screen.findByRole('region', { name: detectionImage.title });
+    expect(screen.getAllByText(new RegExp(detectionImage.caption))).toHaveLength(1);
+    expect(within(card).getAllByRole('img')).toHaveLength(2);
+    expect(within(card).getByRole('button', { name: '詳細を開く' })).toBeInTheDocument();
+  });
+
+  it('本文が別の言い方なら（実 LLM など）、カードの文も出す（情報を落とさない）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('お答えできません。', [refusal])));
+    const { input } = setup();
+    await userEvent.type(input(), '渋谷の新築は？{Enter}');
+    await screen.findByText('お答えできません。');
+    expect(screen.getByText(refusal.message)).toBeInTheDocument();
+  });
+});
+
+describe('最初の画面: 地区の大きさ・分類の意味・「候補」の言い方', () => {
+  it('1 地区 = 約 130 m 四方であること、地区の名前はタイルの中心の住所であることを書く（丁目・区の全体に読めないように）', () => {
+    setup({ areas });
+    const facts = screen.getByText('対象').closest('dl')!;
+    expect(within(facts).getByText('対象').nextElementSibling).toHaveTextContent('1 地区 = 地理院タイル 1 枚 = 約 130 m 四方');
+    expect(within(facts).getByText('地区の名前').nextElementSibling).toHaveTextContent('タイルの中心にある住所の名前です。丁目や区の全体を数えた値ではありません。');
+  });
+
+  it('見出しは、市全体でなく「熊本市中心部」', () => {
+    setup();
+    expect(screen.getByRole('heading', { name: '熊本市中心部の変化を、写真と会話で調べる' })).toBeInTheDocument();
+  });
+
+  it('3 つの分類（印・名前・1 行の説明）を、最初の画面に出す。説明は詳細の画面と同じ文（CLASS_INFO.summary）', () => {
+    setup();
+    const group = screen.getByText(/次の 3 つの分類に分けています/).closest('.welcome__classes') as HTMLElement;
+    for (const cls of CLASS_ORDER) {
+      const item = group.querySelector(`[data-class="${cls}"]`) as HTMLElement;
+      expect(item).toHaveTextContent(CLASS_INFO[cls].label);
+      expect(item).toHaveTextContent(CLASS_INFO[cls].summary);
+      expect(item.querySelector('svg')).not.toBeNull();
+    }
+  });
+
+  it('注意書きの「候補」は、3 分類の合計の意味。「新規出現の候補」（1 分類だけに読める言い方）にしない', () => {
+    setup();
+    const caution = document.querySelector('.welcome__caution') as HTMLElement;
+    expect(caution).toHaveTextContent('ここに出るのは、新築の候補です。');
+    expect(caution).toHaveTextContent('新築と断定するものではありません');
+    expect(caution).not.toHaveTextContent('新規出現');
+    expect(screen.getByText(/3 つの合計が、候補の数です/)).toBeInTheDocument();
   });
 });

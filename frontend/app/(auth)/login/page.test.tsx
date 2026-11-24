@@ -57,6 +57,21 @@ describe('/login', () => {
     expect(screen.getByText('ログインしなくても、チャット・地図・精度は使えます。')).toBeInTheDocument();
   });
 
+  it('設定が足りないときは、案内の 1 行も「いまは使えません」にそろえ（ボタンが無いのに「ログインしてください」と言わない）、行き止まりにならないよう、チャットと地図へ戻るリンクを出す', async () => {
+    authRef.current = null;
+    await show();
+    expect(screen.getByText('ログインは、いまは使えません')).toBeInTheDocument();
+    expect(screen.queryByText('Google アカウントでログインしてください')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'チャットと地図へ戻る' })).toHaveAttribute('href', '/');
+  });
+
+  it('設定があるときは、「ログインしてください」の案内とボタンを出す（戻るリンクは出さない）', async () => {
+    await show();
+    expect(screen.getByText('Google アカウントでログインしてください')).toBeInTheDocument();
+    expect(screen.queryByText('ログインは、いまは使えません')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'チャットと地図へ戻る' })).not.toBeInTheDocument();
+  });
+
   it('設定が足りないときは、URL の ?error の文字を使わず、まだ設定されていませんだけを出す', async () => {
     authRef.current = null;
     await show('<b>x</b>');

@@ -18,10 +18,22 @@ import { formatNumber } from '../../lib/format';
 import { ALL_FILTER, areaLabel, filterFromResults } from '../../lib/result-view';
 import { CandidateImage } from '../CandidateImage';
 import { ClassBadge } from '../ClassBadge';
+import { classOfCell } from './cell';
+import { ClassGuide } from './ClassGuide';
 import { ProvenanceBox } from './ProvenanceBox';
+import { ScrollHint } from './ScrollHint';
 import type { ResultActions } from './types';
 
 const CANDIDATE_ID = /^c-\d+-\d+-\d+$/;
+
+/**
+ * 回答の本文（answerText）が、カードの中の文をすでに含んでいるか。含んでいれば、カードのほうは同じ文を出さない
+ * （同じ文が本文とカードで 2 回出ないように。API の返答文は、お断りの理由や写真の説明を、そのまま本文にも入れる）
+ */
+function saidInAnswer(answerText: string | undefined, text: string): boolean {
+  const t = text.trim();
+  return t !== '' && typeof answerText === 'string' && answerText.includes(t);
+}
 
 function SyntheticChip({ kind }: { kind: string }) {
   return kind === 'synthetic' ? <span className="pill pill--warn pill--inline">合成データ</span> : null;
@@ -90,6 +102,7 @@ export function CountCard({ result, actions }: { result: CountResult; actions: R
         </ul>
       )}
       <ViewButtons result={result} actions={actions} withMap />
+      <ClassGuide />
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -99,7 +112,9 @@ export function CountCard({ result, actions }: { result: CountResult; actions: R
 
 function renderCell(colKey: string, value: TableCell | undefined, nameOf: (id: string) => string) {
   if (value === null || value === undefined) return '—';
-  if (colKey === 'class' && isCandidateClass(value)) return <ClassBadge cls={value} short />;
+  // 分類は、キーでも表示名でも、印つきの短い名前で出す（長い名前は、狭いチャットで切れる）
+  const cls = colKey === 'class' ? classOfCell(value) : null;
+  if (cls) return <ClassBadge cls={cls} short />;
   if (colKey === 'area_id' && typeof value === 'string') return nameOf(value);
   if (typeof value === 'number') return formatNumber(value);
   if (typeof value === 'boolean') return value ? 'はい' : 'いいえ';
@@ -109,6 +124,11 @@ function renderCell(colKey: string, value: TableCell | undefined, nameOf: (id: s
 export function TableCard({ result, actions }: { result: TableResult; actions: ResultActions }) {
   const { nameOf } = useAreas();
   const hasDetail = result.rows.some((r) => typeof r.id === 'string' && CANDIDATE_ID.test(r.id));
+  // 詳細のボタンがある表は、候補 ID の列を、最初の列の名前の下に小さく添える。チャットの幅（340px 前後）では、
+  // ID・地区・分類の 3 列で幅を使い切り、並びの基準の面積と「詳細」が横スクロールの先に隠れていた
+  const idColumn = hasDetail && result.columns.length > 1 ? result.columns.find((c) => c.key === 'id') : undefined;
+  const columns = idColumn ? result.columns.filter((c) => c !== idColumn) : result.columns;
+  const hasClassColumn = columns.some((c) => c.key === 'class');
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -118,13 +138,14 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
       {result.rows.length === 0 ? (
         <p className="empty-note">該当する行はありません。</p>
       ) : (
-        <div className="table-scroll" role="region" aria-label={`${result.title}（横にスクロールできます）`} tabIndex={0}>
-          <table className="data-table">
+        <ScrollHint label={`${result.title}（横にスクロールできます）`}>
+          <table className="data-table data-table--chat">
             <thead>
               <tr>
-                {result.columns.map((c) => (
+                {columns.map((c, i) => (
                   <th key={c.key} scope="col">
                     {c.label}
+                    {idColumn && i === 0 && <span className="visually-hidden">と{idColumn.label}</span>}
                   </th>
                 ))}
                 {hasDetail && (
@@ -137,8 +158,16 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
             <tbody>
               {result.rows.map((row, i) => (
                 <tr key={row.id ?? i}>
-                  {result.columns.map((c) => (
-                    <td key={c.key}>{renderCell(c.key, row[c.key], nameOf)}</td>
+                  {columns.map((c, ci) => (
+                    <td key={c.key}>
+                      {renderCell(c.key, row[c.key], nameOf)}
+                      {idColumn && ci === 0 && typeof row.id === 'string' && (
+                        <span className="data-table__sub">
+                          <span className="visually-hidden">{idColumn.label}: </span>
+                          {row.id}
+                        </span>
+                      )}
+                    </td>
                   ))}
                   {hasDetail && (
                     <td>
@@ -153,11 +182,12 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollHint>
       )}
       <p className="result-card__note">
         全 {formatNumber(result.total)} 件中 {formatNumber(result.shown)} 件を表示
       </p>
+      {hasClassColumn && result.rows.length > 0 && <ClassGuide />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -175,10 +205,17 @@ export function CompareCard({ result, actions }: { result: CompareResult; action
   }
   const hasTotal = result.items.some((i) => typeof i.counts.total === 'number');
   const max = Math.max(1, ...result.items.flatMap((i) => Object.entries(i.counts).filter(([k]) => k !== 'total').map(([, v]) => v)));
-  const columns = [
+  const classColumns = [
     ...CLASS_ORDER.map((k) => ({ key: k as string, label: CLASS_INFO[k].short, color: CLASS_INFO[k].color })),
     ...[...extraKeys].map((k) => ({ key: k, label: k, color: 'var(--primary)' })),
   ];
+  // 並びの基準の列（backend は、分類を指定したときはその分類の件数、なければ合計の多い順に並べる。filter.cls が、その分類）を、地区の次（先頭側）に置く。
+  // 狭いチャットでは、右の列が横スクロールの先に隠れる。並びの基準が見えないと、数字（3, 2, 1, 0…）が乱れて見える
+  const sortCls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
+  const sortKey = sortCls ?? (hasTotal ? 'total' : null);
+  const ordered = sortCls
+    ? [...classColumns.filter((c) => c.key === sortCls), ...classColumns.filter((c) => c.key !== sortCls)]
+    : classColumns;
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -188,24 +225,31 @@ export function CompareCard({ result, actions }: { result: CompareResult; action
       {result.items.length === 0 ? (
         <p className="empty-note">比べる地区がありません。</p>
       ) : (
-        <div className="table-scroll" role="region" aria-label={`${result.title}（横にスクロールできます）`} tabIndex={0}>
-          <table className="data-table compare-table">
+        <ScrollHint label={`${result.title}（横にスクロールできます）`}>
+          <table className="data-table data-table--chat compare-table">
             <thead>
               <tr>
                 <th scope="col">地区</th>
-                {columns.map((c) => (
-                  <th key={c.key} scope="col">
+                {/* 合計で並べるときは、合計を最初に。分類で並べるときは、その分類を最初にして、合計は最後 */}
+                {hasTotal && !sortCls && (
+                  <th scope="col" aria-sort="descending">
+                    合計
+                  </th>
+                )}
+                {ordered.map((c) => (
+                  <th key={c.key} scope="col" aria-sort={sortKey === c.key ? 'descending' : undefined}>
                     {c.label}
                   </th>
                 ))}
-                {hasTotal && <th scope="col">合計</th>}
+                {hasTotal && sortCls && <th scope="col">合計</th>}
               </tr>
             </thead>
             <tbody>
               {result.items.map((item) => (
                 <tr key={item.area_id}>
                   <th scope="row">{item.name}</th>
-                  {columns.map((c) => {
+                  {hasTotal && !sortCls && <td className="mini-cell__value">{formatNumber(item.counts.total ?? 0)}</td>}
+                  {ordered.map((c) => {
                     const v = item.counts[c.key] ?? 0;
                     return (
                       <td key={c.key}>
@@ -218,15 +262,16 @@ export function CompareCard({ result, actions }: { result: CompareResult; action
                       </td>
                     );
                   })}
-                  {hasTotal && <td className="mini-cell__value">{formatNumber(item.counts.total ?? 0)}</td>}
+                  {hasTotal && sortCls && <td className="mini-cell__value">{formatNumber(item.counts.total ?? 0)}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollHint>
       )}
       {/* 比べる地区が無いときは、グラフにも出すものが無い */}
       {result.items.length > 0 && <ViewButtons result={result} actions={actions} />}
+      {result.items.length > 0 && <ClassGuide />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -260,7 +305,16 @@ export function MapFocusCard({ result, actions }: { result: MapFocusResult; acti
 
 // ---- 検出画像 ----
 
-export function DetectionImageCard({ result, actions }: { result: DetectionImageResult; actions: ResultActions }) {
+export function DetectionImageCard({
+  result,
+  actions,
+  answerText,
+}: {
+  result: DetectionImageResult;
+  actions: ResultActions;
+  /** 回答の本文。写真の説明（caption）がすでに本文にあれば、カードでは出さない */
+  answerText?: string;
+}) {
   const cls = isCandidateClass(result.class) ? result.class : null;
   const images =
     result.images.length > 0
@@ -279,7 +333,7 @@ export function DetectionImageCard({ result, actions }: { result: DetectionImage
       </div>
       <p className="chip-row">
         {cls && <ClassBadge cls={cls} short />}
-        <span className="result-card__text">{result.caption}</span>
+        {!saidInAnswer(answerText, result.caption) && <span className="result-card__text">{result.caption}</span>}
       </p>
       <div className="button-row">
         <button type="button" className="btn btn--primary" onClick={() => actions.openCandidate(result.candidate_id)}>
@@ -293,26 +347,56 @@ export function DetectionImageCard({ result, actions }: { result: DetectionImage
 
 // ---- 精度 ----
 
+/** 指標の値（数のときだけ。null・数でない値は null） */
+function metricValue(result: AccuracyResult, key: string): number | null {
+  const v = result.metrics.find((m) => m.key === key)?.value;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** 0〜1 の割合を、整数の % の文字にする（四捨五入。値の読み替えだけで、解釈は足さない） */
+const percent = (ratio: number) => `${Math.round(Math.min(Math.max(ratio, 0), 1) * 100)} %`;
+
 export function AccuracyCard({ result }: { result: AccuracyResult }) {
+  // 専門の数字（F1・IoU など）の前に、適合率と再現率を、平易な言葉で 1 文にして出す。値は結果のものをそのまま（% に直すだけ）。
+  // どちらかが無いとき（古い評価ファイル）は、これまでどおり、指標をそのまま並べる
+  const precision = metricValue(result, 'holdout_object_precision');
+  const recall = metricValue(result, 'holdout_object_recall');
+  const plain = precision !== null && recall !== null;
+  const tiles = (
+    <ul className="metric-grid">
+      {result.metrics.map((m) => (
+        <li key={m.key} className="metric-tile">
+          <span className="metric-tile__label">{m.label}</span>
+          {m.value === null ? (
+            <span className="metric-tile__value metric-tile__value--none">未測定</span>
+          ) : (
+            <span className="metric-tile__value">{formatNumber(m.value)}</span>
+          )}
+          <span className="metric-tile__note">{m.note}</span>
+        </li>
+      ))}
+    </ul>
+  );
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
         <h3 className="result-card__title">{result.title}</h3>
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
-      <ul className="metric-grid">
-        {result.metrics.map((m) => (
-          <li key={m.key} className="metric-tile">
-            <span className="metric-tile__label">{m.label}</span>
-            {m.value === null ? (
-              <span className="metric-tile__value metric-tile__value--none">未測定</span>
-            ) : (
-              <span className="metric-tile__value">{formatNumber(m.value)}</span>
-            )}
-            <span className="metric-tile__note">{m.note}</span>
-          </li>
-        ))}
-      </ul>
+      {plain ? (
+        <>
+          <p className="accuracy-plain">
+            機械が見つけた建物のうち、既存の建物データ（基盤地図情報）と一致したのは約 <b>{percent(precision)}</b>。建物データにある建物のうち、機械が見つけられたのは約{' '}
+            <b>{percent(recall)}</b>です（評価用の地区）。見落としや見まちがいがあるため、結果は目で確かめる前提の「候補」です。
+          </p>
+          <details className="provenance">
+            <summary>くわしい指標（専門の数字）を見る</summary>
+            {tiles}
+          </details>
+        </>
+      ) : (
+        tiles
+      )}
       <p className="result-card__note">
         <Link href="/accuracy">このアプリの精度の画面で、詳しく見る</Link>
       </p>
@@ -323,11 +407,20 @@ export function AccuracyCard({ result }: { result: AccuracyResult }) {
 
 // ---- お断り ----
 
-export function RefusalCard({ result, actions }: { result: RefusalResult; actions: ResultActions }) {
+export function RefusalCard({
+  result,
+  actions,
+  answerText,
+}: {
+  result: RefusalResult;
+  actions: ResultActions;
+  /** 回答の本文。お断りの理由（message）がすでに本文にあれば、カードでは出さない */
+  answerText?: string;
+}) {
   return (
     <section className="result-card result-card--refusal" aria-label={refusalTitle(result.reason)} role="note">
       <h3 className="result-card__title">{refusalTitle(result.reason)}</h3>
-      <p className="result-card__text">{result.message}</p>
+      {!saidInAnswer(answerText, result.message) && <p className="result-card__text">{result.message}</p>}
       {result.suggestions.length > 0 && (
         <div className="suggest-block">
           <span className="suggest-block__label">代わりに、こんな質問ならお答えできます</span>

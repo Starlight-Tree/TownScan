@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { candidateImageUrl, getCandidate } from '../lib/api';
 import type { CandidateDetail } from '../lib/api-types';
 import { useAreas } from '../lib/areas-context';
@@ -18,13 +18,18 @@ interface Props {
   onLoaded?: (detail: CandidateDetail) => void;
   /** 開いたとき見出しへフォーカスを移す（既定 true）。チャットの回答から自動で開くときは false（入力欄のフォーカスを奪わない） */
   autoFocus?: boolean;
+  /**
+   * 見出しへフォーカスを移す合図。マウントしたあとで値が増えたら（同じ候補の詳細が、見えないまま・フォーカスを移さないまま開いているときに、
+   * ユーザーがボタンで「開く」をもう一度押した）、見出しへ移す。マウントしたときの値は合図に数えない（その移し方は autoFocus が決める）
+   */
+  focusNonce?: number;
 }
 
 /**
  * 候補の詳細。右の結果領域の「写真の比較」の中に収まる、流れの中の部品（地図に重ならない）。
  * 2018・2023 の切り出し、分類の説明、根拠の数字。重なりの表示（ドロワー）をやめたが、名前は変えない（差分を小さく保つ）
  */
-export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, autoFocus = true }: Props) {
+export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, autoFocus = true, focusNonce = 0 }: Props) {
   const rootRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const openerRef = useRef<Element | null>(null);
@@ -37,33 +42,55 @@ export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, a
     onLoadedRef.current = onLoaded;
   });
 
-  // 開いたら見出しへフォーカスを移し、閉じたら元の場所へ戻す（地図の「写真を比べる」から開いたときは、同じ更新の中で ResultArea の layout effect が、この effect より先にフォーカスを写真の比較のタブへ移す。だから覚える場所はそのタブで、タブへ戻る）。
-  // autoFocus が false（チャットの回答から自動で開くとき）は、どちらもしない。入力欄にあるフォーカスを奪わず、閉じたときに戻す「元の場所」も覚えない
-  useEffect(() => {
-    if (!autoFocusRef.current) return;
-    openerRef.current = document.activeElement;
+  // 見出しへフォーカスを移す。移す前にフォーカスのあった場所（詳細の外）を、閉じたときの戻し先として覚える
+  const focusHeading = useCallback(() => {
+    const active = document.activeElement;
+    if (!rootRef.current?.contains(active)) openerRef.current = active;
     headingRef.current?.focus();
+  }, []);
+
+  // 開いたら見出しへフォーカスを移し（地図の「写真を比べる」から開いたときは、同じ更新の中で ResultArea の layout effect が、この effect より先にフォーカスを写真の比較のタブへ移す。だから覚える場所はそのタブ）、
+  // 外れたとき、フォーカスを失っていれば（詳細の中にあった要素ごと消えて、body に落ちた）、覚えた場所へ戻す。
+  // いまフォーカスが別の所にあるなら、動かさない: 見えない間に別の候補へ替わって外れる詳細が、地図の印やチャットの入力欄にあるフォーカスを奪わないように。
+  // autoFocus が false（チャットの回答から自動で開くとき）は、開いたとき移さず、戻し先も覚えない（入力欄にあるフォーカスを奪わない）
+  useEffect(() => {
+    if (autoFocusRef.current) focusHeading();
     return () => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
       const el = openerRef.current;
       if (el instanceof HTMLElement && document.contains(el)) el.focus();
     };
-  }, []);
+  }, [focusHeading]);
+
+  // 開いたあとの合図（同じ候補をもう一度「開く」）。ユーザーが押したボタンが、新しい戻し先になる
+  const seenFocusNonce = useRef(focusNonce);
+  useEffect(() => {
+    if (seenFocusNonce.current === focusNonce) return;
+    seenFocusNonce.current = focusNonce;
+    focusHeading();
+  }, [focusNonce, focusHeading]);
 
   useEffect(() => {
     if (state.status === 'ready') onLoadedRef.current?.(state.data);
   }, [state]);
 
   /**
-   * 閉じる（「閉じる」ボタン・Esc）。閉じる直前にフォーカスが詳細の中にあれば、先に、この詳細が入っている tabpanel を名づけているタブ（aria-labelledby。
-   * 結果領域では「写真の比較」のタブ）へ移す。詳細が外れると、フォーカスのあった要素ごと消えて、フォーカスが body に落ちるため
-   * （開いたとき戻し先を覚えなかった autoFocus=false の詳細、たとえば検出画像の回答で自動で開いたものは、上の effect が戻さない）。
-   * 戻し先を覚えている詳細（チャットの「詳細」ボタンから開いた）は、外れるときに上の effect が覚えた場所へ戻す。それがあとに働くので、そちらが優先される
+   * 閉じる（「閉じる」ボタン・Esc）。閉じる直前にフォーカスが詳細の中にあれば、先に、開く前の場所（覚えていれば。チャットの「詳細」ボタンなど）へ、
+   * 覚えていない・戻せないときは、この詳細が入っている tabpanel を名づけているタブ（aria-labelledby。結果領域では「写真の比較」のタブ）へ移す。
+   * 詳細が外れると、フォーカスのあった要素ごと消えて、フォーカスが body に落ちるため
+   * （開いたとき戻し先を覚えなかった autoFocus=false の詳細、たとえば検出画像の回答で自動で開いたものは、戻し先が無いのでタブへ移す）。
+   * 外れるときの後始末は、フォーカスが body に落ちたときだけ戻すので、ここで移したフォーカスは、そのまま残る
    */
   const close = () => {
     const root = rootRef.current;
     if (root?.contains(document.activeElement)) {
-      const tabId = root.closest('[role="tabpanel"]')?.getAttribute('aria-labelledby')?.split(/\s+/)[0];
-      (tabId ? document.getElementById(tabId) : null)?.focus();
+      const opener = openerRef.current;
+      if (opener instanceof HTMLElement && document.contains(opener) && !root.contains(opener)) opener.focus();
+      if (root.contains(document.activeElement)) {
+        const tabId = root.closest('[role="tabpanel"]')?.getAttribute('aria-labelledby')?.split(/\s+/)[0];
+        (tabId ? document.getElementById(tabId) : null)?.focus();
+      }
     }
     onClose();
   };

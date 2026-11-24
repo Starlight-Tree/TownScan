@@ -61,6 +61,17 @@ export function areaLabel(f: MapFilter, nameOf: (areaId: string) => string): str
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
 /**
+ * 道具の結果として読める形か。画面は、API の形が少し違っても壊れない作りにしている。
+ * count は filterFromResults が filter を直接読む（契約では必須）ので、filter がオブジェクトでないものは、壊れた結果として外す。
+ * 回答の「対象・条件」の行（AnswerScope）も、右の地図・グラフの絞り込み（HomeClient）も、filterFromResults に渡す前にこれで外す。
+ * 外さずに渡すと、壊れた count が「条件なし（全地区・全分類）」と読まれ、条件の行（その前の結果の条件）と食い違う
+ */
+export function isWellFormedResult(r: unknown): r is ToolResult {
+  if (!isRecord(r) || typeof r.type !== 'string') return false;
+  return r.type !== 'count' || isRecord(r.filter);
+}
+
+/**
  * 結果の絞り込み条件（backend の _filter_info）の地区の部分。area_ids（2 つ以上）があればそれ、なければ area_id、どちらも無ければ全地区。
  * area_ids があるときは areaId を '' にする（MapFilter の約束）
  */

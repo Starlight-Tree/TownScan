@@ -8,6 +8,7 @@ import {
   areaScopeIds,
   filterFromResults,
   isAllFilter,
+  isWellFormedResult,
   viewForResults,
   widenFilterFor,
   type MapFilter,
@@ -150,6 +151,35 @@ describe('filterFromResults: 地区（1 つ・複数・全地区）と分類', (
     const f = filterFromResults([noFilter]);
     expect(f && isAllFilter(f)).toBe(true);
     expect(filterFromResults([odd]) && isAllFilter(filterFromResults([odd])!)).toBe(true);
+  });
+});
+
+describe('isWellFormedResult（filterFromResults に渡す前の前処理）', () => {
+  it('type が文字列のオブジェクトは読める。count は、filter がオブジェクトのときだけ（契約では必須）', () => {
+    expect(isWellFormedResult(count)).toBe(true);
+    expect(isWellFormedResult(compare)).toBe(true);
+    expect(isWellFormedResult(table)).toBe(true);
+    const noFilter = { ...count, filter: undefined };
+    expect(isWellFormedResult(noFilter)).toBe(false);
+    expect(isWellFormedResult({ ...count, filter: 'x' })).toBe(false);
+    expect(isWellFormedResult({ ...count, filter: null })).toBe(false);
+  });
+
+  it('count 以外は、filter が無くても読める（compare の filter は、無ければ全地区として読む）', () => {
+    expect(isWellFormedResult({ ...compare, filter: undefined })).toBe(true);
+    expect(isWellFormedResult({ ...mapFocus })).toBe(true);
+  });
+
+  it('オブジェクトでない・type が文字列でないものは読めない', () => {
+    for (const v of [null, undefined, 'text', 42, {}, { type: 3 }, []]) expect(isWellFormedResult(v)).toBe(false);
+  });
+
+  it('壊れた count を外してから渡すと、その前の条件を採る（外さずに渡すと、全地区・全分類と読まれる）', () => {
+    const noFilter = { ...count, filter: undefined } as unknown as typeof count;
+    const byWard = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: null } };
+    expect(filterFromResults([byWard, noFilter].filter(isWellFormedResult))).toMatchObject({ areaIds: ['z18-1-2', 'z18-2-2'], scope: '中央区' });
+    const raw = filterFromResults([byWard, noFilter]);
+    expect(raw && isAllFilter(raw)).toBe(true);
   });
 });
 

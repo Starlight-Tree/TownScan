@@ -38,11 +38,12 @@ describe('地図のパネルの配置（地図が残りの高さを取る）', (
     expect(decl('.map-panel > :not(.map-stage)', 'flex')).toBe('none');
   });
 
-  it('ツールバー・集計の帯・現在表示の帯は、狭い幅で折り返す', () => {
+  it('ツールバー・集計の帯（先頭の行も、分類の件数も）は、狭い幅で折り返す。現在表示の帯は、文として流し込むので、折り返しの箱にしない', () => {
     expect(decl('.map-toolbar', 'flex-wrap')).toBe('wrap');
     expect(decl('.summary-strip', 'flex-wrap')).toBe('wrap');
+    expect(decl('.summary-strip__head', 'flex-wrap')).toBe('wrap');
     expect(decl('.summary-strip__counts', 'flex-wrap')).toBe('wrap');
-    expect(decl('.map-status', 'flex-wrap')).toBe('wrap');
+    expect(decl('.map-status', 'flex-wrap')).toBeNull();
   });
 
   it('ツールバーの操作部品は、地図に高さを回すため 36px（44px のままにしない）', () => {
@@ -114,5 +115,82 @@ describe('候補の一覧（スクロールする枠の中のフォーカスの�
 
   it('閉じたままの高さは最小（36px）', () => {
     expect(ruleBody('.cand-list > summary')).toMatch(/min-height\s*:\s*36px/);
+  });
+});
+
+describe('現在表示の帯（現在表示・案内・通知を、ひと続きの文として流し込む）', () => {
+  it('最小の高さは 36px（S1 の高さの見積もりの一部）。1 行のときは、文を真ん中に置く', () => {
+    expect(decl('.map-status', 'min-height')).toBe('36px');
+    expect(decl('.map-status', 'display')).toBe('flex');
+    expect(decl('.map-status', 'align-items')).toBe('center');
+  });
+
+  it('文（.map-status__text）は帯の幅いっぱい（flex: 1・min-width: 0）。項目のあいだは右の余白で空け、空の通知（いつも描く role=status）は余白を取らない', () => {
+    expect(decl('.map-status__text', 'flex')).toBe('1');
+    expect(decl('.map-status__text', 'min-width')).toBe('0');
+    expect(decl('.map-status__text > *', 'margin-right')).toBe('14px');
+    expect(decl('.map-status__text > :empty', 'margin-right')).toBe('0');
+  });
+
+  it('文の中のボタンは、左の余白（.btn--small の 8px）を消す。行の中の高さは、ボタンに合わせて伸びる', () => {
+    expect(decl('.map-status__text > .btn', 'margin-left')).toBe('0');
+    expect(decl('.map-status__text > .btn', 'vertical-align')).toBe('middle');
+  });
+});
+
+describe('集計の帯の先頭の行（対象・全 m 件のうち…・条件を解除）。出入りで帯の高さが動かない', () => {
+  it('先頭の行（.summary-strip__head）は、残りの幅を取る。解除のボタンは、その行の右端へ寄せる', () => {
+    expect(decl('.summary-strip__head', 'display')).toBe('flex');
+    expect(decl('.summary-strip__head', 'flex')).toBe('1 1 auto');
+    expect(decl('.summary-strip__reset', 'margin-left')).toBe('auto');
+  });
+
+  it('「全 m 件のうち…」は、出ないときも幅を空けておく（min-width）。出ているときの文が収まる幅', () => {
+    expect(decl('.summary-strip__scope', 'min-width')).toBe('17em');
+  });
+
+  it('hidden のときは、display: none にせず、visibility: hidden で場所だけを保つ（見えず、フォーカスもできない）', () => {
+    expect(decl('.summary-strip__scope[hidden]', 'visibility')).toBe('hidden');
+    expect(decl('.summary-strip__scope[hidden]', 'display')).toBe('block');
+    expect(decl('.summary-strip__reset[hidden]', 'visibility')).toBe('hidden');
+    expect(decl('.summary-strip__reset[hidden]', 'display')).toBe('inline-flex');
+  });
+});
+
+describe('候補の一覧（閉じたままの summary）のフォーカスの輪', () => {
+  it('輪を内側へ描く（outline-offset: -3px）。閉じたままの summary は、スクロールするパネルの最後の子で、外側へ描くと、下の辺が切れる', () => {
+    expect(decl('.cand-list > summary:focus-visible', 'outline-offset')).toBe('-3px');
+    expect(decl('.map-panel', 'overflow-y')).toBe('auto');
+  });
+});
+
+describe('印の大きさ（押せる大きさ 24px 以上。見た目の点は 18px のまま）', () => {
+  it('点 18px + 余白 3px × 2 = 24px（LeafletMap の MARKER_BOX と同じ）', () => {
+    const px = (v: string | null) => Number.parseFloat(v ?? 'NaN');
+    expect(px(decl('.cand-dot', 'width'))).toBe(18);
+    expect(px(decl('.cand-dot', 'height'))).toBe(18);
+    expect(px(decl('.cand-dot', 'width')) + 2 * px(decl('.cand-dot', 'margin'))).toBe(24);
+  });
+});
+
+describe('CSS だけが守っている振る舞い（規則が消えても、ほかのテストは通る。画面は壊れる）', () => {
+  it('選んでいない画面（.result-area__panel[hidden]）は、display: none にせず visibility: hidden（Leaflet が 0×0 の大きさを覚えないため）', () => {
+    expect(decl('.result-area__panel[hidden]', 'visibility')).toBe('hidden');
+    expect(decl('.result-area__panel[hidden]', 'display')).toBe('flex');
+  });
+
+  it('.app__main の isolation: isolate は、地図の z-index（カード・通知の 1100）を、本文の中に閉じ込める（サイドパネルのメニュー 25 より下）', () => {
+    expect(decl('.app__main', 'isolation')).toBe('isolate');
+  });
+
+  it('地図の上の通知: 外側（.map-overlay-top）は操作を通し、中身（.map-note）だけが受ける（「再試行」が押せる）', () => {
+    expect(decl('.map-overlay-top', 'pointer-events')).toBe('none');
+    expect(decl('.map-note', 'pointer-events')).toBe('auto');
+  });
+
+  it('ツールバーの地区の選択は、長い名前で行を押し広げない（最大 320px・残りの幅だけ使う）', () => {
+    expect(decl('.map-toolbar__group--area', 'max-width')).toBe('320px');
+    expect(decl('.map-toolbar__group--area', 'flex')).toBe('1 1 150px');
+    expect(decl('.map-toolbar__group--area', 'min-width')).toBe('0');
   });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { RESULT_VIEW_LABELS, RESULT_VIEW_ORDER, type ResultView } from '../lib/result-view';
+import { ResultPanelBoundary } from './ResultPanelBoundary';
 
 interface Props {
   view: ResultView;
@@ -156,7 +157,7 @@ export function ResultArea({
             className="result-area__panel"
             hidden={v !== view}
           >
-            {panels[v]}
+            <ResultPanelBoundary name={RESULT_VIEW_LABELS[v]}>{panels[v]}</ResultPanelBoundary>
           </div>
         ))}
       </div>

@@ -32,3 +32,11 @@ export function authConfigProblem(env: AuthEnv): string | null {
   if (secret.length < MIN_SECRET_LENGTH) return `BETTER_AUTH_SECRET is shorter than ${MIN_SECRET_LENGTH} characters`;
   return null;
 }
+
+/**
+ * ログインを使える設定か。getAuth() が null を返さない条件と同じ（authConfigProblem が null）。
+ * Better Auth も DB も作らずに答える（ログインしていない人の画面の枠が、ログインの入口を出すかどうかを決めるため）。
+ */
+export function isAuthConfigured(env: AuthEnv = process.env): boolean {
+  return authConfigProblem(env) === null;
+}

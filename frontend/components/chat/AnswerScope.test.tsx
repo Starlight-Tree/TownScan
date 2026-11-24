@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { CompareResult, CountResult, DetectionImageResult, ToolResult } from '../../lib/api-types';
 import { AreasProvider } from '../../lib/areas-context';
 import { ALL_RESULTS, accuracy, areas, compare, count, countWards, detectionImage, mapFocus, provenance, refusal, table } from '../../tests/fixtures';
-import { filterFromResults } from '../../lib/result-view';
-import { AnswerScope, answerScope, type ScopeItem } from './AnswerScope';
+import { filterFromResults, isWellFormedResult } from '../../lib/result-view';
+import { AnswerScope, answerAreaHint, answerScope, type ScopeItem } from './AnswerScope';
 
 const nameOf = (id: string) => (id === 'z18-1-2' ? 'テスト地区 01' : id);
 const countWith = (filter: CountResult['filter']): CountResult => ({ ...count, filter });
@@ -93,6 +93,16 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
       expect(() => answerScope([narrow, odd], nameOf)).not.toThrow();
       expect(rows(answerScope([narrow, odd], nameOf))).toEqual([{ key: 'area', label: '地区', text: 'すべて' }]);
     });
+  });
+
+  it('壊れた count（filter が無い）は飛ばし、その前の compare の条件を採る。右の絞り込み（HomeClient）も同じ前処理（isWellFormedResult）で、同じ結果になる', () => {
+    const byWard: CompareResult = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: null } };
+    const noFilter = { type: 'count', title: '壊れた件数', total: 1, provenance } as unknown as ToolResult;
+    const items = answerScope([byWard, noFilter], nameOf);
+    expect(items.find((i) => i.key === 'area')?.text).toBe('中央区');
+    expect(items.some((i) => i.key === 'class')).toBe(false);
+    expect(answerAreaHint([byWard, noFilter], 12)).toBe(answerAreaHint([byWard], 12));
+    expect(filterFromResults([byWard, noFilter].filter(isWellFormedResult))).toMatchObject({ areaIds: ['z18-1-2', 'z18-2-2'], scope: '中央区' });
   });
 
   it('compare: 地区が多いときは、先頭の 3 つと残りの数にまとめる', () => {
@@ -197,5 +207,52 @@ describe('AnswerScope（回答の対象・条件の行）', () => {
     const { container } = renderScope([table, mapFocus, accuracy, refusal]);
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByRole('group')).not.toBeInTheDocument();
+  });
+});
+
+describe('地区の範囲の説明（地区は 1 枚のタイル。丁目・区の全体ではない）', () => {
+  const groupOf = (results: ToolResult[], withAreas = true) => {
+    render(
+      <AreasProvider areas={withAreas ? areas : []}>
+        <AnswerScope results={results} />
+      </AreasProvider>,
+    );
+    return screen.getByRole('group', { name: 'この回答の対象・条件' });
+  };
+  const areaValue = (group: HTMLElement) => within(group).getByText('地区', { selector: 'dt' }).nextElementSibling;
+
+  it('複数の地区（区）: 区の名前のあとに、解析した地区の数と 1 地区の大きさを添える', () => {
+    const group = groupOf([countWards]);
+    expect(areaValue(group)).toHaveTextContent('中央区（解析した 2 地区・各約 130 m 四方）');
+  });
+
+  it('1 つの地区: 地区の名前のあとに、1 地区の大きさを添える', () => {
+    const group = groupOf([countWith({ area_id: 'z18-1-2', cls: null })]);
+    expect(areaValue(group)).toHaveTextContent('テスト地区 01（1 地区・約 130 m 四方）');
+  });
+
+  it('全地区: 「すべて」のあとに、解析した地区の数（地区の一覧から）を添える', () => {
+    const group = groupOf([countWith({ area_id: null, cls: null })]);
+    expect(areaValue(group)).toHaveTextContent('すべて（解析した全 1 地区・各約 130 m 四方）');
+  });
+
+  it('全地区: 地区の一覧が読めていなければ、数を作らず「すべて」だけ', () => {
+    const group = groupOf([countWith({ area_id: null, cls: null })], false);
+    expect(areaValue(group)).toHaveTextContent(/^すべて$/);
+    expect(group.querySelector('.answer-scope__hint')).toBeNull();
+  });
+
+  it('説明は「地区」の行だけ。分類・写真の年の行には付けない', () => {
+    const group = groupOf([countWith({ area_id: 'z18-1-2', cls: 'uncertain' })]);
+    expect(group.querySelectorAll('.answer-scope__hint')).toHaveLength(1);
+    expect(within(group).getByText('分類', { selector: 'dt' }).nextElementSibling).not.toHaveTextContent('130 m');
+  });
+
+  it('answerAreaHint: 地区の行と同じ条件（最後の件数・比較）から作る。件数も比較も無ければ null。壊れた結果でも落ちない', () => {
+    const narrow = countWith({ area_id: 'z18-1-2', cls: 'uncertain' });
+    expect(answerAreaHint([narrow, countWards], 12)).toBe('解析した 2 地区・各約 130 m 四方');
+    expect(answerAreaHint([countWards, narrow], 12)).toBe('1 地区・約 130 m 四方');
+    expect(answerAreaHint([table, mapFocus, accuracy, refusal], 12)).toBeNull();
+    expect(answerAreaHint([null, 'x', {}, { type: 'count', title: '壊れた件数' }], 12)).toBeNull();
   });
 });

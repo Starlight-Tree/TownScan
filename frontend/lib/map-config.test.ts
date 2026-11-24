@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CandidateGeometry } from './api-types';
 import {
   ATTRIBUTION,
@@ -9,6 +9,8 @@ import {
   displayStatusText,
   geometryBBox,
   nextNonce,
+  prefersReducedMotion,
+  shiftAboveCover,
   toLatLngs,
   unionBBox,
 } from './map-config';
@@ -115,5 +117,53 @@ describe('displayStatusText（地図の下の「現在表示」）', () => {
   it('件数は千の区切り。候補が届いていない（null）ときは、0 件と言わない', () => {
     expect(displayStatusText('std', 'ok', 1234)).toBe('表示中: 標準地図・候補 1,234 件');
     expect(displayStatusText('photo2023', 'ok', null)).toBe('表示中: 2023 年の写真・候補はまだ表示できていません');
+  });
+});
+
+describe('shiftAboveCover（カードの下に隠れる印を、上へ寄せる量）', () => {
+  // カード: 左 100〜右 300、上 500〜下 560。印の箱は、中心から上下左右に 18px
+  const cover = { left: 100, right: 300, top: 500, bottom: 560 };
+  const box = (x: number, y: number, reach = 18) => ({ left: x - reach, right: x + reach, top: y - reach, bottom: y + reach });
+
+  it('カードの下に入る印は、印の下端 + 空きが、カードの上端に届くまで', () => {
+    // 中心 y=520 → 下端 538。カードの上端 500 に、空き 8px を足して届くには 538 + 8 - 500 = 46
+    expect(shiftAboveCover(box(200, 520), cover, 8)).toBe(46);
+    // 下の半分だけ入っている印（中心 y=490 → 下端 508）
+    expect(shiftAboveCover(box(200, 490), cover, 8)).toBe(16);
+  });
+
+  it('隠れない印は 0（横にある・上にある・下にある・端が触れるだけ）。利用者が動かした地図を、引き戻さない', () => {
+    expect(shiftAboveCover(box(400, 520), cover, 8)).toBe(0); // カードの右
+    expect(shiftAboveCover(box(0, 520), cover, 8)).toBe(0); // カードの左
+    expect(shiftAboveCover(box(200, 400), cover, 8)).toBe(0); // カードの上
+    expect(shiftAboveCover(box(200, 600), cover, 8)).toBe(0); // カードの下
+    expect(shiftAboveCover(box(200, 482), cover, 8)).toBe(0); // 下端がちょうど上端（500）。触れるだけで、重ならない
+    expect(shiftAboveCover(box(300 + 18, 520), cover, 8)).toBe(0); // 箱の左端がカードの右端（300）。触れるだけ
+  });
+
+  it('カードと重ならなければ、空き（8px）の内側にいる印（カードの上端のすぐ上。下端が 495）でも、動かさない', () => {
+    expect(shiftAboveCover(box(200, 477), cover, 8)).toBe(0);
+  });
+
+  it('寄せすぎて、印の上端が地図の枠の上端（0）から空きの分より上へ出るほどは、寄せない', () => {
+    // 印の箱は y=30〜66（高さ 36）。カードは上端 40。全部寄せると 66 + 8 - 40 = 34 だが、上端 30 から空き 8 を残す 22 まで
+    expect(shiftAboveCover({ left: 150, right: 250, top: 30, bottom: 66 }, { left: 100, right: 300, top: 40, bottom: 120 }, 8)).toBe(22);
+    // すでに上端に近く、寄せる余地が無い（上端が空き未満）なら 0
+    expect(shiftAboveCover({ left: 150, right: 250, top: 5, bottom: 60 }, { left: 100, right: 300, top: 40, bottom: 120 }, 8)).toBe(0);
+  });
+});
+
+describe('prefersReducedMotion', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('prefers-reduced-motion: reduce に合うとき true。合わない・matchMedia が無い環境では false', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)', media: query }));
+    expect(prefersReducedMotion()).toBe(true);
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query }));
+    expect(prefersReducedMotion()).toBe(false);
+    vi.stubGlobal('matchMedia', undefined);
+    expect(prefersReducedMotion()).toBe(false);
   });
 });

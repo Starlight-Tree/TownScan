@@ -189,28 +189,42 @@ describe('AccountMenu（パネルを開いたときの名前と矢印）', () =>
 });
 
 describe('AccountMenu（ログインしていない）', () => {
-  it('テーマと、Google でログインする入口だけを出す（ログアウトとメールは出さない）', async () => {
+  it('テーマと、Google でログインする入口だけを出す（ログアウトとメールは出さない）。ボタンは「ログイン」と名乗る', async () => {
     render(<AccountMenu loginHref="/login" />);
-    const button = screen.getByRole('button', { name: 'メニュー' });
-    expect(button).toHaveAttribute('data-tip', 'メニュー');
+    const button = screen.getByRole('button', { name: 'ログイン・テーマのメニュー' });
+    expect(button).toHaveAttribute('data-tip', 'ログイン・テーマ');
+    // 見える名前（パネルを開いているとき）は「ログイン」。読み上げの名前は、その文字を含む
+    expect(button.querySelector('.account-label')).toHaveTextContent('ログイン');
+    expect(button).toHaveAccessibleName(expect.stringContaining('ログイン'));
     await userEvent.click(button);
-    const menu = screen.getByRole('menu', { name: 'メニュー' });
+    const menu = screen.getByRole('menu', { name: 'ログインとテーマ' });
     expect(within(menu).getByRole('menuitem', { name: 'Google でログイン' })).toHaveAttribute('href', '/login');
     expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(3);
     expect(within(menu).queryByRole('menuitem', { name: 'ログアウト' })).not.toBeInTheDocument();
     expect(menu.querySelector('.account-who')).toBeNull();
   });
 
+  it('ログインの入口があるときは、人型のアイコン。≡（メニューの印）は出さない', () => {
+    render(<AccountMenu loginHref="/login" />);
+    const avatar = screen.getByRole('button', { name: 'ログイン・テーマのメニュー' }).querySelector('.account-avatar')!;
+    expect(avatar.querySelector('svg')).not.toBeNull();
+    expect(avatar).not.toHaveTextContent('≡');
+  });
+
   it('ログインの入口を押すと、メニューを閉じる（ページ移動で、メニューが残らない）', async () => {
     render(<AccountMenu loginHref="/login" />);
-    await userEvent.click(screen.getByRole('button', { name: 'メニュー' }));
+    await userEvent.click(screen.getByRole('button', { name: 'ログイン・テーマのメニュー' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Google でログイン' }));
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('行き先が無ければ、テーマだけを出す', async () => {
+  it('行き先が無ければ（ログインを使えない設定）、「メニュー」と ≡ で、テーマだけを出す', async () => {
     render(<AccountMenu />);
-    await userEvent.click(screen.getByRole('button', { name: 'メニュー' }));
+    const button = screen.getByRole('button', { name: 'メニュー' });
+    expect(button).toHaveAttribute('data-tip', 'メニュー');
+    expect(button.querySelector('.account-avatar')).toHaveTextContent('≡');
+    expect(button.querySelector('.account-label')).toHaveTextContent('メニュー');
+    await userEvent.click(button);
     const menu = screen.getByRole('menu', { name: 'メニュー' });
     expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(3);
     expect(within(menu).queryByRole('menuitem')).not.toBeInTheDocument();
@@ -218,6 +232,6 @@ describe('AccountMenu（ログインしていない）', () => {
 
   it('名前・メール・ログアウトの 3 つがそろわなければ、ログイン中とは扱わない', () => {
     render(<AccountMenu name="試験 花子" loginHref="/login" />);
-    expect(screen.getByRole('button', { name: 'メニュー' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ログイン・テーマのメニュー' })).toBeInTheDocument();
   });
 });

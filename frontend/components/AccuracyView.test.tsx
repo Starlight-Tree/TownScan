@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { jsonResponse, metrics, metricsReal, provenance } from '../tests/fixtures';
+import { areas, jsonResponse, metrics, metricsReal, provenance } from '../tests/fixtures';
 import { AccuracyView } from './AccuracyView';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -50,7 +50,16 @@ describe('/accuracy', () => {
   });
 
   it('読み込み中 → エラー → 再試行', async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError('x')).mockResolvedValueOnce(jsonResponse(metrics));
+    // 地区の一覧（/api/areas。町名を出すため）も読むので、URL で答えを分ける。数字（/api/metrics）の最初の 1 回だけ失敗させる
+    let failed = false;
+    fetchMock.mockImplementation(async (input) => {
+      if (String(input) === '/api/areas') return jsonResponse(areas);
+      if (!failed) {
+        failed = true;
+        throw new TypeError('x');
+      }
+      return jsonResponse(metrics);
+    });
     render(<AccuracyView />);
     expect(screen.getByRole('status')).toHaveTextContent('読み込んでいます');
     expect(await screen.findByRole('alert')).toHaveTextContent('読み込めませんでした');
@@ -297,6 +306,100 @@ describe('/accuracy', () => {
       for (const t of ['撮影月が不明', '2018 年は帯状の範囲だけ', 'タイルの縁', '誤検出の可能性', '正解が無い', '対象範囲']) {
         expect(screen.getByText(t)).toBeInTheDocument();
       }
+    });
+  });
+
+  describe('利用者向けの言葉（内部のキー名・ファイルパス・変数式を、ふだんの画面に出さない）', () => {
+    /** 評価ファイル（eval.json）の notes の書き方（開発者向けの文）を、実データから写した */
+    const devNotes = [
+      'タイルの縁に接する物体は、参照・予測の両方から外した。外した数は excluded_edge_objects（内訳は excluded_edge_detail）。',
+      '新築の再現率は、手ラベルが無いので未測定（new_building_recall = null）。',
+      'year_compare: 同じ参照・同じ設定で、2023 年の写真の抽出も測った。',
+      'existing_absent_in_2018: 2018 年の抽出が何も見ていない（ov_2018 <= 0.1 かつ prob_2018_p90 < 0.2）棟の数と割合。',
+      'gml:id の接頭辞は K17、lfSpanFr は 2018-10-01、devDate は 2018-10-02。docs/decisions/0001-data-candidates.md の調査は、更新が止まっていたと記す。',
+    ];
+
+    function routeFetch(areasBody: unknown, metricsBody: unknown = metricsReal) {
+      fetchMock.mockImplementation(async (input) => {
+        if (String(input) === '/api/areas') {
+          if (areasBody === 'fail') throw new TypeError('x');
+          return jsonResponse(areasBody);
+        }
+        return jsonResponse(metricsBody);
+      });
+    }
+
+    it('評価の注記は、見出しと 1 行の説明だけを出し、中身は畳んでおく（項目名・ファイル名・条件式は、開いたときだけ見える）', async () => {
+      routeFetch([], { ...metricsReal, notes: devNotes });
+      render(<AccuracyView />);
+      await screen.findByText('新築の再現率');
+      const panel = screen.getByRole('heading', { name: '評価の注記' }).closest('section')!;
+      expect(within(panel).getByText(/開発者向けです/)).toBeVisible();
+      const details = screen.getByTestId('eval-notes') as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      for (const raw of [/excluded_edge_objects/, /new_building_recall/, /year_compare/, /ov_2018 <= 0\.1/, /gml:id/, /lfSpanFr/, /devDate/, /docs\/decisions\/0001/]) {
+        expect(screen.getByText(raw)).not.toBeVisible();
+      }
+      // 畳んだ中身を見るには、「注記をすべて見る（開発者向け）」を押す
+      const summary = screen.getByText('注記をすべて見る（開発者向け）');
+      expect(summary).toBeVisible();
+      await userEvent.click(summary);
+      expect(details.open).toBe(true);
+      expect(screen.getByText(/excluded_edge_objects/)).toBeVisible();
+      expect(within(details).getAllByRole('listitem')).toHaveLength(devNotes.length);
+    });
+
+    it('注記の外（畳んでいない所）には、キー名・ファイルパス・内部の文書番号（ADR）を出さない', async () => {
+      routeFetch([], { ...metricsReal, notes: devNotes });
+      render(<AccuracyView />);
+      await screen.findByText('新築の再現率');
+      const details = screen.getByTestId('eval-notes');
+      const outside = (document.body.textContent ?? '').replace(details.textContent ?? '', '');
+      expect(outside).not.toMatch(/ADR/);
+      expect(outside).not.toMatch(/docs\/|\.md\b/);
+      expect(outside).not.toMatch(/[a-z]+_[a-z]+/);
+      expect(outside).not.toMatch(/gml:id|lfSpanFr|devDate/);
+    });
+
+    it('地区ごとの値の「地区」は、町名を主にして、タイル ID を下に小さく添える（地区の一覧が読めたとき）', async () => {
+      const [first] = areas;
+      routeFetch([{ ...first!, id: 'z18-226274-105752', name: '黒髪六丁目' }]);
+      render(<AccuracyView />);
+      await screen.findByText('新築の再現率');
+      const table = screen.getAllByRole('table').find((t) => within(t).queryByRole('columnheader', { name: '地区' }))!;
+      await within(table).findByText('黒髪六丁目');
+      const row = within(table).getByText('黒髪六丁目').closest('tr')!;
+      expect(within(row).getAllByRole('cell')[0]).toHaveTextContent('黒髪六丁目z18-226274-105752');
+      expect(row.querySelector('.data-table__sub')).toHaveTextContent('z18-226274-105752');
+      // 一覧に無い地区は、ID のまま（二重に出さない）
+      const other = within(table).getAllByRole('row')[2]!;
+      expect(other.querySelector('.data-table__sub')).toBeNull();
+    });
+
+    it('調整用・評価用の地区の列挙も、町名で言う', async () => {
+      const [first] = areas;
+      const tune = (metricsReal.split?.tune ?? [])[0]!;
+      routeFetch([{ ...first!, id: tune, name: '黒髪六丁目' }]);
+      render(<AccuracyView />);
+      await screen.findByText('新築の再現率');
+      await waitFor(() => expect(screen.getByText(/調整用: 黒髪六丁目/)).toBeInTheDocument());
+    });
+
+    it('地区の一覧を読めなくても、精度の数字は出す。エラーの表示は出さず、地区は ID のまま', async () => {
+      routeFetch('fail');
+      render(<AccuracyView />);
+      await screen.findByText('新築の再現率');
+      const table = screen.getAllByRole('table').find((t) => within(t).queryByRole('columnheader', { name: '地区' }))!;
+      expect(within(table).getByText('z18-226274-105752')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('参照の限界の説明に、内部の文書番号（ADR 0001）を書かない', async () => {
+      routeFetch([]);
+      render(<AccuracyView />);
+      await screen.findByTestId('limit-reference');
+      expect(screen.getByTestId('limit-reference')).toHaveTextContent('開発時の調査記録にあります');
+      expect(screen.getByTestId('limit-reference')).not.toHaveTextContent('ADR');
     });
   });
 

@@ -1,9 +1,10 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AreaSummary, CandidateClass, CandidateFeature } from '../../lib/api-types';
 import { ApiError } from '../../lib/api';
-import type { TileStatus } from '../../lib/map-config';
+import { nextNonce, type TileStatus } from '../../lib/map-config';
 import { ALL_FILTER, type MapFilter } from '../../lib/result-view';
 import type { AsyncState } from '../../lib/use-api';
 import { MapPanel } from './MapPanel';
@@ -12,6 +13,8 @@ import { MapPanel } from './MapPanel';
 const api = vi.hoisted(() => ({ getCandidates: vi.fn() }));
 vi.mock('../../lib/api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/api')>()), getCandidates: api.getCandidates }));
 
+// 地図が受け取る coverRef（選択中のカードの要素。印がカードの下に隠れるとき、地図が上へ寄せるのに使う）を控える
+const seen = vi.hoisted(() => ({ coverRef: null as { current: HTMLElement | null } | null }));
 // Leaflet 本体は LeafletMap.test.tsx で確かめる。ここでは、MapPanel が地図へ渡す props と、地図の外の表示（集計の帯・現在表示・選択中のカード）を見る。
 // 本物と同じく、.leaflet-host が地図の本体（印はこの中）
 vi.mock('./LeafletMap', () => ({
@@ -20,26 +23,33 @@ vi.mock('./LeafletMap', () => ({
     focus: { bbox: number[]; ids: string[]; nonce: number } | null;
     onTileStatus: (s: TileStatus) => void;
     onZoom: (z: number) => void;
-  }) => (
-    <div
-      data-testid="leaflet"
-      className="leaflet-host"
-      data-count={p.features.length}
-      data-focus={p.focus ? 'fit' : ''}
-      data-focus-keys={p.focus ? Object.keys(p.focus).sort().join(',') : ''}
-    >
-      {(['ok', 'partial', 'none'] as const).map((s) => (
-        <button key={s} type="button" onClick={() => p.onTileStatus(s)}>
-          タイル（{s}）
-        </button>
-      ))}
-      {[15, 17].map((z) => (
-        <button key={z} type="button" onClick={() => p.onZoom(z)}>
-          ズーム（{z}）
-        </button>
-      ))}
-    </div>
-  ),
+    coverRef?: { current: HTMLElement | null };
+  }) => {
+    seen.coverRef = p.coverRef ?? null;
+    return (
+      <div
+        data-testid="leaflet"
+        className="leaflet-host"
+        data-count={p.features.length}
+        data-focus={p.focus ? 'fit' : ''}
+        data-focus-keys={p.focus ? Object.keys(p.focus).sort().join(',') : ''}
+        data-focus-bbox={p.focus ? p.focus.bbox.join(',') : ''}
+        data-focus-nonce={p.focus ? p.focus.nonce : ''}
+        tabIndex={0}
+      >
+        {(['ok', 'partial', 'none'] as const).map((s) => (
+          <button key={s} type="button" onClick={() => p.onTileStatus(s)}>
+            タイル（{s}）
+          </button>
+        ))}
+        {[15, 17].map((z) => (
+          <button key={z} type="button" onClick={() => p.onZoom(z)}>
+            ズーム（{z}）
+          </button>
+        ))}
+      </div>
+    );
+  },
 }));
 
 function area(id: string, name: string, counts: [number, number, number]): AreaSummary {
@@ -118,7 +128,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const status = () => document.querySelector('.map-status')!.firstElementChild!.textContent;
+// 帯（.map-status）の中の 1 つの文（.map-status__text）に、現在表示・案内・通知を流し込む。最初の子が、現在表示の文
+const status = () => document.querySelector('.map-status__text')!.firstElementChild!.textContent;
 
 describe('地図の下の「現在表示」', () => {
   it('選んだ地図の種類と候補の件数。初期は 2023 年の写真', async () => {
@@ -142,7 +153,8 @@ describe('地図の下の「現在表示」', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'タイル（ok）' }));
     expect(status()).toBe('表示中: 2023 年の写真・候補 3 件');
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    // 通知の入れ物は、いつも描く（文だけを替える）。文が無いあいだは空
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('標準地図を選んでいれば、タイルの状態に関わらず「標準地図」', async () => {
@@ -160,6 +172,63 @@ describe('地図の下の「現在表示」', () => {
   it('候補の件数は、絞り込み後の件数', () => {
     setup({ filter: { areaId: '', classes: new Set(['uncertain']) } });
     expect(status()).toBe('表示中: 2023 年の写真・候補 1 件');
+  });
+
+  it('標準地図を選んでいれば、タイルが無い範囲でも、「この年の写真がありません」の通知は出ない（通知の入れ物は空のまま）', async () => {
+    setup();
+    await userEvent.click(screen.getByRole('button', { name: 'タイル（none）' }));
+    expect(screen.getByRole('status')).toHaveTextContent('この範囲には、この年の写真がありません');
+    await userEvent.click(screen.getByRole('button', { name: '標準地図' }));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(document.body).not.toHaveTextContent('この年の写真がありません');
+    // 写真へ戻せば、また出る（標準地図のときだけ抑える）
+    await userEvent.click(screen.getByRole('button', { name: '2018 年の写真' }));
+    expect(screen.getByRole('status')).toHaveTextContent('この範囲には、この年の写真がありません');
+  });
+
+  it('「強調表示を解除」は、強調している候補があるときだけ出る。押すと onClearHighlight', async () => {
+    const props = propsFor();
+    const { rerender } = render(<MapPanel {...props} />);
+    expect(screen.queryByRole('button', { name: '強調表示を解除' })).not.toBeInTheDocument();
+    rerender(<MapPanel {...props} highlightIds={new Set(['c-1'])} />);
+    await userEvent.click(screen.getByRole('button', { name: '強調表示を解除' }));
+    expect(props.onClearHighlight).toHaveBeenCalledTimes(1);
+    rerender(<MapPanel {...props} highlightIds={new Set<string>()} />);
+    expect(screen.queryByRole('button', { name: '強調表示を解除' })).not.toBeInTheDocument();
+  });
+
+  it('現在表示の帯は、現在表示・解除のボタン・案内・通知を、1 つの文（.map-status__text）に流し込む。項目ごとの折り返しの箱にしない', async () => {
+    const props = propsFor();
+    render(<MapPanel {...props} highlightIds={new Set(['c-1'])} />);
+    await userEvent.click(screen.getByRole('button', { name: 'タイル（partial）' }));
+    const text = document.querySelector('.map-status > .map-status__text')!;
+    expect(document.querySelector('.map-status')!.children).toHaveLength(1);
+    expect(within(text as HTMLElement).getByRole('button', { name: '強調表示を解除' })).toBeInTheDocument();
+    expect(text).toHaveTextContent('印・形を選ぶと「写真を比べる」が出ます。');
+    expect(within(text as HTMLElement).getByRole('status')).toHaveTextContent('この範囲の一部には、この年の写真がありません');
+  });
+
+  it('タイルの通知の入れ物（role=status）は、通知が無いときも描いてある。同じ要素の文だけが替わる（文と同時に挿入された領域は、読み上げられないことがある）', async () => {
+    setup();
+    const note = screen.getByRole('status'); // 通知が出る前から、ある
+    expect(note).toBeEmptyDOMElement();
+    await userEvent.click(screen.getByRole('button', { name: 'タイル（partial）' }));
+    expect(screen.getByRole('status')).toBe(note);
+    expect(note).toHaveTextContent('この範囲の一部には');
+    await userEvent.click(screen.getByRole('button', { name: 'タイル（ok）' }));
+    expect(screen.getByRole('status')).toBe(note);
+    expect(note).toBeEmptyDOMElement();
+  });
+});
+
+describe('ツールバーの並び（DOM の順 = Tab の順 = 見た目の順）', () => {
+  it('地図の見せ方（種類 → 解析した地区の枠）、対象の地区（地区の選択 → 表示範囲を戻す）の順。狭い幅で折り返しても、地区の選択に 1 行ぶんの幅が回る', () => {
+    setup();
+    const bar = document.querySelector('.map-toolbar')!;
+    const order = Array.from(bar.querySelectorAll<HTMLElement>('button, input, select')).map((el) =>
+      el.matches('select') ? '地区の選択' : el.matches('input') ? el.closest('label')!.textContent!.trim() : el.textContent,
+    );
+    expect(order).toEqual(['2023 年の写真', '2018 年の写真', '標準地図', '解析した地区の枠', '地区の選択', '表示範囲を戻す']);
   });
 });
 
@@ -416,6 +485,18 @@ describe('選択中の候補のカード（印・形を選んでも地図に留�
     expect(names()).toEqual(before);
   });
 
+  it('地図へ、カードの要素を渡す（coverRef）。カードが出ているあいだだけ、その要素を指す（印がカードの下に隠れるとき、地図が上へ寄せる）', () => {
+    const onComparePhotos = vi.fn();
+    const { rerender } = setup({ onComparePhotos });
+    expect(seen.coverRef).not.toBeNull();
+    expect(seen.coverRef!.current).toBeNull();
+    rerender(<MapPanel {...propsFor({ selectedId: 'c-1', onComparePhotos })} />);
+    expect(seen.coverRef!.current).toBe(document.querySelector('.map-selected'));
+    expect(seen.coverRef!.current).not.toBeNull();
+    rerender(<MapPanel {...propsFor({ selectedId: null, onComparePhotos })} />);
+    expect(seen.coverRef!.current).toBeNull();
+  });
+
   it('onComparePhotos が無ければ、カードを出さない', () => {
     setup({ selectedId: 'c-1' });
     expect(screen.queryByRole('group', { name: '選択中の候補' })).not.toBeInTheDocument();
@@ -481,7 +562,9 @@ describe('選択中の候補のカード（印・形を選んでも地図に留�
     it('role=status は持たない（地図の下のタイルの通知の role=status と、1 つに決まらなくなる）', () => {
       setup({ selectedId: 'c-1', onComparePhotos: vi.fn() });
       expect(live()).not.toHaveAttribute('role');
-      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      // role=status は、地図の下のタイルの通知の 1 つだけ（空のまま。候補の選択では読み上げない）
+      expect(screen.getAllByRole('status')).toHaveLength(1);
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
     });
   });
 });
@@ -573,11 +656,12 @@ describe('地図の下の 1 行の帯（現在表示・案内・通知）と、�
 });
 
 describe('ツールバー（地図の種類・地区・解析した地区の枠を 1 つの帯に）', () => {
-  it('3 つとも、同じ .map-toolbar の中にある（折り返しは CSS）', () => {
+  it('3 つとも、同じ .map-toolbar の中にある（折り返しは CSS）。地図の種類のボタン 3 つのほか、「表示範囲を戻す」が 1 つ', () => {
     setup();
     const toolbar = document.querySelector<HTMLElement>('.map-toolbar')!;
     expect(within(toolbar).getByRole('group', { name: '地図の種類' })).toBeInTheDocument();
-    expect(within(toolbar).getAllByRole('button')).toHaveLength(3);
+    expect(within(toolbar).getAllByRole('button')).toHaveLength(4);
+    expect(within(toolbar).getByRole('button', { name: '表示範囲を戻す' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('combobox', { name: '地区' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('checkbox', { name: '解析した地区の枠' })).toBeChecked();
   });
@@ -628,5 +712,171 @@ describe('ランドマークの名前', () => {
   it('外側の tabpanel が「地図」なので、同じ名前の region を重ねない', () => {
     setup();
     expect(screen.queryByRole('region', { name: '地図' })).not.toBeInTheDocument();
+  });
+});
+
+// ---- 絞り込みの地区と、地図の表示範囲 ----
+
+describe('絞り込みの地区が替わったら、地図の表示範囲もそれに合わせる（どの経路でも）', () => {
+  const spread = [
+    { ...area('a', 'アサヒ地区', [4, 4, 2]), bbox: [130.7, 32.8, 130.71, 32.81] as [number, number, number, number] },
+    { ...area('b', 'ノース地区', [5, 3, 1]), bbox: [130.8, 32.9, 130.81, 32.91] as [number, number, number, number] },
+  ];
+  const BOX_A = '130.7,32.8,130.71,32.81';
+  const BOX_B = '130.8,32.9,130.81,32.91';
+  const BOX_ALL = '130.7,32.8,130.81,32.91';
+  const all = new Set<CandidateClass>(['confirmed_new', 'existing_omission', 'uncertain']);
+  const only = (areaId: string, classes = all): MapFilter => ({ areaId, classes });
+  const leaflet = () => screen.getByTestId('leaflet');
+
+  function mount(filter: MapFilter) {
+    const props: ComponentProps<typeof MapPanel> = propsFor({ areas: spread, filter });
+    const view = render(<MapPanel {...props} />);
+    const update = (over: Partial<ComponentProps<typeof MapPanel>> = {}) => view.rerender(<MapPanel {...props} {...over} />);
+    return { ...view, props, update };
+  }
+
+  it('最初の描画では、地図を動かさない（初回の全地区への寄せは、地図が自分で行う）。地区を絞った条件で始まっても同じ', () => {
+    mount(only('b'));
+    expect(leaflet()).toHaveAttribute('data-focus', '');
+  });
+
+  it('グラフの行・チャットの回答など、親が地区の絞り込みを替えたら、その地区へ寄せる', () => {
+    const { update } = mount(ALL_FILTER);
+    update({ filter: only('b') });
+    expect(leaflet()).toHaveAttribute('data-focus', 'fit');
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_B);
+    update({ filter: only('a') });
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_A);
+  });
+
+  it('「条件を解除」・グラフで同じ行をもう一度押す（全地区へ戻る）と、全地区が収まる範囲へ戻す', () => {
+    const { update } = mount(only('b'));
+    update({ filter: ALL_FILTER });
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_ALL);
+  });
+
+  it('複数の地区（区など）の条件は、その地区の和へ寄せる。地区が 1 つに替わると、その地区へ', () => {
+    const { update } = mount(ALL_FILTER);
+    update({ filter: { areaId: '', classes: all, areaIds: ['a', 'b'], scope: '中央区' } });
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_ALL);
+    update({ filter: only('a') });
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_A);
+  });
+
+  it('分類だけ替えても、地図は動かさない（地区が同じ）', () => {
+    const { update } = mount(ALL_FILTER);
+    update({ filter: only('', new Set<CandidateClass>(['uncertain'])) });
+    expect(leaflet()).toHaveAttribute('data-focus', '');
+  });
+
+  it('同じ描画で、親が地図を動かす要求（候補の選択・チャットの地図表示）も渡したら、そちらを優先する（選んだ候補を、地区へ引き戻さない）', () => {
+    const { update } = mount(only('a'));
+    // 親が先に作った要求（HomeClient の fitTo と同じ順で nonce を取る）。地区の絞り込みを替えるのと同じ描画で届く
+    update({ filter: ALL_FILTER, focus: { bbox: [130.7, 32.8, 130.7001, 32.8001], ids: ['c-1'], nonce: nextNonce() } });
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', '130.7,32.8,130.7001,32.8001');
+  });
+
+  it('地区の選択で「すべて」へ戻すと、全地区が収まる範囲へ寄せる（これまでは、地区のまま動かなかった）', async () => {
+    const props = propsFor({ areas: spread });
+    render(<MapPanel {...props} filter={undefined} />);
+    const select = screen.getByRole('combobox', { name: '地区' });
+    await userEvent.selectOptions(select, 'b');
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_B);
+    await userEvent.selectOptions(select, '');
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_ALL);
+    await userEvent.selectOptions(select, 'a');
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_A);
+  });
+
+  it('「条件を解除」を押すと、全地区の範囲へ戻る（絞り込みも全部に戻る）', async () => {
+    const props = propsFor({ areas: spread });
+    render(<MapPanel {...props} filter={undefined} />);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '地区' }), 'a');
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_A);
+    await userEvent.click(screen.getByRole('button', { name: '条件を解除' }));
+    expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_ALL);
+    expect(screen.getByRole('combobox', { name: '地区' })).toHaveValue('');
+  });
+
+  describe('「表示範囲を戻す」', () => {
+    it('全地区のときは全地区の範囲、地区を選んでいるときはその地区の範囲へ、地図を寄せ直す（拡大・移動で見失ったとき）', async () => {
+      const props = propsFor({ areas: spread });
+      render(<MapPanel {...props} filter={undefined} />);
+      const reset = screen.getByRole('button', { name: '表示範囲を戻す' });
+      await userEvent.click(reset);
+      expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_ALL);
+      const first = leaflet().getAttribute('data-focus-bbox');
+      await userEvent.selectOptions(screen.getByRole('combobox', { name: '地区' }), 'b');
+      await userEvent.click(reset);
+      expect(leaflet()).toHaveAttribute('data-focus-bbox', BOX_B);
+      expect(first).toBe(BOX_ALL);
+    });
+
+    it('押すたびに、新しい寄せの要求になる（同じ範囲でも、もう一度寄せ直す）。絞り込みは変えない', async () => {
+      const onFilterChange = vi.fn();
+      render(<MapPanel {...propsFor({ areas: spread, filter: only('b'), onFilterChange })} />);
+      const nonce = () => Number(leaflet().getAttribute('data-focus-nonce'));
+      await userEvent.click(screen.getByRole('button', { name: '表示範囲を戻す' }));
+      const first = nonce();
+      await userEvent.click(screen.getByRole('button', { name: '表示範囲を戻す' }));
+      expect(nonce()).toBeGreaterThan(first);
+      expect(onFilterChange).not.toHaveBeenCalled();
+    });
+
+    it('地区の一覧が無いあいだは押せない', () => {
+      render(<MapPanel {...propsFor({ areas: [] })} />);
+      expect(screen.getByRole('button', { name: '表示範囲を戻す' })).toBeDisabled();
+    });
+  });
+});
+
+// ---- 選択の解除 ----
+
+describe('選択の解除（カードの「選択を解除」・Esc・地図の空いている所）', () => {
+  const group = () => screen.getByRole('group', { name: '選択中の候補' });
+  function mount(over: { selectedId?: string | null; withClear?: boolean } = {}) {
+    const onClearSelection = vi.fn();
+    const selectedId = 'selectedId' in over ? over.selectedId : 'c-1';
+    const props = { ...propsFor({ selectedId, onComparePhotos: vi.fn() }), onClearSelection: over.withClear === false ? undefined : onClearSelection };
+    render(<MapPanel {...props} />);
+    return { onClearSelection };
+  }
+
+  it('カードに「選択を解除」を出し、押すと解除する。「写真を比べる」は残る', async () => {
+    const { onClearSelection } = mount();
+    expect(within(group()).getByRole('button', { name: '写真を比べる' })).toBeInTheDocument();
+    await userEvent.click(within(group()).getByRole('button', { name: '選択を解除' }));
+    expect(onClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('解除の手段を受け取っていなければ、ボタンを出さない（押しても何も起きないボタンを出さない）', () => {
+    mount({ withClear: false });
+    expect(within(group()).queryByRole('button', { name: '選択を解除' })).not.toBeInTheDocument();
+  });
+
+  it('押したボタン（カードの中）が消えるので、フォーカスは地図へ移す（body へ落とさない）', async () => {
+    mount();
+    await userEvent.click(within(group()).getByRole('button', { name: '選択を解除' }));
+    expect(screen.getByTestId('leaflet')).toHaveFocus();
+  });
+
+  it('Esc で解除する。地図の中・カードの中のどちらにフォーカスがあっても（Esc の修飾キーつきは、ブラウザー・OS の操作なので奪わない）', async () => {
+    const { onClearSelection } = mount();
+    screen.getByTestId('leaflet').focus();
+    await userEvent.keyboard('{Escape}');
+    expect(onClearSelection).toHaveBeenCalledTimes(1);
+    within(group()).getByRole('button', { name: '写真を比べる' }).focus();
+    await userEvent.keyboard('{Escape}');
+    expect(onClearSelection).toHaveBeenCalledTimes(2);
+    await userEvent.keyboard('{Shift>}{Escape}{/Shift}');
+    expect(onClearSelection).toHaveBeenCalledTimes(2);
+  });
+
+  it('選んでいる候補が無いとき、Esc では何もしない（地図の外の Esc も奪わない）', async () => {
+    const { onClearSelection } = mount({ selectedId: null });
+    screen.getByTestId('leaflet').focus();
+    await userEvent.keyboard('{Escape}');
+    expect(onClearSelection).not.toHaveBeenCalled();
   });
 });

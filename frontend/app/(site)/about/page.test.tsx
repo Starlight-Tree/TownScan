@@ -24,4 +24,12 @@ describe('このアプリについて（使い方）', () => {
     expect(how).not.toHaveTextContent('詳細が開きます');
     expect(how).not.toHaveTextContent('右の地図で');
   });
+
+  it('いまのモデルを言い切らない（模擬が既定・Gemini も選べる。実際の状態は画面の表示に任せる）', () => {
+    render(<AboutPage />);
+    const how = screen.getByRole('region', { name: '使い方' });
+    expect(how).not.toHaveTextContent('いまの応答は');
+    expect(how).toHaveTextContent('既定では「模擬モデル」');
+    expect(how).toHaveTextContent('Gemini');
+  });
 });

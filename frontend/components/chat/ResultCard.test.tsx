@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { ToolResult } from '../../lib/api-types';
+import type { AccuracyResult, CompareResult, TableResult, ToolResult } from '../../lib/api-types';
 import { ALL_RESULTS, accuracy, compare, count, countWards, detectionImage, mapFocus, refusal, table } from '../../tests/fixtures';
 import { ResultCard } from './ResultCard';
 import type { ResultActions } from './types';
@@ -87,7 +87,8 @@ describe('結果カード: 型ごとの描画', () => {
   it('table: 列・行・「全 N 件中 M 件」、候補の行から詳細を開く', async () => {
     const actions = makeActions();
     render(<ResultCard result={table} actions={actions} />);
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent).slice(0, 3)).toEqual(['候補 ID', '分類', '面積（m²）']);
+    // 候補 ID の列は、最初の列（ここでは分類）の下に添える。列の名前には、ID を含むことを読み上げ用に足す
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['分類と候補 ID', '面積（m²）', '操作']);
     expect(screen.getAllByRole('row')).toHaveLength(3);
     expect(screen.getByText('全 102 件中 2 件を表示')).toBeInTheDocument();
     expect(screen.getByText('新規出現')).toBeInTheDocument();
@@ -219,5 +220,224 @@ describe('結果カード: 想定外の入力', () => {
     expect(screen.getByRole('note', { name: '表示できない結果' })).toHaveTextContent('表示中にエラーが起きました');
     expect(screen.getByRole('heading', { name: 'この質問は範囲外です' })).toBeInTheDocument();
     expect(spy).toHaveBeenCalled();
+  });
+});
+
+// ---- チャットの狭い幅（340px 前後）に収める表・分類の意味・精度・同じ文の重複 ----
+
+/** backend の list_candidates が返す形そのまま（分類は表示名。候補 ID・地区・分類・面積の 4 列） */
+const realTable: TableResult = {
+  ...table,
+  title: '新規出現候補の一覧（全地区・面積の大きい順）',
+  columns: [
+    { key: 'id', label: '候補 ID' },
+    { key: 'area', label: '地区' },
+    { key: 'class', label: '分類' },
+    { key: 'area_m2', label: '面積（m²）' },
+  ],
+  rows: [
+    { id: 'c-226274-105752-9', area: '薄場一丁目', class: '新規出現（旧写真に無い）', area_m2: 232.4 },
+    { id: 'c-226266-105755-3', area: '本荘五丁目', class: '判定保留', area_m2: 180 },
+    { id: 'c-226258-105756-1', area: '本荘五丁目', class: '既存の描き漏れ（旧写真に既にある）', area_m2: 96.5 },
+  ],
+};
+
+describe('結果カード: 表（チャットの狭い幅）', () => {
+  it('一覧: 候補 ID は列にせず、最初の列（地区）の下に添える。面積と「詳細」の列は、そのまま残る', async () => {
+    const actions = makeActions();
+    render(<ResultCard result={realTable} actions={actions} />);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区と候補 ID', '分類', '面積（m²）', '操作']);
+    const row = screen.getByRole('row', { name: /薄場一丁目/ });
+    const cells = within(row).getAllByRole('cell');
+    expect(cells).toHaveLength(4);
+    expect(cells[0]).toHaveTextContent('薄場一丁目');
+    expect(cells[0]!.querySelector('.data-table__sub')).toHaveTextContent('c-226274-105752-9');
+    expect(cells[2]).toHaveTextContent('232.4');
+    await userEvent.click(within(row).getByRole('button', { name: /詳細.*c-226274-105752-9/ }));
+    expect(actions.openCandidate).toHaveBeenCalledWith('c-226274-105752-9');
+  });
+
+  it('一覧: 分類は、表示名で届いても、印つきの短い名前で出す（長い名前で幅を使い切らない）', () => {
+    render(<ResultCard result={realTable} actions={makeActions()} />);
+    const rows = screen.getAllByRole('row').slice(1);
+    const badge = (i: number) => rows[i]!.querySelector('.class-badge');
+    expect(badge(0)).toHaveTextContent(/^新規出現$/);
+    expect(badge(0)).toHaveAttribute('data-class', 'confirmed_new');
+    expect(badge(1)).toHaveTextContent(/^判定保留$/);
+    expect(badge(2)).toHaveTextContent(/^既存の描き漏れ$/);
+    expect(badge(2)!.querySelector('svg')).not.toBeNull();
+    // 表の中には、旧写真に…の長い名前を出さない（分類の意味の折りたたみは別）
+    for (const r of rows) expect(r).not.toHaveTextContent('旧写真に');
+  });
+
+  it('一覧: 知らない分類の値は、そのまま文字で出す', () => {
+    const odd: TableResult = { ...realTable, rows: [{ id: 'c-1-2-1', area: '地区', class: 'まだ無い分類', area_m2: 1 }] };
+    render(<ResultCard result={odd} actions={makeActions()} />);
+    expect(screen.getByText('まだ無い分類')).toBeInTheDocument();
+  });
+
+  it('一覧: 「詳細」のボタンが無い表（候補 ID の無い行）は、列をそのまま出す', () => {
+    const plain: TableResult = {
+      ...table,
+      columns: [
+        { key: 'id', label: '項目' },
+        { key: 'note', label: '説明' },
+      ],
+      rows: [{ id: '件数', note: '候補の数を聞けます' }],
+    };
+    render(<ResultCard result={plain} actions={makeActions()} />);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['項目', '説明']);
+    expect(screen.queryByRole('button', { name: /詳細/ })).not.toBeInTheDocument();
+  });
+
+  it('一覧・比較は、チャット用の表のクラスと、横にスクロールできる枠（フォーカスできる）に入る', () => {
+    const { unmount } = render(<ResultCard result={realTable} actions={makeActions()} />);
+    const region = screen.getByRole('region', { name: `${realTable.title}（横にスクロールできます）` });
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(region.querySelector('table')).toHaveClass('data-table--chat');
+    expect(region.parentElement).toHaveClass('table-scroll-wrap');
+    unmount();
+    render(<ResultCard result={compare} actions={makeActions()} />);
+    expect(screen.getByRole('region', { name: `${compare.title}（横にスクロールできます）` }).querySelector('table')).toHaveClass('data-table--chat');
+  });
+
+  it('比較（合計の多い順）: 並びの基準の「合計」を、地区の次（先頭側）に置く。昇降の印（aria-sort）も付ける', () => {
+    render(<ResultCard result={compare} actions={makeActions()} />);
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers.map((h) => h.textContent)).toEqual(['地区', '合計', '新規出現', '既存の描き漏れ', '判定保留']);
+    expect(headers.map((h) => h.getAttribute('aria-sort'))).toEqual([null, 'descending', null, null, null]);
+    // 行の最初の数字は合計（5+3+1 = 9）
+    const row = screen.getByRole('row', { name: /テスト地区 01/ });
+    expect(within(row).getAllByRole('cell')[0]).toHaveTextContent('9');
+  });
+
+  it('比較（分類の多い順）: その分類の列を地区の次に置き、合計は最後。aria-sort はその分類の列だけ', () => {
+    const byUncertain: CompareResult = { ...compare, filter: { cls: 'uncertain' } };
+    render(<ResultCard result={byUncertain} actions={makeActions()} />);
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers.map((h) => h.textContent)).toEqual(['地区', '判定保留', '新規出現', '既存の描き漏れ', '合計']);
+    expect(headers.map((h) => h.getAttribute('aria-sort'))).toEqual([null, 'descending', null, null, null]);
+    // 地区 01 の判定保留は 1、合計は 9。並びは 判定保留 → 新規出現 → 既存 → 合計
+    const cells = within(screen.getByRole('row', { name: /テスト地区 01/ })).getAllByRole('cell');
+    expect(cells.map((c) => c.textContent)).toEqual(['1', '5', '3', '9']);
+  });
+
+  it('比較: 合計が結果に無いときは、合計の列も aria-sort も出さない（分類の列は、これまでの順）', () => {
+    const noTotal: CompareResult = {
+      ...compare,
+      items: compare.items.map((i) => ({ ...i, counts: { confirmed_new: i.counts.confirmed_new!, existing_omission: 1, uncertain: 0 } })),
+    };
+    render(<ResultCard result={noTotal} actions={makeActions()} />);
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers.map((h) => h.textContent)).toEqual(['地区', '新規出現', '既存の描き漏れ', '判定保留']);
+    expect(headers.every((h) => !h.hasAttribute('aria-sort'))).toBe(true);
+  });
+});
+
+describe('結果カード: 分類の意味', () => {
+  const summaries = ['2023 年の写真に建物があり、2018 年の写真には見当たりません。', '2018 年の写真にも既に写っています。', '新規か既存かを、写真から判断できませんでした。'];
+
+  it('件数・比較・分類の列のある一覧に、「分類の意味」の折りたたみ（3 分類の印・名前・1 行の説明）を付ける', () => {
+    for (const result of [count, compare, realTable]) {
+      const { unmount } = render(<ResultCard result={result} actions={makeActions()} />);
+      const guide = screen.getByText('分類の意味').closest('details') as HTMLElement;
+      expect(guide).not.toHaveAttribute('open');
+      for (const s of summaries) expect(within(guide).getByText(s)).toBeInTheDocument();
+      expect(guide.querySelectorAll('.class-badge')).toHaveLength(3);
+      unmount();
+    }
+  });
+
+  it('分類の列が無い一覧・地図の表示・精度・お断りには付けない', () => {
+    const noClass: TableResult = { ...table, columns: [{ key: 'id', label: '候補 ID' }, { key: 'area_m2', label: '面積（m²）' }] };
+    for (const result of [noClass, mapFocus, accuracy, refusal, { ...compare, items: [] }]) {
+      const { unmount } = render(<ResultCard result={result} actions={makeActions()} />);
+      expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+});
+
+describe('結果カード: 精度（平易な一言）', () => {
+  const withRates: AccuracyResult = {
+    ...accuracy,
+    metrics: [
+      { key: 'holdout_object_f1', label: '物体単位 F1（評価用・2018 年の写真）', value: 0.123, note: '評価用 6 地区' },
+      { key: 'holdout_object_precision', label: '建物の抽出の適合率・物体単位', value: 0.163, note: '評価用 6 地区' },
+      { key: 'holdout_object_recall', label: '建物の抽出の再現率・物体単位', value: 0.098, note: '評価用 6 地区' },
+      { key: 'new_building_recall', label: '新築の再現率', value: null, note: '未測定（手ラベルが無いため）' },
+    ],
+  };
+
+  it('適合率と再現率が届いたら、専門の数字の前に、% に直した 1 文を出す。専門の指標は、折りたたみの中', () => {
+    render(<ResultCard result={withRates} actions={makeActions()} />);
+    const plain = document.querySelector('.accuracy-plain') as HTMLElement;
+    expect(plain).toHaveTextContent('機械が見つけた建物のうち、既存の建物データ（基盤地図情報）と一致したのは約 16 %');
+    expect(plain).toHaveTextContent('機械が見つけられたのは約 10 %');
+    expect(plain).toHaveTextContent('結果は目で確かめる前提の「候補」です');
+    const details = screen.getByText('くわしい指標（専門の数字）を見る').closest('details') as HTMLElement;
+    expect(details).not.toHaveAttribute('open');
+    expect(within(details).getByText('0.123')).toBeInTheDocument();
+    expect(within(details).getByText('未測定')).toBeInTheDocument();
+    // 一言は、折りたたみより前
+    expect(plain.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 精度の画面への道は、そのまま
+    expect(screen.getByRole('link', { name: /精度の画面/ })).toHaveAttribute('href', '/accuracy');
+  });
+
+  it('適合率か再現率が無い（未測定・古い評価ファイル）ときは、一言を作らず、指標をこれまでどおり並べる', () => {
+    for (const result of [accuracy, { ...withRates, metrics: withRates.metrics.filter((m) => m.key !== 'holdout_object_recall') }]) {
+      const { container, unmount } = render(<ResultCard result={result} actions={makeActions()} />);
+      expect(container.querySelector('.accuracy-plain')).toBeNull();
+      expect(screen.queryByText('くわしい指標（専門の数字）を見る')).not.toBeInTheDocument();
+      expect(container.querySelector('.metric-grid')).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it('値は 0〜100 % に収める（想定外の値で、画面に変な数を出さない）', () => {
+    const odd: AccuracyResult = {
+      ...withRates,
+      metrics: withRates.metrics.map((m) => (m.key === 'holdout_object_precision' ? { ...m, value: 1.4 } : m.key === 'holdout_object_recall' ? { ...m, value: 0 } : m)),
+    };
+    render(<ResultCard result={odd} actions={makeActions()} />);
+    const plain = document.querySelector('.accuracy-plain') as HTMLElement;
+    expect(plain).toHaveTextContent('約 100 %');
+    expect(plain).toHaveTextContent('約 0 %');
+  });
+});
+
+describe('結果カード: 回答の本文と同じ文は、カードで繰り返さない', () => {
+  it('お断り: 理由の文が本文にすでにあれば、カードには出さない（見出しと「代わりの質問」は残す）', () => {
+    render(<ResultCard result={refusal} actions={makeActions()} answerText={refusal.message} />);
+    expect(screen.queryByText(refusal.message)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'この質問は範囲外です' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'このアプリの精度は？' })).toBeInTheDocument();
+  });
+
+  it('お断り: 本文に理由の文が無ければ（本文が別の言い方）、カードに出す。本文を渡さなければ、これまでどおり出す', () => {
+    const { unmount } = render(<ResultCard result={refusal} actions={makeActions()} answerText="お答えできません。" />);
+    expect(screen.getByText(refusal.message)).toBeInTheDocument();
+    unmount();
+    render(<ResultCard result={refusal} actions={makeActions()} />);
+    expect(screen.getByText(refusal.message)).toBeInTheDocument();
+  });
+
+  it('お断り: 本文が、理由の文の前後に別の文を足していても、含んでいれば出さない', () => {
+    render(<ResultCard result={refusal} actions={makeActions()} answerText={`先に一言。${refusal.message}あとに一言。`} />);
+    expect(screen.queryByText(refusal.message)).not.toBeInTheDocument();
+  });
+
+  it('検出画像: 写真の説明が本文にすでにあれば、カードには出さない（分類の印・写真・「詳細を開く」は残す）', () => {
+    render(<ResultCard result={detectionImage} actions={makeActions()} answerText={`候補 c-1-2-1 の写真を、2018 年と 2023 年で並べます。${detectionImage.caption}`} />);
+    expect(screen.queryByText(detectionImage.caption)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '詳細を開く' })).toBeInTheDocument();
+    expect(document.querySelector('.class-badge')).not.toBeNull();
+  });
+
+  it('検出画像: 本文に説明が無ければ、カードに出す', () => {
+    render(<ResultCard result={detectionImage} actions={makeActions()} answerText="写真です。" />);
+    expect(screen.getByText(detectionImage.caption)).toBeInTheDocument();
   });
 });

@@ -5,7 +5,7 @@ import { THEME_OPTIONS } from './themeOptions';
 
 /**
  * テーマの切り替え（ライト / ダーク / システム）。上の横帯（1023px 以下）の右端（状態の表示の隣）と、ログイン画面の上の帯で使う。選ぶと localStorage に保存し、以後は OS より優先する。「システム」で OS に従う状態へ戻す。
- * 保存値は、描画のあとに読む（theme-store.ts）。1024px 以上のサイドパネルでは、アカウントのメニュー（AccountMenu）の中に、同じ選択がある。
+ * 保存値は、描画のあとに読む（theme-store.ts）。1024px 以上のサイドパネルでは、アカウントのメニュー（AccountMenu）の中に、同じ選択がある。上の横帯でも、600px 以下では帯のこの切り替えを隠し、アカウントのメニューの中の選択を使う（globals.css）。
  */
 export function ThemeSwitch() {
   const choice = useThemeChoice();

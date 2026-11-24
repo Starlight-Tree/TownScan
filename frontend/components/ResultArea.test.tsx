@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ResultView } from '../lib/result-view';
 import { ResultArea } from './ResultArea';
@@ -503,10 +503,76 @@ describe('結果領域まわりの CSS（拡大のときのチャット・空の
     expect(Number(m![3])).toBeGreaterThan(Number(m![1]));
   });
 
-  it('CSS のコメントが、規則と食い違わない: 左右に並べるのは窓の幅 1000px 以上、縦に戻すのは data-open=true のときだけ（細い帯では、窓 1024〜1056px でも左右）', () => {
+  it('CSS のコメントが、規則と食い違わない: 左右に並べるのは窓の幅 1000px 以上、縦に戻すのは data-open=true のときだけ（細い帯では、窓 1024〜1055px でも左右）', () => {
     expect(css).not.toContain('窓が 1057px 以上で左右に並ぶ');
     expect(css).not.toContain('本文の幅が 1000px に満たなければ縦に積む');
     expect(css).toContain('窓の幅 1000px 以上で決まる');
-    expect(css).toContain('窓が 1024〜1056px');
+    expect(css).toContain('窓が 1024〜1055px');
+    // 細い帯は 3.5rem = 56px。窓 1056px の本文は、ちょうど 1000px で、1000px に満たない幅ではない。だから 1056px は含めない
+    expect(css).not.toContain('1024〜1056px');
+  });
+});
+
+describe('1 つの画面の描画が壊れても、アプリ全体を巻き込まない（白地・英語の既定のエラー画面にしない）', () => {
+  /** 描画で例外を出す部品。`broken.on` が true のあいだ出す */
+  const broken = { on: true };
+  function Bomb(): ReactNode {
+    if (broken.on) throw new Error('地図が壊れた');
+    return <p>直った地図</p>;
+  }
+  const withBomb = { ...panels, map: <Bomb /> };
+
+  function Frame({ initial = 'map' as ResultView }: { initial?: ResultView }) {
+    const [view, setView] = useState<ResultView>(initial);
+    return (
+      <>
+        <nav aria-label="アプリの枠">サイドバー</nav>
+        <ResultArea view={view} onViewChange={setView} announcement="" panels={withBomb} />
+      </>
+    );
+  }
+
+  it('壊れた画面の中に、日本語で知らせる（role=alert）。タブ・ほかの画面・アプリの枠は残る', () => {
+    broken.on = true;
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<Frame />);
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('「地図」を表示できませんでした');
+    expect(alert).toHaveTextContent('チャットと、ほかの画面は、そのまま使えます');
+    expect(screen.getByRole('tabpanel', { name: '地図' })).toContainElement(alert);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    expect(screen.getByRole('navigation', { name: 'アプリの枠' })).toBeInTheDocument();
+    expect(log.mock.calls.some((c) => String(c[0]).includes('結果領域の「地図」の描画に失敗しました'))).toBe(true);
+  });
+
+  it('壊れていない画面は、そのまま使える。タブで移っても、壊れた画面だけが知らせを出す', async () => {
+    broken.on = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<Frame />);
+    await userEvent.click(tab('グラフ'));
+    expect(screen.getByText('グラフの中身')).toBeVisible();
+    // 壊れた地図の知らせは、隠れた地図のパネルの中にあり、見えている画面では読み上げない
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const mapPanel = document.getElementById(tab('地図').getAttribute('aria-controls')!)!;
+    expect(mapPanel).toContainElement(screen.getByRole('alert', { hidden: true }));
+  });
+
+  it('「もう一度表示する」で、画面の中身を作り直す。直っていれば元に戻る', async () => {
+    broken.on = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<Frame />);
+    broken.on = false;
+    await userEvent.click(screen.getByRole('button', { name: 'もう一度表示する' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('直った地図')).toBeVisible();
+  });
+
+  it('直っていなければ、知らせのまま（無限に描き直さない）。「ページを再読み込み」も出す', async () => {
+    broken.on = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<Frame />);
+    await userEvent.click(screen.getByRole('button', { name: 'もう一度表示する' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ページを再読み込み' })).toBeInTheDocument();
   });
 });

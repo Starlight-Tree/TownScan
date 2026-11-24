@@ -3,8 +3,9 @@
 import type { CandidateClass, ToolResult } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { CLASS_INFO, isCandidateClass } from '../../lib/classes';
-import { areaLabel, filterFromResults } from '../../lib/result-view';
+import { areaLabel, filterFromResults, isWellFormedResult } from '../../lib/result-view';
 import { ClassBadge } from '../ClassBadge';
+import { areaScopeHint } from './area-scale';
 
 /** 「対象・条件」の行の 1 項目。text は値、cls があれば分類の印つきで出す */
 export interface ScopeItem {
@@ -20,12 +21,8 @@ const SHOWN_WHEN_TRUNCATED = 3;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
-/** 画面は、API の形が少し違っても壊れない作りにしている（ResultCard と同じ）。この行は添え物なので、壊れた結果は黙って飛ばす */
-function wellFormed(r: unknown): r is ToolResult {
-  if (!isRecord(r) || typeof r.type !== 'string') return false;
-  // filterFromResults は count の filter を直接読むので、無いものは渡さない
-  return r.type !== 'count' || isRecord(r.filter);
-}
+// 画面は、API の形が少し違っても壊れない作りにしている（ResultCard と同じ）。この行は添え物なので、壊れた結果（isWellFormedResult）は黙って飛ばす。
+// 右の絞り込み（HomeClient）も同じ前処理で飛ばす。そうしないと、壊れた count を、こちらは飛ばし、右は「全地区・全分類」と読んで、食い違う
 
 function finiteYears(v: unknown): number[] {
   return Array.isArray(v) ? v.filter((y): y is number => typeof y === 'number' && Number.isFinite(y)) : [];
@@ -46,7 +43,7 @@ function classText(cls: string): string {
  * 表・地図の表示・精度・お断りは、条件を持たない（結果に値が無い）ので、項目を出さない。
  */
 export function answerScope(results: readonly unknown[], nameOf: (areaId: string) => string): ScopeItem[] {
-  const valid = results.filter(wellFormed);
+  const valid = results.filter(isWellFormedResult);
   const items: ScopeItem[] = [];
 
   // 地区・分類の行は、右の絞り込みと同じ「最後の件数・比較」から作る（先の件数の条件を、あとの比較が置き換えたなら、比較の条件）
@@ -98,10 +95,21 @@ export function answerScope(results: readonly unknown[], nameOf: (areaId: string
   return items;
 }
 
+/**
+ * 「地区」の値に添える、範囲の説明（「解析した 3 地区・各約 130 m 四方」など）。地区が、丁目や区の全体ではなく、小さなタイル 1 枚であることを示す。
+ * 地区の行と同じ条件（最後の count・compare。answerScope と同じ）から作る。地区の行が無い回答には null。
+ * totalAreas は、解析した地区の総数（地区の一覧から。分からなければ 0。条件が「すべて」のときに使う）
+ */
+export function answerAreaHint(results: readonly unknown[], totalAreas: number): string | null {
+  const filter = filterFromResults(results.filter(isWellFormedResult));
+  return filter ? areaScopeHint(filter, totalAreas) : null;
+}
+
 /** 回答の「対象・条件」の行。出せる値が無い回答（表・精度・お断りなど）には何も出さない */
 export function AnswerScope({ results }: { results: readonly ToolResult[] }) {
-  const { nameOf } = useAreas();
+  const { nameOf, areas } = useAreas();
   const items = answerScope(results, nameOf);
+  const areaHint = answerAreaHint(results, areas.length);
   if (items.length === 0) return null;
   return (
     <div className="answer-scope" role="group" aria-label="この回答の対象・条件">
@@ -109,7 +117,10 @@ export function AnswerScope({ results }: { results: readonly ToolResult[] }) {
         {items.map((item) => (
           <div key={item.key} className="answer-scope__item" data-scope={item.key}>
             <dt className="answer-scope__label">{item.label}</dt>
-            <dd className="answer-scope__value">{item.cls ? <ClassBadge cls={item.cls} /> : item.text}</dd>
+            <dd className="answer-scope__value">
+              {item.cls ? <ClassBadge cls={item.cls} /> : item.text}
+              {item.key === 'area' && areaHint && <span className="answer-scope__hint">（{areaHint}）</span>}
+            </dd>
           </div>
         ))}
       </dl>

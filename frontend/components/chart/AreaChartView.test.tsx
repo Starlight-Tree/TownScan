@@ -279,3 +279,42 @@ describe('見出し・ランドマーク・フォーカス', () => {
     expect(Number(pad)).toBeGreaterThanOrEqual(6);
   });
 });
+
+describe('グラフの操作が地図とつながっていることの案内', () => {
+  const view = (filter: MapFilter, onShowMap?: () => void) =>
+    render(<AreaChartView areas={areas} filter={filter} onFilterChange={vi.fn()} onShowMap={onShowMap} />);
+
+  it('見出しの説明は、数字と並びが「表示中の分類の合計」であることと、絞り込みが地図にも反映されることを、文字で言う', () => {
+    view(ALL_FILTER);
+    const hint = document.querySelector('.area-chart__hint')!;
+    expect(hint).toHaveTextContent('表示中の分類の合計が多い順です');
+    expect(hint).toHaveTextContent('絞り込みは地図にも反映されます');
+  });
+
+  it('分類のチップの近くに、地図にも反映されることを、目に見える文で言う（読み上げの名前にだけ書かない）', () => {
+    view(ALL_FILTER);
+    const note = document.querySelector('.area-chart__note')!;
+    expect(note).toHaveTextContent('分類を切り替えると、地図と集計の帯の表示にも反映されます');
+    // チップの群れの直後（aria-label ではなく、画面の文字）
+    expect(screen.getByRole('group', { name: /グラフに出す分類/ }).nextElementSibling).toBe(note);
+  });
+
+  it('絞り込み中（地区・分類）で onShowMap があれば、「地図で見る」を出し、押すと呼ぶ', async () => {
+    const onShowMap = vi.fn();
+    view({ areaId: 'a', classes: ALL_FILTER.classes }, onShowMap);
+    expect(document.querySelector('.area-chart__linked')).toHaveTextContent('地図にも反映されています');
+    await userEvent.click(screen.getByRole('button', { name: '地図で見る' }));
+    expect(onShowMap).toHaveBeenCalledTimes(1);
+  });
+
+  it('分類だけを絞っていても出す（地図の印も消えている）。何も絞っていないとき・onShowMap が無いときは出さない', () => {
+    const shown = view(only('confirmed_new'), vi.fn());
+    expect(screen.getByRole('button', { name: '地図で見る' })).toBeInTheDocument();
+    shown.unmount();
+    const all = view(ALL_FILTER, vi.fn());
+    expect(screen.queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
+    all.unmount();
+    view({ areaId: 'a', classes: ALL_FILTER.classes });
+    expect(screen.queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
+  });
+});

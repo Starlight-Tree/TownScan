@@ -20,7 +20,8 @@ interface Props {
  * 分類ごとの件数は、そのまま表示の切り替え（チェックボックス）を兼ねる。地図に重ねる凡例をやめ、
  * 同じ内容（分類の印・名前・件数）を 2 か所に出さないため。押すと filter.classes だけを切り替え、地区・複数の地区の条件は保つ。
  * 数字は /api/areas の counts を足したもの（推測しない）。分類の一部だけを表示しているときは、
- * 3 分類の数字は「対象の全体」のまま、表示中の件数との差を別の行で言う（全体と絞り込み後を取り違えないように）。
+ * 3 分類の数字は「対象の全体」のまま、表示中の件数との差を「対象」の行で言う（全体と絞り込み後を取り違えないように）。
+ * 「全 m 件のうち…」と「条件を解除」は、「対象」と同じ行（分類の件数より前）に、いつも場所を取って置く。出入りで帯の高さが変わらない。
  */
 export function SummaryStrip({ areas, filter, onFilterChange }: Props) {
   const { areaId, classes } = filter;
@@ -34,6 +35,10 @@ export function SummaryStrip({ areas, filter, onFilterChange }: Props) {
     (areaId === '' ? (areas.length === 0 ? '地区の情報がありません' : `全 ${formatNumber(areas.length)} 地区`) : (area?.name ?? areaId));
   const num = (n: number) => (sums.found ? formatNumber(n) : '—');
   const partial = !allClassesShown(classes);
+  // 「全 m 件のうち…」と「条件を解除」は、出ないときも場所を取る（hidden でも visibility で場所を保つ。globals.css）。
+  // 分類のチェックを 1 つ外した・地区を選んだ直後に、帯の行が増えて、地図の高さと中身が動かないように
+  const showScope = partial && sums.found;
+  const showReset = !isAllFilter(filter);
   // 「条件を解除」を押すと、そのボタン自身が消える。フォーカスが <body> へ落ちないよう、帯の見出し（対象）へ移す
   const targetRef = useRef<HTMLParagraphElement>(null);
 
@@ -47,10 +52,30 @@ export function SummaryStrip({ areas, filter, onFilterChange }: Props) {
 
   return (
     <div className="summary-strip" role="group" aria-label="件数の集計">
-      <p className="summary-strip__target" ref={targetRef} tabIndex={-1}>
-        <span className="summary-strip__key">対象</span>
-        <strong>{target}</strong>
-      </p>
+      <div className="summary-strip__head">
+        <p className="summary-strip__target" ref={targetRef} tabIndex={-1}>
+          <span className="summary-strip__key">対象</span>
+          <strong>{target}</strong>
+        </p>
+        <p className="summary-strip__scope" hidden={!showScope}>
+          {showScope && (
+            <>
+              全 <strong>{formatNumber(sums.total)}</strong> 件のうち、表示中 <strong>{formatNumber(sumShown(sums.byClass, classes))}</strong> 件
+            </>
+          )}
+        </p>
+        <button
+          type="button"
+          className="btn btn--small summary-strip__reset"
+          hidden={!showReset}
+          onClick={() => {
+            targetRef.current?.focus();
+            onFilterChange(ALL_FILTER);
+          }}
+        >
+          条件を解除
+        </button>
+      </div>
       <div role="group" aria-label="表示する分類（色・線・形で区別）">
         <ul className="summary-strip__counts">
           {CLASS_ORDER.map((c) => {
@@ -81,23 +106,6 @@ export function SummaryStrip({ areas, filter, onFilterChange }: Props) {
           })}
         </ul>
       </div>
-      {partial && sums.found && (
-        <p className="summary-strip__scope">
-          全 <strong>{formatNumber(sums.total)}</strong> 件のうち、表示中 <strong>{formatNumber(sumShown(sums.byClass, classes))}</strong> 件
-        </p>
-      )}
-      {!isAllFilter(filter) && (
-        <button
-          type="button"
-          className="btn btn--small summary-strip__reset"
-          onClick={() => {
-            targetRef.current?.focus();
-            onFilterChange(ALL_FILTER);
-          }}
-        >
-          条件を解除
-        </button>
-      )}
     </div>
   );
 }

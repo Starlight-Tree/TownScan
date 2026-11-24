@@ -389,7 +389,7 @@ code {
 /* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
    1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
    開いた表示だと、本文は窓より 16rem 狭い。チャットと結果領域を左右に並べる @media は、窓の幅 1000px 以上で決まる（本文の幅ではない）。
-   縦に戻す規則は、このファイルの末尾の @media にあり、サイドパネルを開いている（data-open='true'）ときだけ効く。細い帯のときは効かないので、窓が 1024〜1056px（本文が 1000px に満たない）でも左右に並ぶ */
+   縦に戻す規則は、このファイルの末尾の @media にあり、サイドパネルを開いている（data-open='true'）ときだけ効く。細い帯のときは効かないので、窓が 1024〜1055px（細い帯 56px を引いた本文が 1000px に満たない）でも左右に並ぶ */
 .app-sidebar { display: none; }
 .app-rail-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -479,6 +479,8 @@ code {
 .auth-lead { font-size: 14px; color: var(--muted); text-align: center; }
 /* .btn（あとで定義される）の display より強くして、幅いっぱいの 1 つのボタンにする */
 .auth-box .google-login { display: flex; width: 100%; margin-top: 28px; }
+/* ログインを使えないとき、ボタンの代わりに出す「チャットと地図へ戻る」（リンク）。ボタンと同じ幅・位置で、下線は付けない */
+.auth-box .auth-back { display: flex; width: 100%; margin-top: 28px; text-decoration: none; }
 .login-alert { margin-top: 20px; }
 .auth-note { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; line-height: 1.7; }
 
@@ -893,6 +895,9 @@ p.banner {
 }
 
 .chat__scroll {
+  /* 中の .visually-hidden（position: absolute。「あなた: 」「TownScan: 」など）の包含ブロックにする。
+     position が無いと、読み上げ用の span がスクロール領域の外へはみ出して文書の高さを押し広げ、会話が長いほどページ全体がスクロールしてしまう */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -900,6 +905,10 @@ p.banner {
   flex-direction: column;
   gap: 14px;
   padding-right: 4px;
+  /* overflow-y: auto の枠は、辺で中身のフォーカスの輪（3px + 離れ 2px = 5px）を切る。左の先頭に接する部品（「地図で見る」・質問の例・「使ったツール」）の輪が収まる余白（6px）を内側に取り、
+     同じだけの負の余白で、見かけの位置を保つ（右は、失敗した発言の破線の枠（4px）に合わせた余白のまま） */
+  padding-left: 6px;
+  margin-left: -6px;
 }
 
 .chat__tools {
@@ -914,7 +923,11 @@ p.banner {
   min-width: 0;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  /* 横にスクロールする枠は、縦の辺も切る（overflow-x: auto で、縦も auto になる）。質問の例の輪（3px + 離れ 2px = 5px）が、上・左右・下で収まる余白（6px）を内側に取り、
+     同じだけの負の余白で、見かけの位置を保つ（下は、これまでの余白 4px のまま）。キーボードで枠の外の例へ進んだときも、輪が見える位置までスクロールする */
+  padding: 6px;
+  margin: -6px -6px -2px;
+  scroll-padding: 6px;
 }
 
 .chat__reset {
@@ -1118,6 +1131,51 @@ p.banner {
   white-space: normal;
 }
 
+/* 地区の大きさ（1 地区 = 約 130 m 四方のタイル 1 枚）や、解析した地区の数。値のあとに、控えめに添える */
+.answer-scope__hint {
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+/* 分類の意味（components/chat/ClassGuide.tsx）。最初の画面では常に出し、回答のカードでは折りたたむ。
+   色だけに頼らず、分類の印（形・線）と名前に、1 行の説明を並べる */
+.welcome__classes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.class-guide__list {
+  display: grid;
+  gap: 8px;
+  background: var(--surface-muted);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.class-guide__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.class-guide__item dd {
+  overflow-wrap: anywhere;
+}
+
+.class-guide .class-guide__list {
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.class-guide__item .class-badge {
+  white-space: normal;
+}
+
 .suggest-block {
   display: flex;
   flex-direction: column;
@@ -1250,9 +1308,58 @@ p.banner {
 }
 
 .table-scroll {
+  /* 表の中の .visually-hidden（「操作」「詳細（候補 ID）」など。position: absolute）を、この枠の中に閉じ込める。
+     position が無いと、表の右はし（横スクロールの先）にある読み上げ用の span が、外の枠の横幅を押し広げる */
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+/* チャットの表の、横にはみ出す側の縁に出す影（components/chat/ScrollHint.tsx が data-overflow-start / -end を付け外しする）。
+   続きがあることに気づけるように。クリックは通す。文字の色から作るので、ライトでもダークでも見える */
+.table-scroll-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.table-scroll-wrap::before,
+.table-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 24px;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.table-scroll-wrap::before {
+  left: 1px;
+  border-radius: 7px 0 0 7px;
+  background: linear-gradient(to right, var(--shadow), transparent);
+  background: linear-gradient(to right, color-mix(in srgb, var(--text) 24%, transparent), transparent);
+}
+
+.table-scroll-wrap::after {
+  right: 1px;
+  border-radius: 0 7px 7px 0;
+  background: linear-gradient(to left, var(--shadow), transparent);
+  background: linear-gradient(to left, color-mix(in srgb, var(--text) 24%, transparent), transparent);
+}
+
+.table-scroll-wrap[data-overflow-start]::before,
+.table-scroll-wrap[data-overflow-end]::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-scroll-wrap::before,
+  .table-scroll-wrap::after {
+    transition: none;
+  }
 }
 
 .data-table {
@@ -1306,9 +1413,74 @@ p.banner {
   min-width: 14em;
 }
 
+/* チャットの結果の表（幅 340px 前後のカードの中）。答えの核の列（地区・件数・面積・詳細）が、横にスクロールしなくても見えるように、
+   余白を詰め、見出し・文字・分類の印は折り返す（数と操作のボタンは折り返さない）。それでもはみ出すときは、ScrollHint の影で気づける */
+.data-table--chat th,
+.data-table--chat td {
+  padding: 6px 7px;
+  white-space: normal;
+  /* anywhere にしない（数の途中で折り返さない。列の最小幅が 1 文字分まで縮むのを防ぐ） */
+  overflow-wrap: break-word;
+}
+
+.data-table--chat thead th {
+  vertical-align: bottom;
+  line-height: 1.4;
+}
+
+.data-table--chat tbody th[scope='row'] {
+  min-width: 0;
+}
+
+.data-table--chat .class-badge {
+  white-space: normal;
+}
+
+.data-table--chat .btn {
+  white-space: nowrap;
+}
+
+/* 「詳細」のボタン: 表の外の並びで付く左の余白（.btn--small の margin-left）と横の余白を詰める */
+.data-table--chat .btn--small {
+  margin-left: 0;
+  padding: 0 10px;
+}
+
+.data-table--chat .mini-cell {
+  grid-template-columns: minmax(16px, 1fr) auto;
+  min-width: 0;
+}
+
+.data-table--chat .bar--mini {
+  min-width: 16px;
+}
+
+.data-table--chat .mini-cell__value {
+  white-space: nowrap;
+}
+
+/* 候補 ID は、最初の列の名前の下に、小さく添える（列にすると、狭いチャットで面積・詳細が隠れる） */
+.data-table__sub {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  /* ID は、列が狭いときだけ途中で折り返してよい */
+  overflow-wrap: anywhere;
+}
+
 .data-table .cell-mark {
   width: 1%;
   padding-right: 4px;
+}
+
+/* 表のセルの中の補足（地区の名前の下に添えるタイル ID など）。名前より小さく、弱い色 */
+.data-table__sub {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table tr.is-chosen td {
@@ -1339,6 +1511,16 @@ p.banner {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
+}
+
+/* 精度の回答カードの、専門の数字の前に置く平易な一言（AccuracyCard）。結果の値だけから作る */
+.accuracy-plain {
+  background: var(--surface-muted);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
 }
 
 .metric-grid--big {
@@ -1551,7 +1733,9 @@ p.banner {
   flex: none;
 }
 
-/* 地図の種類・地区の選択・解析した地区の枠を、1 行に並べる（狭い幅では折り返す）。ボタン・選択・チェックは、地図に高さを回すため 36px にする */
+/* 地図の種類・解析した地区の枠・地区の選択・寄せ直しを、1 行に並べる（狭い幅では折り返す）。ボタン・選択・チェックは、地図に高さを回すため 36px にする。
+   DOM の順は、「地図の見せ方」（種類・地区の枠）→「対象の地区」（選択・寄せ直し）。結果領域が 520px ほどのとき、1 行目は種類 + 枠、2 行目は地区の選択 + 寄せ直しになり、
+   選択に 1 行ぶんの幅（最大 320px）が回る（種類の次に選択を置くと、残りの約 190px から行の頭の「地区」と矢印を引いて、地区名が切れた） */
 .map-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1571,6 +1755,11 @@ p.banner {
 
 .map-toolbar .seg-btn {
   padding: 0 10px;
+}
+
+/* .btn--small の左の余白（8px）は、ツールバーの間隔（gap）と二重になるので消す */
+.map-toolbar .map-toolbar__reset {
+  margin-left: 0;
 }
 
 .map-toolbar__group {
@@ -1694,8 +1883,8 @@ p.banner {
 }
 
 /* ---- 地図の上の集計の帯（components/map/SummaryStrip.tsx） ----
-   「対象」と、分類ごとの件数（そのまま表示の切り替えのチェックボックス）と「条件を解除」を、ふつうの幅で 1 行に並べる。狭い幅では折り返す。
-   地図に重ねる凡例は無い（同じ内容を 2 か所に出さない） */
+   1 行目（.summary-strip__head）は「対象」・「全 m 件のうち、表示中 n 件」・「条件を解除」。分類ごとの件数（そのまま表示の切り替えのチェックボックス）は、その次。
+   結果領域が広ければ、同じ行の右に並び、狭ければ 2 行目になる。地図に重ねる凡例は無い（同じ内容を 2 か所に出さない） */
 .summary-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1707,6 +1896,17 @@ p.banner {
   border-radius: var(--radius);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* 「全 m 件のうち…」と「条件を解除」は、出ないときも場所を取る（下の [hidden] の規則）。出入りで折り返しが変わらず、帯の高さが動かない（動くと、地図が縮んで中身が上下する）。
+   head は残りの幅を取り、解除を右端へ寄せる（.summary-strip__reset の margin-left: auto） */
+.summary-strip__head {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
 }
 
 .summary-strip__target {
@@ -1773,7 +1973,20 @@ p.banner {
 }
 
 .summary-strip__scope {
+  /* 出ているときの文（「全 1,219 件のうち、表示中 1,212 件」で約 17em）が収まる幅。出ないときも、この幅を空けておく */
+  min-width: 17em;
   color: var(--muted);
+}
+
+/* hidden でも display: none にはしない。見えず・フォーカスもできないまま、場所だけを保つ（.result-area__panel[hidden] と同じ流儀） */
+.summary-strip__scope[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.summary-strip__reset[hidden] {
+  display: inline-flex;
+  visibility: hidden;
 }
 
 .summary-strip__scope strong {
@@ -1789,6 +2002,7 @@ p.banner {
    地図の外に差し込むと、地図が縮んで、押した印が動いた。重ねるので、地図の大きさは変わらない。
    下端の中央寄せ（印は地図の中ほどに多いので、なるべく覆わない）。出典の表示（右下。高さ約 22px）に重ならないよう、下から 30px あける。
    z-index は、Leaflet の部品（コントロールが 1000）より上。.app__main の isolation の中なので、サイドパネルのメニューには重ならない。
+   カードは不透明で、下の印を覆う。選んだ印・キーボードでフォーカスした印がこの下に入るときは、地図の側が上へ寄せる（LeafletMap の revealAboveCover）。
    枠を太くして、集計の帯と見分ける（色だけに頼らない） */
 .map-selected {
   position: absolute;
@@ -1822,6 +2036,29 @@ p.banner {
 
 .map-selected__compare {
   margin-left: auto;
+}
+
+/* 結果領域の 1 画面の描画が壊れたときの知らせ（components/ResultPanelBoundary.tsx）。その画面の中に出し、アプリ全体は壊さない */
+.panel-error {
+  display: grid;
+  gap: 8px;
+  margin: 12px;
+  padding: 16px;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius);
+  color: var(--error-text);
+  font-size: 14px;
+}
+
+.panel-error__title {
+  font-weight: 700;
+}
+
+.panel-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* ---- グラフ画面（components/chart/AreaChartView.tsx）: 地区ごとの件数の積み上げ横棒 ---- */
@@ -1867,6 +2104,22 @@ p.banner {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 8px;
+}
+
+/* 分類のチップ・行の操作が、地図にも効くことを、目に見える文で伝える（読み上げの名前にだけ書いていた） */
+.area-chart__note {
+  margin-top: -6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.area-chart__linked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* 押した状態（グラフに出す）は、太い実線の枠と太字。外した状態は、破線の枠と取り消し線（色だけで伝えない） */
@@ -2044,19 +2297,40 @@ p.banner {
   color: var(--error-text);
 }
 
-/* 地図の下の 1 行の帯。現在表示・案内・地図についての通知（写真が無い範囲・印で表示・候補が無い）をまとめる。長いときは折り返す */
+/* 地図の下の帯。現在表示・案内・地図についての通知（写真が無い範囲・印で表示・候補が無い）を、ひと続きの文として流し込む（.map-status__text）。
+   項目ごとに折り返すと、行の右が空いて行が増える（結果領域が 520px ほどのとき、案内と通知が 1 つずつ行を取って 3〜4 行になった）。
+   最小の高さは 36px で、1 行のときは文を真ん中に置く。長いときは折り返す */
 .map-status {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 2px 14px;
   padding: 2px 12px;
   min-height: 36px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 13px;
+  line-height: 1.5;
   color: var(--muted);
+}
+
+.map-status__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 項目のあいだは右の余白で空ける（折り返しの行頭に空きを作らない）。空の通知（いつも描く role=status）は、余白も取らない */
+.map-status__text > * {
+  margin-right: 14px;
+}
+
+.map-status__text > :empty {
+  margin-right: 0;
+}
+
+/* .btn--small の左の余白（8px）は、右の余白と二重になるので消す。文の中の行の高さは、ボタンの 36px に合わせて伸びる */
+.map-status__text > .btn {
+  margin-left: 0;
+  vertical-align: middle;
 }
 
 .map-status__hint {
@@ -2091,6 +2365,11 @@ p.banner {
   align-items: center;
   font-weight: 500;
   color: var(--primary);
+}
+
+/* 閉じたままの summary は、パネル（.map-panel。overflow-y: auto）の最後の子で、下端がパネルの端に接する。外側へ描く輪は、下の辺と左右の辺の下端が切れるので、内側へ描く */
+.cand-list > summary:focus-visible {
+  outline-offset: -3px;
 }
 
 .cand-list__note {
@@ -2159,7 +2438,7 @@ p.banner {
   display: block;
   width: 18px;
   height: 18px;
-  margin: 2px;
+  margin: 3px; /* 印の箱は 24px（LeafletMap の MARKER_BOX）。見た目の点は 18px のまま、箱の真ん中に置く */
   box-sizing: border-box;
   background: color-mix(in srgb, var(--c) 40%, var(--map-casing));
   border: 3px solid var(--c);
@@ -2462,9 +2741,120 @@ p.banner {
   }
 }
 
+/* 狭い画面（600px 以下）の上の横帯。390px で 281px（画面の約 36%）あった高さを、2〜3 段（約 100〜130px）に収め、チャットの入力欄を最初の画面に入れる。
+   1 段目: ロゴと、アカウントのボタン。2 段目: 3 つのページ（1 行に収まる大きさ。収まらない幅では折り返す。横スクロールにはしない: フォーカスの輪が切れる）。
+   3 段目: 状態の印（模擬モデルなど。あるときだけ）。説明文は隠す。テーマの切り替えは、アカウントのメニューの中に同じものがあるので、帯からは隠す（アカウントが無いときだけ、帯に残す）。
+   .app-header__tools は、中身（状態・テーマ・アカウント）を帯の格子に直接並べるため display: contents にする */
+@media (max-width: 600px) {
+  .app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand account'
+      'nav nav'
+      'status status';
+    align-items: center;
+    gap: 0 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .app-header__brand {
+    grid-area: brand;
+  }
+  .app-header__tagline {
+    display: none;
+  }
+  .app-header__tools {
+    display: contents;
+  }
+  .app-header__account {
+    grid-area: account;
+  }
+  .app-header__nav {
+    grid-area: nav;
+    gap: 2px;
+  }
+  .app-header__nav .nav-link {
+    flex: 1 0 auto;
+    justify-content: center;
+    padding: 0 6px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .app-header__status {
+    grid-area: status;
+    min-height: 0;
+  }
+  .app-header__status:not(:empty) {
+    padding: 2px 0 6px;
+  }
+  .app-header__tools:has(.app-header__account) .theme-switch {
+    display: none;
+  }
+}
+
+/* 指で押す画面（狭い幅、または指などの粗いポインター）の、押す大きさ。帯のロゴのリンク（34px）・テーマの切り替え（40×36px）・「根拠を見る」（32px）を 44px にする。
+   マウスで使う広い画面は、密なままにする */
+@media (max-width: 600px), (pointer: coarse) {
+  .app-header__logo {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .theme-switch-option {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .provenance > summary {
+    min-height: 44px;
+  }
+}
+
+/* 縦に積む幅（窓 999px 以下。チャットの下に結果領域）。スクロールは、ページ 1 つに寄せる。
+   結果領域は、高さを固定せず、内容の高さで伸ばす（これまでは 86dvh・最小 560px の枠で、地図・グラフ・写真の比較が、枠の中で別にスクロールした）。
+   見えている画面だけが流れの中に入る。選んでいない画面は、これまでどおり hidden（visibility: hidden。display: none にしない）のまま、結果領域の置き場いっぱいに重ねて置く（流れの外なので、高さを増やさない）。
+   地図は、置き場の高さに依らず、画面の高さの 56%（320〜560px）を持つ。隠れていても、見えても、Leaflet の大きさは同じ。
+   チャットは、内容が少ないうちは縮み、増えたら 64dvh（上限 640px）で止めて、記録の中でスクロールする（チャットの記録は、内側のスクロールが要る）。
+   上限を 78dvh から下げて、結果領域の帯（地図・グラフ・写真の比較）が、最初の画面に入るようにする。
+   サイドパネルを開いた 1024〜1256px の縦積みにも、同じ規則を、このファイルの末尾の @media に持つ（.app:has(.app-sidebar[data-open='true'])。変えるときは両方） */
+@media (max-width: 999px) {
+  .home > .chat {
+    height: auto;
+    min-height: min(420px, 64dvh);
+    max-height: min(64dvh, 640px);
+  }
+  .home > .result-area {
+    height: auto;
+    min-height: 0;
+  }
+  .result-area__panels {
+    flex: none;
+  }
+  .result-area__panel:not([hidden]) {
+    position: relative;
+    inset: auto;
+    overflow: visible;
+  }
+  .result-area__panel > .map-panel {
+    flex: none;
+    overflow-y: visible;
+  }
+  .result-area__panel > .drawer {
+    flex: none;
+  }
+  .result-area__panel > .result-area__empty {
+    flex: none;
+    min-height: 240px;
+  }
+  .map-stage {
+    flex: none;
+    height: clamp(320px, 56dvh, 560px);
+  }
+}
+
 /* サイドパネルを開いている（data-open='true'）間は、本文が窓より 16rem 狭い。窓が 1024〜1256px のあいだ（本文は 768〜1000px）は、チャットと結果領域を縦に積む
    （上の @media (min-width: 1000px) の、左右に並べる規則を打ち消す）。左右に並べる @media は、本文ではなく窓の幅 1000px 以上で決まり、縦に戻すのは、この規則の data-open='true' のときだけ。
-   細い帯（3.5rem）のときは、この規則が効かないので、窓が 1024〜1056px（本文が 1000px に満たない）でも左右に並ぶ。窓が 1257px 以上なら、開いたままでも並ぶ */
+   細い帯（3.5rem = 56px）のときは、この規則が効かないので、窓が 1024〜1055px（本文が 1000px に満たない。窓 1056px で本文はちょうど 1000px）でも左右に並ぶ。窓が 1257px 以上なら、開いたままでも並ぶ */
 @media (min-width: 1024px) and (max-width: 1256px) {
   .app:has(.app-sidebar[data-open='true']):has(.home) {
     height: auto;
@@ -2480,12 +2870,38 @@ p.banner {
     display: block;
     overflow: visible;
   }
+  /* 縦に積む幅の高さの決め方は、上の @media (max-width: 999px) と同じ（結果領域は内容の高さ・ページでスクロール・チャットは 64dvh まで）。変えるときは両方 */
   .app:has(.app-sidebar[data-open='true']) .home > .chat {
-    height: min(78dvh, 680px);
+    height: auto;
+    min-height: min(420px, 64dvh);
+    max-height: min(64dvh, 640px);
   }
   .app:has(.app-sidebar[data-open='true']) .home > .result-area {
-    min-height: 560px;
-    height: 86dvh;
+    height: auto;
+    min-height: 0;
+  }
+  .app:has(.app-sidebar[data-open='true']) .result-area__panels {
+    flex: none;
+  }
+  .app:has(.app-sidebar[data-open='true']) .result-area__panel:not([hidden]) {
+    position: relative;
+    inset: auto;
+    overflow: visible;
+  }
+  .app:has(.app-sidebar[data-open='true']) .result-area__panel > .map-panel {
+    flex: none;
+    overflow-y: visible;
+  }
+  .app:has(.app-sidebar[data-open='true']) .result-area__panel > .drawer {
+    flex: none;
+  }
+  .app:has(.app-sidebar[data-open='true']) .result-area__panel > .result-area__empty {
+    flex: none;
+    min-height: 240px;
+  }
+  .app:has(.app-sidebar[data-open='true']) .map-stage {
+    flex: none;
+    height: clamp(320px, 56dvh, 560px);
   }
   /* 縦に積むので、広げる先の列が無い。「拡大」のボタンを隠す（上の @media (min-width: 1000px) の表示を打ち消す） */
   .app:has(.app-sidebar[data-open='true']) .result-area__expand {

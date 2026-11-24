@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AUTH_COOKIE_PREFIX, authConfigProblem } from './auth-config';
+import { AUTH_COOKIE_PREFIX, authConfigProblem, isAuthConfigured } from './auth-config';
 
 const ok = {
   BETTER_AUTH_SECRET: 'x'.repeat(40),
@@ -36,6 +36,15 @@ describe('authConfigProblem', () => {
       expect(authConfigProblem({ ...ok, BETTER_AUTH_URL: bad }), bad).toBe('BETTER_AUTH_URL is not an http(s) URL');
     }
     expect(authConfigProblem({ ...ok, BETTER_AUTH_URL: 'https://townscan.example.com/' })).toBeNull();
+  });
+});
+
+describe('isAuthConfigured', () => {
+  it('authConfigProblem が null のときだけ true（getAuth() が null を返さない条件と同じ）', () => {
+    expect(isAuthConfigured(ok)).toBe(true);
+    expect(isAuthConfigured({ ...ok, GOOGLE_CLIENT_ID: '' })).toBe(false);
+    expect(isAuthConfigured({ ...ok, BETTER_AUTH_SECRET: 'short' })).toBe(false);
+    expect(isAuthConfigured({})).toBe(false);
   });
 });
 

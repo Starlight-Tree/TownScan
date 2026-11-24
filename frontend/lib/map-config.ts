@@ -83,6 +83,33 @@ export const nextNonce = () => ++nonceCounter;
  */
 export type MapFocus = { bbox: BBox; ids: string[]; nonce: number };
 
+// ---- 地図の上に重ねる部品の下に隠れる印を、上へ寄せる ----
+
+/** 地図の枠の左上を原点にした、長方形（ピクセル） */
+export interface PixelBox {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/**
+ * 地図の上に重ねた部品（選択中の候補のカード。cover）の下に、印・形（target）が隠れるとき、地図を上へ寄せる量（ピクセル）。隠れなければ 0。
+ * カードの横にある印・上にある印は、隠れていないので動かさない（利用者が動かした地図を、無駄に引き戻さない）。
+ * 寄せたあと、印の下端がカードの上端から gap だけ離れるようにする。ただし、印の上端が地図の枠の上端より上へ出るほどは寄せない。
+ */
+export function shiftAboveCover(target: PixelBox, cover: PixelBox, gap: number): number {
+  const overlapsX = target.right > cover.left && target.left < cover.right;
+  const overlapsY = target.bottom > cover.top && target.top < cover.bottom;
+  if (!overlapsX || !overlapsY) return 0;
+  return Math.max(0, Math.min(target.bottom + gap - cover.top, target.top - gap));
+}
+
+/** 利用者が「動きを減らす」設定にしているか（OS の prefers-reduced-motion）。matchMedia が無い環境では false */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 // ---- 幾何 ----
 
 function eachPoint(coords: unknown, fn: (lon: number, lat: number) => void): void {
@@ -124,6 +151,14 @@ export function unionBBox(boxes: BBox[]): BBox | null {
 
 export function areasBBox(areas: AreaSummary[]): BBox | null {
   return unionBBox(areas.map((a) => a.bbox));
+}
+
+/**
+ * 絞り込みの対象の地区（scope。全地区なら null）が収まる範囲。全地区なら全地区の和。
+ * 対象の地区が一覧に 1 つも無い（一覧がまだ届いていない・知らない地区）ときは null
+ */
+export function scopeBBox(areas: AreaSummary[], scope: ReadonlySet<string> | null): BBox | null {
+  return unionBBox(areas.filter((a) => scope === null || scope.has(a.id)).map((a) => a.bbox));
 }
 
 /** GeoJSON の [lon,lat] を Leaflet の [lat,lon] へ（Polygon・MultiPolygon） */

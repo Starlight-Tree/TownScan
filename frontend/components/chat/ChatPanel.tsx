@@ -7,6 +7,8 @@ import { useAreas } from '../../lib/areas-context';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useHealth } from '../HealthProvider';
 import { AnswerScope } from './AnswerScope';
+import { TILE_SIDE_TEXT } from './area-scale';
+import { ClassDefinitions } from './ClassGuide';
 import { buildRequestMessages, MAX_CONTENT_LENGTH } from './history';
 import { ResultCard } from './ResultCard';
 import { isMapFocus, type ChatActions, type ChatEntry, type ResultActions } from './types';
@@ -37,12 +39,43 @@ interface Failure {
 let nextId = 0;
 const newId = () => `m${++nextId}`;
 
+/** 要素 el の上端の位置（スクロールする枠 box の中身の先頭から数える。枠のスクロール量を含む） */
+function offsetWithin(box: HTMLElement, el: HTMLElement): number {
+  return el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+}
+
+/**
+ * 回答が届いたあとの、チャット欄のスクロール位置。
+ * - 回答が欄の高さに収まるなら、いちばん下（回答の先頭も見える）。
+ * - 欄より長い回答は、いちばん下まで送ると、結論の最初の文と質問が上に隠れる。質問（直前の自分の発言）の先頭が見える位置に合わせる。
+ *   質問が長く、欄の 3 分の 1 を超えるときは、回答の先頭に合わせる。
+ */
+function scrollTopForAnswer(box: HTMLElement): number {
+  const nodes = box.querySelectorAll<HTMLElement>('[data-entry]');
+  const answer = nodes[nodes.length - 1];
+  if (!answer || answer.dataset.entry !== 'assistant') return box.scrollHeight;
+  if (answer.getBoundingClientRect().height <= box.clientHeight) return box.scrollHeight;
+  const answerTop = offsetWithin(box, answer);
+  const question = nodes.length > 1 ? nodes[nodes.length - 2] : undefined;
+  if (question && question.dataset.entry === 'user') {
+    const questionTop = offsetWithin(box, question);
+    if (answerTop - questionTop <= box.clientHeight / 3) return questionTop;
+  }
+  return answerTop;
+}
+
+/** 指で触る端末（主な入力が指）では、質問の例を押したあとに入力欄へ移すと、画面のキーボードが開いて回答を隠す */
+function prefersTouch(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+}
+
 export function ChatPanel({ actions }: Props) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   // 再送する中身と、画面上のどの発言か（失敗の印をつけ外しするため）
   const retryRef = useRef<{ messages: ChatRequestMessage[]; entryId: string } | null>(null);
@@ -51,11 +84,22 @@ export function ChatPanel({ actions }: Props) {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   // 新しい発言・状態の変化のあと、いちばん下へ。発言が 1 件も無い間（説明の画面だけ）は、下へ動かさない:
-  // 開いた直後に下まで送ると、説明の見出しから読み始められない。「新しい会話」で 0 件に戻ったときは、説明の先頭へ戻す
+  // 開いた直後に下まで送ると、説明の見出しから読み始められない。「新しい会話」で 0 件に戻ったときは、説明の先頭へ戻す。
+  // 回答が届いたとき（送信中でも失敗でもない）は、長い回答の冒頭と質問が見える位置にする（scrollTopForAnswer）
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = entries.length === 0 ? 0 : el.scrollHeight;
+    if (!el) return;
+    if (entries.length === 0) el.scrollTop = 0;
+    else if (entries[entries.length - 1]?.role === 'assistant' && !sending && !failure) el.scrollTop = scrollTopForAnswer(el);
+    else el.scrollTop = el.scrollHeight;
   }, [entries, sending, failure]);
+
+  // 質問の例を押す・「新しい会話」を押すと、押したボタンが消える（または押せなくなる）ので、フォーカスが body へ落ちる。
+  // キーボードの人が、先頭から Tab をたどり直さずに続きを入力できるよう、入力欄へ移す。
+  // 画面の外へ動かさない（preventScroll）。指で触る端末では、画面のキーボードが開くので移さない
+  const focusComposer = useCallback(() => {
+    if (!prefersTouch()) inputRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const request = useCallback(
     async (messages: ChatRequestMessage[], entryId: string) => {
@@ -127,7 +171,8 @@ export function ChatPanel({ actions }: Props) {
     setEntries([]);
     setFailure(null);
     setSending(false);
-  }, []);
+    focusComposer();
+  }, [focusComposer]);
 
   const resultActions = useMemo<ResultActions>(() => ({ ...actions, ask: send }), [actions, send]);
 
@@ -146,16 +191,24 @@ export function ChatPanel({ actions }: Props) {
   return (
     <section className="chat" aria-label="チャット">
       <div className="chat__scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions" aria-busy={sending}>
-        {entries.length === 0 && <Welcome onPick={send} onShowMap={() => actions.showView('map')} />}
+        {entries.length === 0 && (
+          <Welcome
+            onPick={(text) => {
+              send(text);
+              focusComposer();
+            }}
+            onShowMap={() => actions.showView('map')}
+          />
+        )}
         {entries.map((entry) =>
           entry.role === 'user' ? (
-            <div key={entry.id} className={entry.failed ? 'msg msg--user msg--failed' : 'msg msg--user'}>
+            <div key={entry.id} data-entry="user" className={entry.failed ? 'msg msg--user msg--failed' : 'msg msg--user'}>
               <span className="visually-hidden">あなた: </span>
               {entry.content}
               {entry.failed && <span className="msg__note">未送信</span>}
             </div>
           ) : (
-            <div key={entry.id} className="msg msg--assistant">
+            <div key={entry.id} data-entry="assistant" className="msg msg--assistant">
               <span className="visually-hidden">TownScan: </span>
               {entry.content && <p className="msg__text">{entry.content}</p>}
               {entry.results && entry.results.length > 0 && (
@@ -164,7 +217,7 @@ export function ChatPanel({ actions }: Props) {
                   <AnswerScope results={entry.results} />
                 </ErrorBoundary>
               )}
-              {entry.results?.map((r, i) => <ResultCard key={i} result={r} actions={resultActions} />)}
+              {entry.results?.map((r, i) => <ResultCard key={i} result={r} actions={resultActions} answerText={entry.content} />)}
               {entry.tool_calls && entry.tool_calls.length > 0 && (
                 <details className="provenance provenance--tools">
                   <summary>使ったツール</summary>
@@ -206,7 +259,16 @@ export function ChatPanel({ actions }: Props) {
         <div className="chat__tools">
           <div className="chat__chips" aria-label="質問の例">
             {SUGGESTIONS.slice(0, 4).map((s) => (
-              <button key={s} type="button" className="chip chip--compact" onClick={() => send(s)} disabled={sending}>
+              <button
+                key={s}
+                type="button"
+                className="chip chip--compact"
+                onClick={() => {
+                  send(s);
+                  focusComposer();
+                }}
+                disabled={sending}
+              >
                 {s}
               </button>
             ))}
@@ -223,6 +285,7 @@ export function ChatPanel({ actions }: Props) {
         </label>
         <input
           id="chat-input"
+          ref={inputRef}
           type="text"
           className="input"
           autoComplete="off"
@@ -249,14 +312,22 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
   const { areas } = useAreas();
   return (
     <div className="welcome">
-      <h2 className="welcome__title">熊本の街の変化を、写真と会話で調べる</h2>
+      <h2 className="welcome__title">熊本市中心部の変化を、写真と会話で調べる</h2>
       <p className="welcome__lead">
         熊本市中心部の航空写真（2018 年と 2023 年）から、<b>新しく現れた建物の候補</b>を棟ごとに見つけています。質問すると、件数・表・地図・写真を、根拠つきで返します。
       </p>
       <dl className="welcome__facts">
         <div>
           <dt>対象</dt>
-          <dd>{areas.length > 0 ? `熊本市中心部の ${areas.length} 地区（1 地区 = 地理院タイル 1 枚）` : '熊本市中心部の地区（1 地区 = 地理院タイル 1 枚）'}</dd>
+          <dd>
+            {areas.length > 0
+              ? `熊本市中心部の ${areas.length} 地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`
+              : `熊本市中心部の地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`}
+          </dd>
+        </div>
+        <div>
+          <dt>地区の名前</dt>
+          <dd>タイルの中心にある住所の名前です。丁目や区の全体を数えた値ではありません。</dd>
         </div>
         <div>
           <dt>比較</dt>
@@ -267,8 +338,12 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
           <dd>国土地理院（地理院タイル・基盤地図情報）</dd>
         </div>
       </dl>
+      <div className="welcome__classes">
+        <span className="suggest-block__label">見つけた候補は、次の 3 つの分類に分けています（3 つの合計が、候補の数です）</span>
+        <ClassDefinitions />
+      </div>
       <p className="welcome__caution">
-        結果は「新規出現の<b>候補</b>」です。写真から機械が見つけたもので、新築と断定するものではありません。
+        ここに出るのは、新築の<b>候補</b>です。写真から機械が見つけたもので、新築と断定するものではありません。
       </p>
       <div className="welcome__actions">
         <button type="button" className="btn" onClick={onShowMap}>

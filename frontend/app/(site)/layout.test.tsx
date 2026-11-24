@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { health, jsonResponse } from '../../tests/fixtures';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/about', redirect: vi.fn() }));
@@ -20,7 +20,17 @@ const { default: SiteLayout } = await import('./layout');
 const fetchMock = vi.fn<typeof fetch>();
 const show = async () => render(await SiteLayout({ children: <p>本文の中身</p> }));
 
+// ログインを使える設定（lib/auth-config.ts の 5 つの変数がそろっている）。個々のテストが、足りない状態へ替える
+const AUTH_ENV = {
+  BETTER_AUTH_SECRET: 'test-secret-'.padEnd(40, 'x'),
+  BETTER_AUTH_URL: 'http://localhost:3500',
+  GOOGLE_CLIENT_ID: 'client-id',
+  GOOGLE_CLIENT_SECRET: 'client-secret',
+  DATABASE_URL: 'postgresql://u:p@db:5432/d',
+};
+
 beforeEach(() => {
+  for (const [name, value] of Object.entries(AUTH_ENV)) vi.stubEnv(name, value);
   jar.names = [];
   getSession.mockReset();
   getAuth.mockReset();
@@ -28,6 +38,10 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(jsonResponse(health));
   vi.stubGlobal('fetch', fetchMock);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('(site) の枠', () => {
@@ -52,14 +66,28 @@ describe('(site) の枠', () => {
     await screen.findAllByText('模擬モデルで応答しています');
   });
 
-  it('ログインしていない（Cookie が無い）とき: Better Auth も DB も呼ばず、サイドパネルと上の横帯の両方に「メニュー」（Google でログイン）がある', async () => {
+  it('ログインしていない（Cookie が無い）とき: Better Auth も DB も呼ばず、サイドパネルと上の横帯の両方に「ログイン」の入口（Google でログイン）がある', async () => {
     await show();
     expect(getAuth).not.toHaveBeenCalled();
-    const buttons = screen.getAllByRole('button', { name: 'メニュー' });
+    const buttons = screen.getAllByRole('button', { name: 'ログイン・テーマのメニュー' });
     expect(buttons).toHaveLength(2);
     expect(buttons.map((b) => b.closest('aside, header')?.tagName)).toEqual(['ASIDE', 'HEADER']);
     await userEvent.click(buttons[1]!);
     expect(screen.getByRole('menuitem', { name: 'Google でログイン' })).toHaveAttribute('href', '/login');
+    await screen.findAllByText('模擬モデルで応答しています');
+  });
+
+  it('Google でのログインの設定が無い環境では、メニューに「Google でログイン」を出さない（押しても、ボタンの無いページへ着くだけ）。テーマだけのメニュー', async () => {
+    vi.stubEnv('GOOGLE_CLIENT_ID', '');
+    await show();
+    expect(getAuth).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'ログイン・テーマのメニュー' })).not.toBeInTheDocument();
+    const buttons = screen.getAllByRole('button', { name: 'メニュー' });
+    expect(buttons).toHaveLength(2);
+    await userEvent.click(buttons[1]!);
+    const menu = screen.getByRole('menu', { name: 'メニュー' });
+    expect(within(menu).queryByRole('menuitem', { name: 'Google でログイン' })).not.toBeInTheDocument();
+    expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(3);
     await screen.findAllByText('模擬モデルで応答しています');
   });
 
@@ -90,7 +118,7 @@ describe('(site) の枠', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     getSession.mockRejectedValue(new Error('connect ECONNREFUSED'));
     await show();
-    expect(screen.getAllByRole('button', { name: 'メニュー' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'ログイン・テーマのメニュー' })).toHaveLength(2);
     expect(screen.getByRole('main')).toHaveTextContent('本文の中身');
     await screen.findAllByText('模擬モデルで応答しています');
   });
@@ -99,7 +127,7 @@ describe('(site) の枠', () => {
     jar.names = ['townscan.session_token'];
     getAuth.mockReturnValue(null);
     await show();
-    expect(screen.getAllByRole('button', { name: 'メニュー' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'ログイン・テーマのメニュー' })).toHaveLength(2);
     await screen.findAllByText('模擬モデルで応答しています');
   });
 

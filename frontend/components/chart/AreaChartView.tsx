@@ -4,7 +4,7 @@ import { useId, type CSSProperties } from 'react';
 import type { AreaSummary, CandidateClass } from '../../lib/api-types';
 import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
 import { formatNumber } from '../../lib/format';
-import { areaScopeIds, type MapFilter } from '../../lib/result-view';
+import { areaScopeIds, isAllFilter, type MapFilter } from '../../lib/result-view';
 import { ClassSwatch } from '../ClassBadge';
 import { buildRows, multiAreaName, type AreaRow } from './area-stats';
 
@@ -16,6 +16,8 @@ interface Props {
    */
   filter: MapFilter;
   onFilterChange: (next: MapFilter) => void;
+  /** 地図の画面へ切り替える。渡されたときだけ、絞り込み中に「地図で見る」を出す（グラフの操作は、地図の絞り込みと同じものを替えるため） */
+  onShowMap?: () => void;
 }
 
 /** 行を読み上げる文。色や棒の長さを見られない人にも、地区名と 3 分類の件数が伝わるようにする */
@@ -31,7 +33,7 @@ function rowLabel(row: AreaRow, classes: ReadonlySet<CandidateClass>): string {
  * 棒は HTML と CSS だけで描く（幅は、表示している行のうち最大の合計に対する割合）。
  * 分類は色だけでなく、棒の縁の線（実線・破線・点線）と塗りの模様でも区別する（lib/classes.ts の方針）。
  */
-export function AreaChartView({ areas, filter, onFilterChange }: Props) {
+export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Props) {
   const { classes, areaId } = filter;
   const titleId = useId();
   const shown = CLASS_ORDER.filter((c) => classes.has(c));
@@ -69,7 +71,10 @@ export function AreaChartView({ areas, filter, onFilterChange }: Props) {
             <span className="area-chart__scope-key">対象:</span> <strong>{multiName}</strong>
           </p>
         )}
-        <p className="area-chart__hint">合計の多い順です。行を押すとその地区に絞り込み、もう一度押すと全地区に戻ります。</p>
+        {/* 右の数字・並び順は、表示している分類だけの合計（分類のチップを替えると、数字も並びも変わる） */}
+        <p className="area-chart__hint">
+          表示中の分類の合計が多い順です。行を押すとその地区に絞り込み、もう一度押すと全地区に戻ります。絞り込みは地図にも反映されます。
+        </p>
       </header>
 
       {empty ? (
@@ -86,6 +91,15 @@ export function AreaChartView({ areas, filter, onFilterChange }: Props) {
               </button>
             ))}
           </div>
+          <p className="area-chart__note">分類を切り替えると、地図と集計の帯の表示にも反映されます。</p>
+          {onShowMap && !isAllFilter(filter) && (
+            <div className="area-chart__linked">
+              <span>いまの絞り込み（地区・分類）は、地図にも反映されています。</span>
+              <button type="button" className="btn btn--small" onClick={onShowMap}>
+                地図で見る
+              </button>
+            </div>
+          )}
 
           {shown.length === 0 ? (
             <p className="empty-note" role="status">

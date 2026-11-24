@@ -1,7 +1,8 @@
 'use client';
 
-import { getMetrics } from '../lib/api';
-import type { MetricsResponse, Provenance } from '../lib/api-types';
+import type { ReactNode } from 'react';
+import { getAreas, getMetrics } from '../lib/api';
+import type { AreaSummary, MetricsResponse, Provenance } from '../lib/api-types';
 import {
   DEFAULT_EVAL_YEAR,
   FEW_MATCHES,
@@ -27,18 +28,31 @@ import {
   type SplitKey,
   type YearCompare,
 } from '../lib/accuracy';
-import { useAreas } from '../lib/areas-context';
+import { AreasProvider, useAreas } from '../lib/areas-context';
 import { formatNumber } from '../lib/format';
 import { useAsync } from '../lib/use-api';
 import { ProvenanceBox } from './chat/ProvenanceBox';
 
 const loadMetrics = (signal: AbortSignal) => getMetrics(signal);
+const loadAreas = (signal: AbortSignal) => getAreas(signal);
+const NO_AREAS: AreaSummary[] = [];
 
 function cell(v: unknown): string {
   return isNum(v) ? formatNumber(v) : '—';
 }
 
 export function AccuracyView() {
+  // 「地区ごとの値」などで、地区の ID（z18-…）を町名で言うために、地区の一覧も読む。読めなくても数字は出す（地区は ID のまま。エラーにはしない）
+  const areasQ = useAsync(loadAreas);
+  const areas = areasQ.state.status === 'ready' ? areasQ.state.data : NO_AREAS;
+  return (
+    <AreasProvider areas={areas}>
+      <AccuracyContent />
+    </AreasProvider>
+  );
+}
+
+function AccuracyContent() {
   const { state, reload } = useAsync(loadMetrics);
 
   return (
@@ -222,11 +236,16 @@ function MetricsBody({ m }: { m: MetricsResponse }) {
       {m.notes && m.notes.length > 0 && (
         <section className="panel" aria-labelledby="h-notes">
           <h2 id="h-notes" className="panel__title">評価の注記</h2>
-          <ul className="plain-list">
-            {m.notes.map((n, i) => (
-              <li key={i}>{n}</li>
-            ))}
-          </ul>
+          {/* 評価の元データ（eval.json）に付いた注記は、項目名・ファイル名・条件式がそのまま書いてある開発者向けの文。ふだんは畳み、この画面の説明は、上の文と「既知の限界」に書く */}
+          <p className="page__small">評価の元データに付いている注記です。項目名やファイル名がそのまま書いてあるので、開発者向けです。この画面の説明は、上の文と「既知の限界」にあります。</p>
+          <details className="provenance" data-testid="eval-notes">
+            <summary>注記をすべて見る（開発者向け）</summary>
+            <ul className="plain-list">
+              {m.notes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          </details>
         </section>
       )}
 
@@ -378,8 +397,17 @@ function PerAreaTable({ rows, year }: { rows: Array<Record<string, unknown>>; ye
   const { nameOf } = useAreas();
   const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
   const label = (k: string) => PER_AREA_LABEL[k] ?? k.replace(/_/g, ' ');
-  const show = (k: string, v: unknown) => {
-    if (k === 'area_id' && typeof v === 'string') return nameOf(v);
+  const show = (k: string, v: unknown): ReactNode => {
+    if (k === 'area_id' && typeof v === 'string') {
+      const name = nameOf(v);
+      // 町名が分かるときは、町名を主にして、タイル ID を下に小さく添える（地図・チャットの地区の呼び方と、評価ファイルの ID を突き合わせられる）
+      return name === v ? v : (
+        <>
+          {name}
+          <span className="data-table__sub">{v}</span>
+        </>
+      );
+    }
     if (k === 'split') return v === 'tune' ? '調整用' : v === 'holdout' ? '評価用' : String(v ?? '—');
     return isNum(v) ? formatNumber(v) : v === null || v === undefined ? '—' : String(v);
   };
@@ -491,7 +519,7 @@ function ReferenceLimit() {
     <div data-testid="limit-reference">
       <b>参照（基盤地図情報）が写真より古い可能性</b>
       <br />
-      参照は、写真より古い可能性があります（推定）。配布の版の日付は 2018-10 ですが、建物ごとの測量の時期は分かりません。この地域のデータは 2017 年 10 月の更新のあと実質止まっていた、と調査記録（ADR 0001）にありますが、独立の確認はしていません。写真にあって参照に無い建物は「余分（FP）」に、参照に残る取り壊し済みの建物は「見逃し（FN）」に数えられます。このため、<b>物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値</b>です。
+      参照は、写真より古い可能性があります（推定）。配布の版の日付は 2018-10 ですが、建物ごとの測量の時期は分かりません。この地域のデータは 2017 年 10 月の更新のあと実質止まっていた、と開発時の調査記録にありますが、独立の確認はしていません。写真にあって参照に無い建物は「余分（FP）」に、参照に残る取り壊し済みの建物は「見逃し（FN）」に数えられます。このため、<b>物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値</b>です。
     </div>
   );
 }
