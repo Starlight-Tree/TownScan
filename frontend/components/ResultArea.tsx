@@ -8,8 +8,6 @@ interface Props {
   view: ResultView;
   /** ユーザー自身のタブ操作（クリック・矢印キー・Home・End）。回答や結果カードからの切り替えは、親が view を直接変える */
   onViewChange: (view: ResultView) => void;
-  /** 画面に見えない live region に出す文（自動で切り替えたことを、読み上げで知らせる）。空なら何も読まない */
-  announcement: string;
   /** 3 つの画面の中身。どれも外さず、選んでいない画面は hidden にする（地図の Leaflet が、位置や拡大を保つため） */
   panels: Record<ResultView, ReactNode>;
   /** 結果領域を広げているか（チャットの列を狭める）。無ければ「拡大」ボタンを出さない */
@@ -17,6 +15,8 @@ interface Props {
   onToggleExpanded?: () => void;
   /** 値が変わるたびに（回答・結果カード・詳細の操作で画面が替わったとき）、縦に積む幅では結果領域の上端が見える所までスクロールする。フォーカスは動かさない */
   revealNonce?: number;
+  /** マウントされた直後にも、同じ「見える所まで」のスクロールをする。閉じていた結果領域が、回答・操作で開いた（マウントされた）とき、縦に積む幅ではチャットの下に出て見えないため */
+  revealOnMount?: boolean;
 }
 
 /** 上端がこの割合（画面の高さに対して）より下にあるときは、見えていても「見える所まで」動かす（下の端に頭だけ出ている状態を、見えたと数えない） */
@@ -43,11 +43,11 @@ function revealIfOutOfView(el: HTMLElement | null) {
 export function ResultArea({
   view,
   onViewChange,
-  announcement,
   panels,
   expanded = false,
   onToggleExpanded,
   revealNonce,
+  revealOnMount = false,
 }: Props) {
   const baseId = useId();
   const rootRef = useRef<HTMLElement>(null);
@@ -68,6 +68,12 @@ export function ResultArea({
     const active = document.activeElement;
     if (active && panelRefs.current[before]?.contains(active)) tabRefs.current[view]?.focus();
   }, [view]);
+
+  // 開いたとき（マウント）の 1 回。マウント時の値で決める
+  const revealOnMountRef = useRef(revealOnMount);
+  useEffect(() => {
+    if (revealOnMountRef.current) revealIfOutOfView(rootRef.current);
+  }, []);
 
   useEffect(() => {
     if (seenNonce.current === revealNonce) return;
@@ -93,9 +99,6 @@ export function ResultArea({
 
   return (
     <section ref={rootRef} className="result-area" aria-label="結果">
-      <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
-        {announcement}
-      </div>
       {/* 帯は、タブの列（tablist）と、拡大のボタンを並べる。tablist には、タブだけを入れる */}
       <div className="result-area__bar">
         <div className="result-area__tabs" role="tablist" aria-label="結果の見せ方">

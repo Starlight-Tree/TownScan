@@ -29,6 +29,8 @@ export const SUGGESTIONS = [...IN_SCOPE_SUGGESTIONS, ...OUT_OF_SCOPE_SUGGESTIONS
 
 interface Props {
   actions: ChatActions;
+  /** 「新しい会話」（チャットの中のボタンも、サイドパネルのボタンも）で会話を空にしたあとに呼ぶ。親が、結果領域を最初の状態へ戻す */
+  onNewConversation?: () => void;
 }
 
 interface Failure {
@@ -69,7 +71,7 @@ function prefersTouch(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 }
 
-export function ChatPanel({ actions }: Props) {
+export function ChatPanel({ actions, onNewConversation }: Props) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -170,8 +172,9 @@ export function ChatPanel({ actions }: Props) {
     setEntries([]);
     setFailure(null);
     setSending(false);
+    onNewConversation?.();
     focusComposer();
-  }, [focusComposer]);
+  }, [focusComposer, onNewConversation]);
 
   // サイドパネルの「新しい会話」も、同じ処理を呼ぶ
   useRegisterNewConversation(reset);

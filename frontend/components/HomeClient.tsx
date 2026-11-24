@@ -87,8 +87,11 @@ function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLo
   );
 }
 
-/** `/`: 左にチャット、右に結果領域（地図・グラフ・写真の比較）。回答・地図・グラフ・詳細の間の受け渡しをここで持つ */
-export function HomeClient() {
+/**
+ * `/`: 左にチャット、右に結果領域（地図・グラフ・写真の比較）。回答・地図・グラフ・詳細の間の受け渡しをここで持つ。
+ * 最初はチャットだけ。結果領域は、結果つきの回答か「地図で見る」で開く。defaultResultOpen は、最初から開いた状態で始める（結果領域の中の動きの検査と、将来の会話の復元用）
+ */
+export function HomeClient({ defaultResultOpen = false }: { defaultResultOpen?: boolean } = {}) {
   const areasQ = useAsync(loadAreas);
   const candQ = useAsync(loadFeatures);
   const [selected, setSelected] = useState<Selection | null>(null);
@@ -109,6 +112,12 @@ export function HomeClient() {
   const [expanded, setExpanded] = useState(false);
   // 回答・結果カード・詳細の操作で画面を替えるたびに +1（画面が同じでも）。縦に積む幅で、結果領域が見える所までスクロールする合図
   const [revealNonce, setRevealNonce] = useState(0);
+  // 結果領域を開いているか。会話の前（最初の画面）は閉じて、チャットだけを見せる。
+  // 回答・結果カード・「地図で見る」などの操作で画面を見せるとき（applyView の announce）に開き、「新しい会話」で閉じる。
+  // 閉じているあいだは結果領域をマウントしない（Leaflet が、大きさの無い枠で始まらないように）。一度開いたら、閉じるまでマウントしたまま
+  const [resultOpen, setResultOpen] = useState(defaultResultOpen);
+  // コールバックの中で（再描画を待たずに）「開いているか」を読むための控え
+  const resultOpenRef = useRef(defaultResultOpen);
 
   const areas = areasQ.state.status === 'ready' ? areasQ.state.data : NO_AREAS;
   const features = candQ.state.status === 'ready' ? candQ.state.data : null;
@@ -138,7 +147,12 @@ export function HomeClient() {
       setAnnouncement('');
       return;
     }
-    if (changed) setAnnouncement(`「${RESULT_VIEW_LABELS[next]}」を表示しました`);
+    // 閉じていた結果領域は、ここで開く（ユーザー自身のタブ操作は、開いているときにしか起こらない）。
+    // 画面が同じ（地図のまま）でも、結果領域が現れたことは知らせる（「地図で見る」を押した人は、右が開いたことに気づけない）
+    const opened = !resultOpenRef.current;
+    resultOpenRef.current = true;
+    setResultOpen(true);
+    if (changed || opened) setAnnouncement(`「${RESULT_VIEW_LABELS[next]}」を表示しました`);
     setRevealNonce((n) => n + 1);
   }, []);
   const chooseView = useCallback((next: ResultView) => applyView(next, false), [applyView]);
@@ -263,6 +277,21 @@ export function HomeClient() {
 
   const toggleExpanded = useCallback(() => setExpanded((e) => !e), []);
 
+  /** 「新しい会話」: 最初の画面（チャットだけ）へ戻す。開き直したとき、前の会話の絞り込み・強調・選択・拡大が残らないように、これらも外す */
+  const resetResults = useCallback(() => {
+    resultOpenRef.current = false;
+    setResultOpen(false);
+    setExpanded(false);
+    setSelected(null);
+    setPendingFocusId(null);
+    setHighlightIds(NO_IDS);
+    setFocus(null);
+    setFilter(ALL_FILTER);
+    viewRef.current = 'map';
+    setView('map');
+    setAnnouncement('');
+  }, []);
+
   const closeDrawer = useCallback(() => {
     setSelected(null);
     setPendingFocusId(null);
@@ -290,48 +319,54 @@ export function HomeClient() {
 
   return (
     <AreasProvider areas={areas}>
-      <div className={expanded ? 'home home--expanded' : 'home'}>
-        <ChatPanel actions={chatActions} />
-        <ResultArea
-          view={view}
-          onViewChange={chooseView}
-          announcement={announcement}
-          expanded={expanded}
-          onToggleExpanded={toggleExpanded}
-          revealNonce={revealNonce}
-          panels={{
-            map: (
-              <MapPanel
-                areas={areas}
-                areasState={areasQ.state}
-                candidatesState={candQ.state.status === 'ready' ? { status: 'ready', data: candQ.state.data } : candQ.state}
-                reloadCandidates={candQ.reload}
-                reloadAreas={areasQ.reload}
-                focus={focus}
-                selectedId={selectedId}
-                highlightIds={highlightIds}
-                onSelect={selectFromMap}
-                onOpen={openCandidate}
-                onClearHighlight={() => setHighlightIds(NO_IDS)}
-                filter={filter}
-                onFilterChange={setFilter}
-                onComparePhotos={comparePhotos}
-                onClearSelection={closeDrawer}
-              />
-            ),
-            chart: <AreaChartView areas={areas} filter={filter} onFilterChange={setFilter} onShowMap={() => showView('map')} />,
-            photos: (
-              <PhotosPanel
-                selected={selected}
-                focusNonce={focusNonce}
-                visible={view === 'photos'}
-                onClose={closeDrawer}
-                onShowOnMap={showOnMap}
-                onLoaded={onDetailLoaded}
-              />
-            ),
-          }}
-        />
+      <div className={!resultOpen ? 'home home--chat-only' : expanded ? 'home home--expanded' : 'home'}>
+        {/* 自動で画面を替えたことを知らせる live region。結果領域が閉じていても、開く前から DOM にある（開くのと同時に作ると、読み上げられない） */}
+        <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+          {announcement}
+        </div>
+        <ChatPanel actions={chatActions} onNewConversation={resetResults} />
+        {resultOpen && (
+          <ResultArea
+            view={view}
+            onViewChange={chooseView}
+            expanded={expanded}
+            onToggleExpanded={toggleExpanded}
+            revealNonce={revealNonce}
+            revealOnMount={revealNonce > 0}
+            panels={{
+              map: (
+                <MapPanel
+                  areas={areas}
+                  areasState={areasQ.state}
+                  candidatesState={candQ.state.status === 'ready' ? { status: 'ready', data: candQ.state.data } : candQ.state}
+                  reloadCandidates={candQ.reload}
+                  reloadAreas={areasQ.reload}
+                  focus={focus}
+                  selectedId={selectedId}
+                  highlightIds={highlightIds}
+                  onSelect={selectFromMap}
+                  onOpen={openCandidate}
+                  onClearHighlight={() => setHighlightIds(NO_IDS)}
+                  filter={filter}
+                  onFilterChange={setFilter}
+                  onComparePhotos={comparePhotos}
+                  onClearSelection={closeDrawer}
+                />
+              ),
+              chart: <AreaChartView areas={areas} filter={filter} onFilterChange={setFilter} onShowMap={() => showView('map')} />,
+              photos: (
+                <PhotosPanel
+                  selected={selected}
+                  focusNonce={focusNonce}
+                  visible={view === 'photos'}
+                  onClose={closeDrawer}
+                  onShowOnMap={showOnMap}
+                  onLoaded={onDetailLoaded}
+                />
+              ),
+            }}
+          />
+        )}
       </div>
     </AreasProvider>
   );

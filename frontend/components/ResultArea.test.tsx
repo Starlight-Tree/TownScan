@@ -28,7 +28,7 @@ function Harness({ initial = 'map', onChange }: { initial?: ResultView; onChange
           onChange?.(v);
           setView(v);
         }}
-        announcement=""
+       
         panels={panels}
       />
     </>
@@ -128,16 +128,6 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
     expect(tab('地図')).toHaveFocus();
   });
 
-  it('announcement は、画面に見えない polite の live region に出る（空なら何も出さない）', () => {
-    const { rerender } = render(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} />);
-    const live = document.querySelector<HTMLElement>('[aria-live="polite"]')!;
-    expect(live).toHaveAttribute('role', 'status');
-    expect(live).toHaveClass('visually-hidden');
-    expect(live).toBeEmptyDOMElement();
-    rerender(<ResultArea view="chart" onViewChange={() => {}} announcement="「グラフ」を表示しました" panels={panels} />);
-    expect(live).toHaveTextContent('「グラフ」を表示しました');
-  });
-
   // この 2 つは、フォーカスを動かさずに画面が替わる場合（回答・結果カード・「地図で見る」）。DOM の click() は、フォーカスを動かさない
   it('見ていた画面の中にあったフォーカスは、画面が替わったとき、選ばれたタブへ移す（フォーカスが消えない）', async () => {
     render(<Harness />);
@@ -193,12 +183,12 @@ describe('拡大のボタン', () => {
   const expandButton = () => screen.getByRole('button', { name: '拡大' });
 
   it('onToggleExpanded が無ければ出さない', () => {
-    render(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded />);
+    render(<ResultArea view="map" onViewChange={() => {}} panels={panels} expanded />);
     expect(screen.queryByRole('button', { name: '拡大' })).not.toBeInTheDocument();
   });
 
   it('タブの帯の右端に出る。tablist の外にあり、tablist にはタブだけが入る', () => {
-    render(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} onToggleExpanded={() => {}} />);
+    render(<ResultArea view="map" onViewChange={() => {}} panels={panels} onToggleExpanded={() => {}} />);
     const list = screen.getByRole('tablist');
     expect(list).not.toContainElement(expandButton());
     expect([...list.children].every((c) => c.getAttribute('role') === 'tab')).toBe(true);
@@ -209,22 +199,22 @@ describe('拡大のボタン', () => {
 
   it('状態は aria-pressed で持ち、名前は「拡大」のまま（名前は変えない）', () => {
     const { rerender } = render(
-      <ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded={false} onToggleExpanded={() => {}} />,
+      <ResultArea view="map" onViewChange={() => {}} panels={panels} expanded={false} onToggleExpanded={() => {}} />,
     );
     expect(expandButton()).toHaveAttribute('aria-pressed', 'false');
-    rerender(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded onToggleExpanded={() => {}} />);
+    rerender(<ResultArea view="map" onViewChange={() => {}} panels={panels} expanded onToggleExpanded={() => {}} />);
     expect(expandButton()).toHaveAttribute('aria-pressed', 'true');
     expect(expandButton()).toHaveAccessibleName('拡大');
   });
 
   it('広げているときだけ、「元の大きさに戻す」を目に見える文でも出す。名前は「拡大」のまま（補足は読み上げず、説明は title）', () => {
     const { rerender } = render(
-      <ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded={false} onToggleExpanded={() => {}} />,
+      <ResultArea view="map" onViewChange={() => {}} panels={panels} expanded={false} onToggleExpanded={() => {}} />,
     );
     expect(expandButton()).not.toHaveTextContent('元の大きさに戻す');
     expect(expandButton()).toHaveAccessibleDescription('チャットの列を狭めて、結果領域を広げます');
 
-    rerender(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded onToggleExpanded={() => {}} />);
+    rerender(<ResultArea view="map" onViewChange={() => {}} panels={panels} expanded onToggleExpanded={() => {}} />);
     expect(expandButton()).toHaveTextContent('拡大（元の大きさに戻す）');
     const hint = expandButton().querySelector('.result-area__expand-hint')!;
     expect(hint).toHaveAttribute('aria-hidden', 'true');
@@ -234,18 +224,18 @@ describe('拡大のボタン', () => {
   });
 
   it('expanded を渡さなくても、押していない状態（aria-pressed=false）', () => {
-    render(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} onToggleExpanded={() => {}} />);
+    render(<ResultArea view="map" onViewChange={() => {}} panels={panels} onToggleExpanded={() => {}} />);
     expect(expandButton()).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('アイコンは装飾（aria-hidden）で、向きが状態で変わる。名前には入らない', () => {
     const { rerender } = render(
-      <ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded={false} onToggleExpanded={() => {}} />,
+      <ResultArea view="map" onViewChange={() => {}} panels={panels} expanded={false} onToggleExpanded={() => {}} />,
     );
     const icon = () => expandButton().querySelector('svg')!;
     expect(icon()).toHaveAttribute('aria-hidden', 'true');
     const before = icon().querySelector('path')!.getAttribute('d');
-    rerender(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} expanded onToggleExpanded={() => {}} />);
+    rerender(<ResultArea view="map" onViewChange={() => {}} panels={panels} expanded onToggleExpanded={() => {}} />);
     expect(icon()).toHaveAttribute('aria-hidden', 'true');
     expect(icon().querySelector('path')!.getAttribute('d')).not.toBe(before);
     expect(expandButton()).toHaveAccessibleName('拡大');
@@ -253,7 +243,7 @@ describe('拡大のボタン', () => {
 
   it('押すと onToggleExpanded が呼ばれる（クリックも、キーボードの Enter・Space も）', async () => {
     const onToggle = vi.fn();
-    render(<ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} onToggleExpanded={onToggle} />);
+    render(<ResultArea view="map" onViewChange={() => {}} panels={panels} onToggleExpanded={onToggle} />);
     await userEvent.click(expandButton());
     expect(onToggle).toHaveBeenCalledTimes(1);
     expandButton().focus();
@@ -273,7 +263,7 @@ describe('拡大のボタン', () => {
           <ResultArea
             view="map"
             onViewChange={onViewChange}
-            announcement=""
+           
             panels={panels}
             expanded={expanded}
             onToggleExpanded={() => {
@@ -361,12 +351,28 @@ describe('縦に積む幅で、結果領域の上端へスクロールする（r
   });
 
   const area = (nonce?: number) => (
-    <ResultArea view="map" onViewChange={() => {}} announcement="" panels={panels} revealNonce={nonce} />
+    <ResultArea view="map" onViewChange={() => {}} panels={panels} revealNonce={nonce} />
   );
 
   it('初回の描画では、動かさない（revealNonce の初期値があっても）', () => {
     setup(900);
     render(area(0));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('revealOnMount: マウントの直後に、上端が画面の高さの 6 割より下なら、上端へスクロールする（閉じていた結果領域が開いたとき）', () => {
+    setup(window.innerHeight * 0.6 + 40);
+    render(<ResultArea view="map" onViewChange={() => {}} panels={panels} revealNonce={1} revealOnMount />);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
+    expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole('region', { name: '結果' }));
+  });
+
+  it('revealOnMount: すでに見える位置なら、動かさない。値が変わるまでは、もう動かさない', () => {
+    setup(100);
+    const { rerender } = render(<ResultArea view="map" onViewChange={() => {}} panels={panels} revealNonce={1} revealOnMount />);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    rerender(<ResultArea view="chart" onViewChange={() => {}} panels={panels} revealNonce={1} revealOnMount />);
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
@@ -527,7 +533,7 @@ describe('1 つの画面の描画が壊れても、アプリ全体を巻き込�
     return (
       <>
         <nav aria-label="アプリの枠">サイドバー</nav>
-        <ResultArea view={view} onViewChange={setView} announcement="" panels={withBomb} />
+        <ResultArea view={view} onViewChange={setView} panels={withBomb} />
       </>
     );
   }

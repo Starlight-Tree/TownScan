@@ -715,6 +715,12 @@ p.banner {
     height: auto;
     min-height: 0;
   }
+  /* 最初の画面（会話の前。HomeClient が .home--chat-only を付ける）: チャットだけを、中央の 1 列に置く。
+     結果領域（右の列）は、最初の結果つきの回答か「地図で見る」で開く。開くと、上の 2 列（チャット 340〜440px・結果領域）になる */
+  .home--chat-only {
+    grid-template-columns: minmax(0, 760px);
+    justify-content: center;
+  }
   /* 結果領域の「拡大」（HomeClient が .home--expanded を付ける）。チャットの列を、普通の幅（340〜440px）より狭い 280px にして、残りを結果領域へ回す。
      普通の 440px からは 160px 広がる（340px までだと 100px しか増えず、押した効きが小さかった）。
      チャットのメッセージ一覧（.chat__scroll）と入力欄は、そのまま残る（列が狭くなるだけ）。280px では、質問の例の行だけが窮屈になるので、下の 2 つで整える
