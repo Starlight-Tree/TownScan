@@ -4,6 +4,8 @@
 #   http://127.0.0.1:8500/api/docs   # API の仕様（FastAPI の自動文書）
 # ポートは 127.0.0.1 だけに公開する。他のローカルのサービス（JobNavi 3200/8200、ShopOrder 3400/8400、DocuNavi 5433）と重ねない。変えない。
 # db は公開しない。Docker VM の空きが少ない（約 0.5 GB）ため、mem_limit を付けてある（db 256m・api 512m・web 512m）。
+# ログイン（任意。Better Auth・Google だけ）: web が画面のサーバーの中で動かし、api は web の JWKS で JWT を検証するだけ。仕様: docs/spec-prototype.md §2.1
+#   BETTER_AUTH_SECRET は scripts/dev-up.sh が .env に 1 回だけ作る。GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET は、あなたが .env に書く（無くても起動でき、ログイン以外は使える）。
 name: townscan
 
 services:
@@ -41,11 +43,20 @@ services:
       local.ui.group: "App-TownScan"
     mem_limit: 512m
     environment:
-      # パスワードは英数字だけ（scripts/dev-up.sh が作る 16 進の乱数）。URL にそのまま入れる
-      DATABASE_URL: "postgresql://townscan:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD が未設定です}@db:5432/townscan"
+      # パスワードは英数字だけ（scripts/dev-up.sh が作る 16 進の乱数）。URL にそのまま入れる（web も同じ値を使う）
+      DATABASE_URL: &database_url "postgresql://townscan:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD が未設定です}@db:5432/townscan"
       TILES_DIR: /data/townscan/tiles
-      # mock 以外は起動時にエラー（実モデルは承認後）
+      # 返答のモデル: mock（既定）か gemini。gemini のときは GEMINI_API_KEY が要る（空なら起動時にエラー）。
+      # GEMINI_API_KEY は .env に自分で書く（値はここにも .env.example にも書かない。compose がホストの .env から渡す）。GEMINI_MODEL は空なら既定のモデル
       LLM_PROVIDER: "${LLM_PROVIDER:-mock}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-}"
+      # ログイン（任意）。画面のサーバー（web の Better Auth）が出す JWT を、その JWKS の公開鍵で検証するだけ（ログインの通信・秘密は持たない）。
+      # AUTH_ISSUER は web の BETTER_AUTH_URL と同じ値（JWT の iss）、AUTH_AUDIENCE は web の JWT_AUDIENCE と同じ値（JWT の aud）。
+      # AUTH_JWKS_URL は api のコンテナから届く web の URL（iss とは別。frontend-net 越し）。JWKS は呼ばれたときに取りに行く（web の起動を待たない）
+      AUTH_ISSUER: "${BETTER_AUTH_URL:-http://localhost:3500}"
+      AUTH_AUDIENCE: "${JWT_AUDIENCE:-townscan}"
+      AUTH_JWKS_URL: "http://web:3000/api/auth/jwks"
     volumes:
       # 写真タイルと pipeline の出力（読み取り専用）。無いと Docker が root 所有で作るので、scripts/dev-up.sh が先に作る
       - ./data/townscan:/data/townscan:ro
@@ -74,6 +85,7 @@ services:
     container_name: townscan-web
     labels:
       local.ui.group: "App-TownScan"
+    # 512m のまま。参照元の jobnavi-frontend（約 1.9 GB の実測）は next dev で、ここは standalone の本番実行。Better Auth と pg の接続プールで増えるのは数十 MB の見込み（未実測。dev-up のあとに docker stats で確かめる）
     mem_limit: 512m
     environment:
       # /api/* の転送先（実行時に読む）
@@ -82,13 +94,29 @@ services:
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
       NEXT_TELEMETRY_DISABLED: "1"
+      # ログイン（Better Auth。Google だけ）。画面のサーバーの中で動く。値は .env（Git 管理外）から読み、このファイルには書かない。
+      # BETTER_AUTH_URL は、ブラウザーから見た web の URL（Google のリダイレクト URI と JWT の iss になる。ポートを変えたら Google 側も直す）。
+      # BETTER_AUTH_SECRET は 32 文字以上の乱数（scripts/dev-up.sh が作る）。一度決めたら変えない（DB の auth_jwks の署名鍵と Google のトークンの暗号化に使う。変えると全員がログアウトに見える）。
+      # どれかが足りないときは、ログインが「まだ設定されていません」と出る（/api/auth/* は 503。ほかの画面と API は今まどおり動く）。だから、空の既定値で compose は起動できる。
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3500}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      # JWT の対象（aud）。api の AUTH_AUDIENCE と同じ値になる
+      JWT_AUDIENCE: "${JWT_AUDIENCE:-townscan}"
+      # ログインの表（auth_ で始まる表）を読み書きするための DB 接続。注意: api と同じ資格情報で、表ごとの権限分けはしていない（auth_ の表だけを使うのは、コードの上の約束）。
+      # 地区・候補などのアプリのデータは、これまでどおり api 経由で読む。web に届く経路は backend-net（internal）だけで、db は公開しない
+      DATABASE_URL: *database_url
     ports:
       - "127.0.0.1:3500:3000"
     depends_on:
       api:
         condition: service_healthy
+      db:
+        condition: service_healthy
     networks:
       - frontend-net
+      - backend-net
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -98,8 +126,9 @@ services:
     restart: unless-stopped
 
 networks:
+  # web と api（web は Google への通信で外へ出る）。api は web の JWKS をここ越しに取りに行く
   frontend-net: {}
-  # db と api をつなぐ。外へは出られない
+  # db と、api・web をつなぐ。外へは出られない（web が入っているのは、ログインの auth_ の表を読み書きするため）
   backend-net:
     internal: true
 

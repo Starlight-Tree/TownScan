@@ -41,9 +41,11 @@ done
 
 echo "== テストを流す"
 set +e
-# dev-up.sh のテスト（tests/test_dev_up.py）が読めるよう、スクリプトを読み取り専用で渡す（偽の docker で流すので、本物の docker は使わない）
+# dev-up.sh・login-secrets.sh のテスト（tests/test_dev_up.py・tests/test_login_secrets.py）が読めるよう、スクリプトを読み取り専用で渡す
+# （偽の docker・infisical で流すので、本物の docker・infisical は使わない）
 docker run --rm --name "$RUNNER" --network "$NET" --memory 384m \
   -v "$PWD/scripts/dev-up.sh:/scripts/dev-up.sh:ro" -e DEV_UP_SCRIPT=/scripts/dev-up.sh \
+  -v "$PWD/scripts/login-secrets.sh:/scripts/login-secrets.sh:ro" -e LOGIN_SECRETS_SCRIPT=/scripts/login-secrets.sh \
   -e TEST_DATABASE_URL="postgresql://townscan:$PW@$DB:5432/townscan_test" \
   "$IMG" python -m pytest -q "$@"
 status=$?
