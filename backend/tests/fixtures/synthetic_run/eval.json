@@ -1,0 +1,73 @@
+{
+ "chosen": {
+  "scale": 1.5,
+  "threshold": 0.5
+ },
+ "excluded_edge_objects": 4,
+ "holdout": {
+  "object": {
+   "f1": 0.58,
+   "precision": 0.62,
+   "recall": 0.55
+  },
+  "pixel": {
+   "f1": 0.76,
+   "iou": 0.61,
+   "precision": 0.78,
+   "recall": 0.74
+  }
+ },
+ "new_building_recall": null,
+ "notes": [
+  "合成データ（テスト用）の値で、実測ではない"
+ ],
+ "per_area": [
+  {
+   "area_id": "z18-226249-105759",
+   "object_f1": 0.5
+  },
+  {
+   "area_id": "z18-226250-105759",
+   "object_f1": 0.5
+  },
+  {
+   "area_id": "z18-226249-105760",
+   "object_f1": 0.5
+  }
+ ],
+ "reference": "合成データ（基盤地図情報ではない）",
+ "split": {
+  "holdout": [
+   "z18-226250-105759",
+   "z18-226249-105760"
+  ],
+  "tune": [
+   "z18-226249-105759"
+  ]
+ },
+ "sweep": [
+  {
+   "scale": 1.0,
+   "threshold": 0.5,
+   "tune_object_f1": 0.5
+  },
+  {
+   "scale": 1.5,
+   "threshold": 0.5,
+   "tune_object_f1": 0.6
+  }
+ ],
+ "tune": {
+  "object": {
+   "f1": 0.6,
+   "precision": 0.64,
+   "recall": 0.57
+  },
+  "pixel": {
+   "f1": 0.79,
+   "iou": 0.66,
+   "precision": 0.8,
+   "recall": 0.79
+  }
+ }
+}
