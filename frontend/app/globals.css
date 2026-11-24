@@ -402,6 +402,10 @@ code {
   .app-rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
   .app-rail-btn { position: relative; display: grid; width: 2.5rem; height: 2.5rem; flex: none; place-items: center; border: 0; border-radius: 0.6rem; background: transparent; color: var(--muted); text-decoration: none; cursor: pointer; }
   .app-rail-btn:hover, .app-rail-btn:focus-visible { background: var(--surface-muted); color: var(--text); }
+  /* 「新しい会話」: 開いた表示では、枠のあるボタン（DocuNavi の ws-new と同じ位置・同じ見た目の考え方）。細い帯では、ほかのアイコンと同じ */
+  .app-new { color: var(--text); }
+  .app-sidebar[data-open='true'] .app-new { border: 1px solid var(--border); background: var(--surface); margin-bottom: 0.25rem; }
+  .app-sidebar[data-open='true'] .app-new:hover, .app-sidebar[data-open='true'] .app-new:focus-visible { background: var(--surface-muted); }
   .app-rail-btn[aria-current='page'] { background: var(--tag-bg); color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); }
   .app-rail-logo { color: var(--text); }
   .app-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; }

@@ -60,6 +60,15 @@ export function SidebarIcon() {
   );
 }
 
+/** 「新しい会話」の絵（十字。DocuNavi の PlusIcon と同じ）。 */
+export function PlusIcon() {
+  return (
+    <Line size={18}>
+      <path d="M10 4v12M4 10h12" />
+    </Line>
+  );
+}
+
 /** 帯の行き先のアイコン。サーバーの layout からは、この名前（文字列）で渡す。 */
 export type NavIconName = 'chat' | 'accuracy' | 'about';
 

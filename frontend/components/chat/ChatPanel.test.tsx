@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AreaSummary, ChatResponse } from '../../lib/api-types';
 import { AreasProvider } from '../../lib/areas-context';
 import { areas, compare, count, countWards, detectionImage, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
 import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
+import { NewConversationProvider, useStartNewConversation } from '../NewConversation';
 import { ChatPanel, SUGGESTIONS } from './ChatPanel';
 import type { ChatActions } from './types';
 
@@ -734,6 +735,49 @@ describe('キーボードの操作: 押したボタンが消えても、フォ�
     expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
     expect(document.activeElement).not.toBe(document.body);
     expect(input()).toHaveFocus();
+  });
+
+  it('サイドパネルの「新しい会話」（NewConversation）でも、同じ処理で会話が空に戻り、入力欄へフォーカスが移る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
+    let startNew: () => boolean = () => false;
+    function Probe() {
+      startNew = useStartNewConversation();
+      return null;
+    }
+    render(
+      <NewConversationProvider>
+        <Probe />
+        <ChatPanel actions={makeActions()} />
+      </NewConversationProvider>,
+    );
+    const box = screen.getByRole('textbox', { name: '質問を入力' });
+    await userEvent.type(box, 'ひとつめ{Enter}');
+    await screen.findByText('答えです');
+    expect(screen.queryByRole('heading', { name: /写真と会話で調べる/ })).not.toBeInTheDocument();
+    act(() => {
+      expect(startNew()).toBe(true);
+    });
+    expect(screen.queryByText('答えです')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
+    expect(box).toHaveFocus();
+  });
+
+  it('チャットを外す（ホームから移る）と、サイドパネルの「新しい会話」は何もしない（ホームへ移る側に回る）', () => {
+    let startNew: () => boolean = () => true;
+    function Probe() {
+      startNew = useStartNewConversation();
+      return null;
+    }
+    const tree = (withChat: boolean) => (
+      <NewConversationProvider>
+        <Probe />
+        {withChat && <ChatPanel actions={makeActions()} />}
+      </NewConversationProvider>
+    );
+    const { rerender } = render(tree(true));
+    expect(startNew()).toBe(true);
+    rerender(tree(false));
+    expect(startNew()).toBe(false);
   });
 
   it('指で触る端末（pointer: coarse）では、画面のキーボードを開かないよう、入力欄へ移さない', async () => {

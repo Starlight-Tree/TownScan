@@ -5,6 +5,7 @@ import { AppHeader } from '../../components/AppHeader';
 import { AppSidebar } from '../../components/AppSidebar';
 import type { SidebarItem } from '../../components/AppSidebar';
 import { HealthProvider } from '../../components/HealthProvider';
+import { NewConversationProvider } from '../../components/NewConversation';
 import { isAuthConfigured } from '../../lib/auth-config';
 import { currentUser, displayName } from '../../lib/session';
 
@@ -29,17 +30,19 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
   );
   return (
     <HealthProvider>
-      <div className="app">
-        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={ITEMS}>
-          {account}
-        </AppSidebar>
-        <div className="app__column">
-          <AppHeader account={account} />
-          <main id="main" className="app__main" tabIndex={-1}>
-            {children}
-          </main>
+      <NewConversationProvider>
+        <div className="app">
+          <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={ITEMS}>
+            {account}
+          </AppSidebar>
+          <div className="app__column">
+            <AppHeader account={account} />
+            <main id="main" className="app__main" tabIndex={-1}>
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </NewConversationProvider>
     </HealthProvider>
   );
 }

@@ -6,6 +6,7 @@ import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useHealth } from '../HealthProvider';
+import { useRegisterNewConversation } from '../NewConversation';
 import { AnswerScope } from './AnswerScope';
 import { TILE_SIDE_TEXT } from './area-scale';
 import { ClassDefinitions } from './ClassGuide';
@@ -173,6 +174,9 @@ export function ChatPanel({ actions }: Props) {
     setSending(false);
     focusComposer();
   }, [focusComposer]);
+
+  // サイドパネルの「新しい会話」も、同じ処理を呼ぶ
+  useRegisterNewConversation(reset);
 
   const resultActions = useMemo<ResultActions>(() => ({ ...actions, ask: send }), [actions, send]);
 

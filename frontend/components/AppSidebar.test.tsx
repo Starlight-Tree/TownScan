@@ -7,9 +7,10 @@ import { health, jsonResponse } from '../tests/fixtures';
 import { AppSidebar } from './AppSidebar';
 import type { SidebarItem } from './AppSidebar';
 import { HealthProvider } from './HealthProvider';
+import { NewConversationProvider, useRegisterNewConversation } from './NewConversation';
 
-const nav = vi.hoisted(() => ({ pathname: '/' }));
-vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
+const nav = vi.hoisted(() => ({ pathname: '/', push: vi.fn() }));
+vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname, useRouter: () => ({ push: nav.push }) }));
 
 const items: SidebarItem[] = [
   { href: '/', label: 'チャットと地図', icon: 'chat' },
@@ -24,6 +25,57 @@ const setup = (pathname: string, props: Partial<Parameters<typeof AppSidebar>[0]
     </AppSidebar>,
   );
 };
+
+function HomeChat({ onNew }: { onNew: () => void }) {
+  useRegisterNewConversation(onNew);
+  return null;
+}
+
+describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', () => {
+  beforeEach(() => nav.push.mockReset());
+
+  it('ロゴの下、行き先の上に、ボタンとして出る（名前は画面に出さない文字で持ち、ツールチップにもなる）', () => {
+    setup('/');
+    const menu = screen.getByRole('navigation', { name: '主なページ' });
+    const button = within(menu).getByRole('button', { name: '新しい会話' });
+    expect(button).toHaveAttribute('data-tip', '新しい会話');
+    expect(within(button).getByText('新しい会話')).toHaveClass('app-rail-label');
+    const order = [...menu.querySelectorAll('a, button')].map((e) => e.textContent?.trim());
+    expect(order.indexOf('新しい会話')).toBeGreaterThan(order.indexOf('TownScan'));
+    expect(order.indexOf('新しい会話')).toBeLessThan(order.indexOf('チャットと地図'));
+  });
+
+  it('ホームのチャットが開いていれば、そのチャットを新しくし、ページは移らない', async () => {
+    const onNew = vi.fn();
+    nav.pathname = '/';
+    render(
+      <NewConversationProvider>
+        <HomeChat onNew={onNew} />
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items} />
+      </NewConversationProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    expect(onNew).toHaveBeenCalledTimes(1);
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it('ほかのページ（チャットが無い）では、ホームへ移る', async () => {
+    nav.pathname = '/about';
+    render(
+      <NewConversationProvider>
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items} />
+      </NewConversationProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    expect(nav.push).toHaveBeenCalledWith('/');
+  });
+
+  it('CSS: 開いた表示では枠のあるボタン、細い帯ではほかのアイコンと同じ', () => {
+    const css = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8');
+    expect(css).toMatch(/\.app-sidebar\[data-open='true'\] \.app-new\s*\{[^}]*border:\s*1px solid var\(--border\)/);
+    expect(css).not.toMatch(/\.app-sidebar\[data-open='false'\] \.app-new\s*\{[^}]*border:/);
+  });
+});
 
 describe('AppSidebar', () => {
   it('ロゴ・3 つの行き先・下部の中身を出す（名前は、画面に出さない文字で持つ）', () => {
