@@ -15,6 +15,7 @@ import type {
 import { CLASS_INFO, CLASS_ORDER, isCandidateClass, refusalTitle } from '../../lib/classes';
 import { candidateImageUrl } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
+import { ALL_FILTER, areaLabel, filterFromResults } from '../../lib/result-view';
 import { CandidateImage } from '../CandidateImage';
 import { ClassBadge } from '../ClassBadge';
 import { ProvenanceBox } from './ProvenanceBox';
@@ -30,13 +31,33 @@ function barColor(key: string): string {
   return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--primary)';
 }
 
+/**
+ * 件数・比較の結果から、右の結果領域のグラフ（件数は地図も）へ進む（回答の数字を、グラフ・地図でも確かめられるように）。
+ * 押すと、このカードの結果から作った条件で開く。古い回答のカードを押しても、いまの絞り込みではなく、その回答の条件になる
+ */
+function ViewButtons({ result, actions, withMap }: { result: CountResult | CompareResult; actions: ResultActions; withMap?: boolean }) {
+  return (
+    <div className="button-row">
+      <button type="button" className="btn" onClick={() => actions.showView('chart', filterFromResults([result]) ?? undefined)}>
+        グラフで見る
+      </button>
+      {withMap && (
+        <button type="button" className="btn" onClick={() => actions.showView('map', filterFromResults([result]) ?? undefined)}>
+          地図で見る
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ---- 件数 ----
 
-export function CountCard({ result }: { result: CountResult }) {
+export function CountCard({ result, actions }: { result: CountResult; actions: ResultActions }) {
   const { nameOf } = useAreas();
   const max = Math.max(1, ...result.breakdown.map((b) => b.value));
   const cls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
-  const areaId = result.filter?.area_id ?? null;
+  // 複数の地区（区など）は API の scope をそのまま出す。右の地図・グラフに写す条件と同じ読み方
+  const areaText = areaLabel(filterFromResults([result]) ?? ALL_FILTER, nameOf);
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -49,9 +70,9 @@ export function CountCard({ result }: { result: CountResult }) {
         </span>
         <span className="count-hero__unit">件</span>
       </p>
-      {(cls || areaId) && (
+      {(cls || areaText) && (
         <p className="chip-row" aria-label="絞り込み条件">
-          {areaId && <span className="pill">地区: {nameOf(areaId)}</span>}
+          {areaText && <span className="pill">地区: {areaText}</span>}
           {cls && <ClassBadge cls={cls} short />}
         </p>
       )}
@@ -68,6 +89,7 @@ export function CountCard({ result }: { result: CountResult }) {
           ))}
         </ul>
       )}
+      <ViewButtons result={result} actions={actions} withMap />
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -143,7 +165,7 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
 
 // ---- 比較 ----
 
-export function CompareCard({ result }: { result: CompareResult }) {
+export function CompareCard({ result, actions }: { result: CompareResult; actions: ResultActions }) {
   const known: string[] = [...CLASS_ORDER];
   const extraKeys = new Set<string>();
   for (const item of result.items) {
@@ -203,6 +225,8 @@ export function CompareCard({ result }: { result: CompareResult }) {
           </table>
         </div>
       )}
+      {/* 比べる地区が無いときは、グラフにも出すものが無い */}
+      {result.items.length > 0 && <ViewButtons result={result} actions={actions} />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -218,7 +242,7 @@ export function MapFocusCard({ result, actions }: { result: MapFocusResult; acti
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
       <p className="result-card__text">
-        地図の右側で、{result.candidate_ids.length > 0 ? `候補 ${formatNumber(result.candidate_ids.length)} 件を目立たせて` : 'この範囲を'}表示します。
+        結果領域の「地図」で、{result.candidate_ids.length > 0 ? `候補 ${formatNumber(result.candidate_ids.length)} 件を目立たせて` : 'この範囲を'}表示します。
       </p>
       <div className="button-row">
         <button

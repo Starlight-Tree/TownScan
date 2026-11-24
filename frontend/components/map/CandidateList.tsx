@@ -12,22 +12,34 @@ const PAGE = 30;
 
 interface Props {
   areaId: string | null;
+  /**
+   * 絞り込みの対象が 2 地区以上（区など）か。API は地区を 1 つしか受けないので、このときは一覧の本体を出さない
+   * （出すと、地図・グラフ・集計の帯と対象がずれる）
+   */
+  multiArea?: boolean;
   cls: CandidateClass | null;
   onSelect: (id: string) => void;
 }
 
 /** 地図の印を使えない人（キーボード・スクリーンリーダー）のための、面積順の一覧 */
-export function CandidateList({ areaId, cls, onSelect }: Props) {
+export function CandidateList({ areaId, multiArea = false, cls, onSelect }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <details className="cand-list" onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>候補を一覧で見る（面積の大きい順）</summary>
-      {open && <CandidateListBody areaId={areaId} cls={cls} onSelect={onSelect} />}
+      {/* API が分類を 1 つしか受けない（契約は変えない）ので、複数の分類を表示しているときは、一覧が地図・グラフとずれる。見出しの近くで言う */}
+      <p className="cand-list__note">分類が 1 つのときだけ、一覧も絞り込みます。</p>
+      {open &&
+        (multiArea ? (
+          <p className="empty-note">地区を 1 つに絞ると、一覧が出ます。</p>
+        ) : (
+          <CandidateListBody areaId={areaId} cls={cls} onSelect={onSelect} />
+        ))}
     </details>
   );
 }
 
-function CandidateListBody({ areaId, cls, onSelect }: Props) {
+function CandidateListBody({ areaId, cls, onSelect }: Omit<Props, 'multiArea'>) {
   const { nameOf } = useAreas();
   const [limit, setLimit] = useState(PAGE);
   const { state, reload } = useAsync(

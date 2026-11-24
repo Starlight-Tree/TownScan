@@ -8,9 +8,10 @@ import { metadata } from '../app/layout';
 // どのページのタブも 'TownScan' になる。
 
 const PAGES: Array<[string, () => Promise<Record<string, unknown>>]> = [
-  ['/', () => import('../app/page')],
-  ['/about', () => import('../app/about/page')],
-  ['/accuracy', () => import('../app/accuracy/page')],
+  ['/', () => import('../app/(site)/page')],
+  ['/about', () => import('../app/(site)/about/page')],
+  ['/accuracy', () => import('../app/(site)/accuracy/page')],
+  ['/login', () => import('../app/(auth)/login/page')],
 ];
 
 describe('タブ名', () => {

@@ -37,6 +37,14 @@ export const count: CountResult = {
   provenance,
 };
 
+/** 複数の地区（区）にまたがる件数。backend の _filter_info は、地区が 2 つ以上なら area_id でなく area_ids と scope（表示用の名前）を返す */
+export const countWards: CountResult = {
+  ...count,
+  title: '中央区の新規出現（旧写真に無い）',
+  total: 14,
+  filter: { area_ids: ['z18-1-2', 'z18-2-2'], cls: null, scope: '中央区' },
+};
+
 export const table: TableResult = {
   type: 'table',
   title: '面積の大きい順',

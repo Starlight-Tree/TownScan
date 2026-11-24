@@ -232,17 +232,30 @@ code {
   top: 8px;
 }
 
-/* ---- 全体 ---- */
+/* ---- 全体 ----
+   (site) の画面は、`.app` の中に、左のサイドパネル（.app-sidebar。1024px 以上だけ）と、本文の列（.app__column）がある。
+   本文の列には、上の横帯（.app-header。1023px 以下だけ）、バナー（合成データ・API 不通。どちらの幅でも出す）、本文（.app__main）が縦に並ぶ。
+   ログインの画面（(auth)）は、`.app` の中に、上の帯（.auth-header）と本文だけ（サイドパネルなし）。 */
 .app {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
 }
 
+.app__column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
 .app__main {
   flex: 1;
   min-height: 0;
   outline: none;
+  /* 地図（Leaflet の各層と、選択中の候補のカード・上の通知の z-index 1100）の重なり順を、この中に閉じ込める。サイドパネルのアカウントのメニュー（z-index 25）より、必ず下になるように */
+  isolation: isolate;
 }
 
 @media (min-width: 1000px) {
@@ -337,6 +350,137 @@ code {
 .theme-switch-option:hover { color: var(--text); }
 .theme-switch-option[aria-pressed='true'] { background: var(--tag-bg); color: var(--tag-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
 .app-header .theme-switch-label { display: none; }
+
+/* 上の横帯の右端のアカウント。メニューは下へ開く（サイドパネルでは、右・上へ開く） */
+.app-header__account {
+  display: flex;
+}
+
+.app-header .account-button {
+  width: 44px;
+  height: 44px;
+}
+
+.app-header .account-menu {
+  top: calc(100% + 0.35rem);
+  right: 0;
+  bottom: auto;
+  left: auto;
+}
+
+/* ---- アカウント（JobNavi・DocuNavi と同じ。アバターのボタンを押すと、メニューが開く）---- */
+.account { position: relative; }
+.account-button { position: relative; display: grid; width: 2.5rem; height: 2.5rem; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 0.6rem; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.account-button:hover, .account-button[aria-expanded='true'] { border-color: var(--border); background: var(--surface-muted); }
+.account-label, .account-caret { display: none; }
+.account-avatar { display: grid; width: 1.9rem; height: 1.9rem; place-items: center; border-radius: 50%; overflow: hidden; background: var(--primary); color: var(--on-primary); font-weight: 700; }
+.account-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.account-menu { position: absolute; z-index: 10; bottom: 0; left: calc(100% + 0.5rem); width: 14rem; padding: 0.4rem; border: 1px solid var(--border); border-radius: 0.9rem; background: var(--surface); box-shadow: 0 8px 24px var(--shadow); font-size: 14.4px; font-weight: 400; line-height: 1.4; }
+.account-who { margin: 0 0 0.3rem; padding: 0.5rem 0.75rem 0.65rem; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+.account-theme { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.75rem; }
+.account-theme-options { display: flex; gap: 0.1rem; }
+.account-theme-option { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 0; border-radius: 0.5rem; background: transparent; color: var(--muted); cursor: pointer; }
+.account-theme-option:hover { color: var(--text); }
+.account-theme-option[aria-checked='true'] { background: var(--surface-muted); color: var(--text); }
+.account-theme-option:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.account-item { display: block; width: 100%; padding: 0.6rem 0.75rem; border: 0; border-radius: 0.6rem; background: transparent; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.account-item:hover, .account-item:focus-visible { background: var(--surface-muted); }
+
+/* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
+   1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
+   開いた表示だと、本文は窓より 16rem 狭い。チャットと結果領域を左右に並べる @media は、窓の幅 1000px 以上で決まる（本文の幅ではない）。
+   縦に戻す規則は、このファイルの末尾の @media にあり、サイドパネルを開いている（data-open='true'）ときだけ効く。細い帯のときは効かないので、窓が 1024〜1056px（本文が 1000px に満たない）でも左右に並ぶ */
+.app-sidebar { display: none; }
+.app-rail-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+@media (min-width: 1024px) {
+  .app:has(> .app-sidebar) { flex-direction: row; }
+  .app__column > .app-header { display: none; }
+  /* アカウントのメニューとツールチップが、右の本文の上に重なって見えるよう、重なり順を上げる */
+  .app-sidebar { flex: 0 0 3.5rem; align-self: flex-start; position: sticky; top: 0; z-index: 25; isolation: isolate; height: 100dvh; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 0.75rem 0.5rem; background: var(--surface); border-right: 1px solid var(--border); }
+  .app-rail { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+  .app-rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+  .app-rail-btn { position: relative; display: grid; width: 2.5rem; height: 2.5rem; flex: none; place-items: center; border: 0; border-radius: 0.6rem; background: transparent; color: var(--muted); text-decoration: none; cursor: pointer; }
+  .app-rail-btn:hover, .app-rail-btn:focus-visible { background: var(--surface-muted); color: var(--text); }
+  .app-rail-btn[aria-current='page'] { background: var(--tag-bg); color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); }
+  .app-rail-logo { color: var(--text); }
+  .app-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; }
+  /* 畳む・開くボタン */
+  .app-icon-btn { display: grid; width: 2rem; height: 2rem; flex: none; place-items: center; padding: 0; border: 0; border-radius: 0.4rem; background: transparent; color: var(--muted); cursor: pointer; }
+  .app-icon-btn:hover { background: var(--surface-muted); color: var(--text); }
+  /* 閉じた帯のロゴの位置は、開くボタン。ホバー・フォーカスで、ロゴが開閉の絵に変わる */
+  .app-rail-open { display: none; }
+  .app-open-icon { position: absolute; inset: 0; display: none; place-items: center; }
+  .app-open-btn:hover .app-brand-icon, .app-open-btn:focus-visible .app-brand-icon { visibility: hidden; }
+  .app-open-btn:hover .app-open-icon, .app-open-btn:focus-visible .app-open-icon { display: grid; }
+
+  /* 状態の印（模擬モデルで応答しています）。細い帯では、アイコンだけ（名前はツールチップと読み上げ）。開いた表示では、アイコンと文 */
+  .app-status:empty { display: none; }
+  /* .pill（あとで定義される）より強くして、細い帯の見た目を決める */
+  .app-sidebar .app-status-pill { position: relative; display: grid; width: 2.5rem; height: 2.5rem; place-items: center; padding: 0; border-radius: 0.6rem; }
+
+  /* ツールチップ（ホバーとキーボードのフォーカスで、アイコンの右に出す） */
+  .app-sidebar [data-tip]::after { position: absolute; z-index: 20; top: 50%; left: calc(100% + 0.5rem); padding: 0.25rem 0.5rem; border-radius: 0.4rem; background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 600; white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(-50%); content: attr(data-tip); }
+  .app-sidebar [data-tip]:hover::after, .app-sidebar [data-tip]:focus-visible::after { opacity: 1; }
+  /* メニューを開いている間は、ツールチップを出さない（メニューに重なるため） */
+  .app-sidebar [data-tip][aria-expanded='true']::after { display: none; }
+
+  .app-sidebar[data-open='false'] .app-brand-link { display: none; }
+  /* 閉じた帯の空き部分で開く。下敷きのボタンがパネル全体を覆い、帯の項目・アイコンは、その上に載って自分のクリックだけを受ける（ページ遷移・メニュー。開閉はしない）。
+     帯の入れ物は pointer-events: none で素通しにし、中身だけ auto に戻す（pointer-events は子に引き継がれるので、下敷きにも auto を戻す） */
+  .app-sidebar[data-open='false'] .app-rail-open { position: absolute; z-index: -1; inset: 0; display: block; padding: 0; border: 0; background: transparent; cursor: e-resize; }
+  .app-sidebar[data-open='false'] .app-rail, .app-sidebar[data-open='false'] .app-rail-foot { pointer-events: none; }
+  .app-sidebar[data-open='false'] .app-rail-open, .app-sidebar[data-open='false'] .app-rail-btn, .app-sidebar[data-open='false'] .app-status-pill, .app-sidebar[data-open='false'] .app-rail-foot .account { pointer-events: auto; }
+
+  .app-sidebar[data-open='true'] { flex-basis: 16rem; align-items: stretch; padding: 0.75rem; }
+  .app-sidebar[data-open='true'] .app-rail { align-items: stretch; }
+  .app-sidebar[data-open='true'] .app-brand-row { padding-bottom: 0.5rem; }
+  .app-sidebar[data-open='true'] .app-rail-btn { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 0.7rem; padding: 0 0.375rem; }
+  .app-sidebar[data-open='true'] .app-brand-link { width: auto; min-width: 0; flex: 1; padding: 0 0.25rem; gap: 0.45rem; }
+  .app-sidebar[data-open='true'] .app-rail-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; font-size: 14.72px; font-weight: 500; }
+  .app-sidebar[data-open='true'] .app-rail-btn[aria-current='page'] .app-rail-label { font-weight: 700; }
+  .app-sidebar[data-open='true'] .app-brand-name { display: flex; flex-direction: column; font-size: 16.8px; font-weight: 800; line-height: 1.15; }
+  .app-sidebar[data-open='true'] [data-tip]::after { display: none; }
+  .app-sidebar[data-open='true'] .app-rail-foot { width: 100%; align-items: stretch; }
+  .app-sidebar[data-open='true'] .app-status-pill { display: flex; width: 100%; height: auto; align-items: center; justify-content: flex-start; gap: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 0.6rem; font-size: 12.5px; line-height: 1.4; }
+  .app-sidebar[data-open='true'] .app-status-pill svg { flex: none; }
+  .app-sidebar[data-open='true'] .app-status-pill .app-rail-label { font-size: inherit; font-weight: 600; white-space: normal; }
+  .app-sidebar[data-open='true'] .account { width: 100%; }
+  .app-sidebar[data-open='true'] .account-button { display: flex; width: 100%; justify-content: flex-start; gap: 0.6rem; padding: 0 0.5rem; }
+  .app-sidebar[data-open='true'] .account-label { display: block; min-width: 0; flex: 1; overflow: hidden; font-size: 13.6px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+  .app-sidebar[data-open='true'] .account-caret { display: block; flex: none; }
+  .app-sidebar[data-open='true'] .account-menu { top: auto; right: 0; bottom: calc(100% + 0.35rem); left: 0; width: auto; }
+}
+
+/* ---- ログインの画面（サイドパネルなし。上の帯は「← チャットと地図」とテーマの切り替えだけ）---- */
+.auth-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-header__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.auth-header .theme-switch-label { display: none; }
+
+.auth-main { display: flex; justify-content: center; padding: 56px 24px 64px; }
+.auth-box { width: 100%; max-width: 440px; }
+.auth-box h1 { margin: 0 0 12px; font-size: 22.4px; text-align: center; }
+.auth-lead { font-size: 14px; color: var(--muted); text-align: center; }
+/* .btn（あとで定義される）の display より強くして、幅いっぱいの 1 つのボタンにする */
+.auth-box .google-login { display: flex; width: 100%; margin-top: 28px; }
+.login-alert { margin-top: 20px; }
+.auth-note { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; line-height: 1.7; }
 
 .pill {
   display: inline-block;
@@ -529,7 +673,7 @@ p.banner {
 }
 
 .check input,
-.legend input {
+.summary-strip__opt input {
   width: 18px;
   height: 18px;
   accent-color: var(--primary);
@@ -547,7 +691,7 @@ p.banner {
   height: min(78dvh, 680px);
 }
 
-.home > .map-panel {
+.home > .result-area {
   min-height: 560px;
   height: 86dvh;
 }
@@ -561,10 +705,180 @@ p.banner {
     padding: 16px 24px;
   }
   .home > .chat,
-  .home > .map-panel {
+  .home > .result-area {
     height: auto;
     min-height: 0;
   }
+  /* 結果領域の「拡大」（HomeClient が .home--expanded を付ける）。チャットの列を、普通の幅（340〜440px）より狭い 280px にして、残りを結果領域へ回す。
+     普通の 440px からは 160px 広がる（340px までだと 100px しか増えず、押した効きが小さかった）。
+     チャットのメッセージ一覧（.chat__scroll）と入力欄は、そのまま残る（列が狭くなるだけ）。280px では、質問の例の行だけが窮屈になるので、下の 2 つで整える
+     （そのほかの中身は、ボタンが折り返し、長い文字列は overflow-wrap で折り返し、表は .table-scroll の中で横にスクロールするので、はみ出さない）。
+     サイドパネルを開いた 1024〜1256px の縦積みは、末尾の @media の .app:has(…) .home が、これより強い規則で 1 列に戻す */
+  .home--expanded {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+  /* 質問の例（横にスクロールする列）は、「新しい会話」と同じ行だと 150px ほどしか使えない。例を 1 行いっぱいに広げ、「新しい会話」を次の行へ回す */
+  .home--expanded .chat__tools {
+    flex-wrap: wrap;
+  }
+  .home--expanded .chat__chips {
+    flex-basis: 100%;
+  }
+}
+
+/* ---- 右の結果領域（地図・グラフ・写真の比較をタブで切り替える。components/ResultArea.tsx）----
+   縦に「タブの帯」と「パネルの置き場」。置き場が残りの高さを取り、3 つのパネルは同じ枠に重ねる（選んでいない画面は hidden） */
+.result-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  /* 縦に積む幅で、結果領域の上端へスクロールするとき（ResultArea の revealNonce）、上の縁にぴったり付けない */
+  scroll-margin-top: 12px;
+}
+
+/* タブの帯。左にタブの列（role=tablist。タブだけを入れる）、右端に「拡大」のボタン（tablist の外） */
+.result-area__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.result-area__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 選択中は、色だけでなく、塗りと太字でも区別する（.seg-btn の押した状態と同じ見た目） */
+.result-area__tab {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background: var(--surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.result-area__tab:hover {
+  background: var(--tag-bg);
+  border-color: var(--primary);
+}
+
+.result-area__tab[aria-selected='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+
+/* 「拡大」のボタン。縦に積む幅では出さない（既定は非表示。横に並ぶ幅だけ、上の @media で出す）。
+   押した状態は、タブの選択（塗りつぶし）と見分けがつくよう、太い実線の枠・地色・太字・内向きの矢印（色だけで伝えない。グラフの凡例の押した状態と同じ流儀） */
+.result-area__expand {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background: var(--surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.result-area__expand:hover {
+  background: var(--tag-bg);
+  border-color: var(--primary);
+}
+
+.result-area__expand[aria-pressed='true'] {
+  padding: 0 13px;
+  border: 2px solid var(--primary);
+  background: var(--tag-bg);
+  font-weight: 700;
+}
+
+.result-area__expand-icon {
+  flex: none;
+}
+
+/* 広げているときだけ出す、押すと何が起きるかの文（見た目の補足。名前は「拡大」のまま）。ボタンは太字だが、補足は通常の太さで、名前と見分ける */
+.result-area__expand-hint {
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* 横に並ぶ幅（上の .home の @media と同じ 1000px）だけ出す。縦に積むと、広げる先の列が無い。
+   サイドパネルを開いた 1024〜1256px も縦に積むので、末尾の @media で隠す。この規則は、上の既定（display: none）より後に置く（同じ強さなので、順で決まる） */
+@media (min-width: 1000px) {
+  .result-area__expand {
+    display: inline-flex;
+  }
+}
+
+.result-area__panels {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.result-area__panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* hidden でも、display: none にはしない。Leaflet は表示の大きさを覚えていて、display: none で 0×0 に変わると、
+   戻した直後の「候補へ寄せる」（fitBounds）が 0 の大きさで計算されて崩れる。visibility なら、見えず・フォーカスもできないまま、大きさを保つ */
+.result-area__panel[hidden] {
+  display: flex;
+  visibility: hidden;
+}
+
+/* 地図のパネルは、タブの帯の下いっぱいに広げる（.map-panel の高さは、これまで .home の直下の規則で決めていた） */
+.result-area__panel > .map-panel {
+  flex: 1;
+}
+
+.result-area__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* 中身が無いので、枠自身がフォーカスを受ける。外側へ描くと、親（.result-area__panel の overflow）に切られて輪が見えないので、内側へ描く */
+.result-area__empty:focus-visible {
+  outline-offset: -3px;
+}
+
+.result-area__empty-hint {
+  font-size: 13px;
 }
 
 .chat {
@@ -759,6 +1073,51 @@ p.banner {
   font-size: 13px;
 }
 
+.welcome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 回答の「対象・条件」の行（components/chat/AnswerScope.tsx）。回答の文と結果カードのあいだに置く、控えめな帯。
+   値は結果の中身だけから出す（地区・分類・写真の年）。色に頼らず、ラベルの文字で項目を区別する */
+.answer-scope {
+  background: var(--surface-muted);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.answer-scope__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.answer-scope__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.answer-scope__label {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.answer-scope__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 分類の印の名前は長いので、狭いチャットでは折り返す */
+.answer-scope__value .class-badge {
+  white-space: normal;
+}
+
 .suggest-block {
   display: flex;
   flex-direction: column;
@@ -775,6 +1134,11 @@ p.banner {
   flex-direction: column;
   gap: 8px;
   align-items: flex-start;
+}
+
+/* 範囲外の質問の例は、答えられる質問の例と、色ではなく破線の枠でも区別する */
+.suggest-block--refuse .chip {
+  border-style: dashed;
 }
 
 /* ---- 結果カード ---- */
@@ -1171,25 +1535,42 @@ p.banner {
   border-radius: 999px;
 }
 
-/* ---- 地図 ---- */
+/* ---- 地図 ----
+   縦の flex。地図（.map-stage）が、上下の帯の残りの高さをすべて取る。帯（地図の種類・集計・現在表示・一覧）は、中身の高さのまま縮めない。
+   窓が低く、中身が収まらないときだけ、パネルがスクロールする（地図は min-height より小さくしない） */
 .map-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
 }
 
+.map-panel > :not(.map-stage) {
+  flex: none;
+}
+
+/* 地図の種類・地区の選択・解析した地区の枠を、1 行に並べる（狭い幅では折り返す）。ボタン・選択・チェックは、地図に高さを回すため 36px にする */
 .map-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 16px;
-  padding: 8px 12px;
+  gap: 2px 12px;
+  padding: 4px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+.map-toolbar .seg-btn,
+.map-toolbar .select,
+.map-toolbar .check {
+  min-height: 36px;
+}
+
+.map-toolbar .seg-btn {
+  padding: 0 10px;
 }
 
 .map-toolbar__group {
@@ -1199,6 +1580,19 @@ p.banner {
   gap: 6px;
 }
 
+/* 地区の選択は、長い名前（地区名・区・件数）で行を押し広げない。残りの幅だけ使い、入りきらなければ折り返す */
+.map-toolbar__group--area {
+  flex: 1 1 150px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 320px;
+}
+
+.map-toolbar__group--area .select {
+  flex: 1;
+  min-width: 0;
+}
+
 .map-toolbar__label {
   font-size: 12px;
   color: var(--muted);
@@ -1206,8 +1600,8 @@ p.banner {
 
 .map-stage {
   position: relative;
-  flex: 1;
-  min-height: 260px;
+  flex: 1 1 0;
+  min-height: 320px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
@@ -1299,43 +1693,328 @@ p.banner {
   color: var(--muted);
 }
 
-.legend {
-  position: absolute;
-  left: 12px;
-  bottom: 34px;
-  z-index: 1100;
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  max-width: min(320px, calc(100% - 24px));
-  padding: 6px 10px 8px;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
+/* ---- 地図の上の集計の帯（components/map/SummaryStrip.tsx） ----
+   「対象」と、分類ごとの件数（そのまま表示の切り替えのチェックボックス）と「条件を解除」を、ふつうの幅で 1 行に並べる。狭い幅では折り返す。
+   地図に重ねる凡例は無い（同じ内容を 2 か所に出さない） */
+.summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 10px;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.legend legend {
-  padding: 0 4px;
-  font-weight: 700;
+.summary-strip__target {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.summary-strip__target strong {
+  overflow-wrap: anywhere;
+}
+
+.summary-strip__key {
+  font-size: 12px;
   color: var(--muted);
 }
 
-.legend__row {
-  display: grid;
-  grid-template-columns: 18px 18px minmax(0, 1fr) auto;
+.summary-strip__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+/* 分類ごとの選択肢（label）。選んでいる分類は、色だけでなく、チェックの印・太い枠・地色で見分ける。
+   枠は、1px の枠に内側の 1px の影を足して 2px に見せる（寸法が変わらないので、切り替えても、帯が動かない） */
+.summary-strip__opt {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  background: var(--surface);
   cursor: pointer;
-  line-height: 1.4;
 }
 
-.legend__count {
+.summary-strip__counts li[data-shown='true'] .summary-strip__opt {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  background: var(--tag-bg);
+}
+
+.summary-strip__opt .summary-strip__key {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.summary-strip__counts strong {
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
+}
+
+/* 表示していない分類は、数字を弱くして「（非表示）」と書く（色だけに頼らない。チェックも外れている） */
+.summary-strip__counts li[data-shown='false'] strong {
+  font-weight: 400;
   color: var(--muted);
 }
 
+.summary-strip__off {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.summary-strip__scope {
+  color: var(--muted);
+}
+
+.summary-strip__scope strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-strip__reset {
+  margin-left: auto;
+}
+
+/* 地図に重ねる「選択中の候補」のカード（components/map/MapPanel.tsx。.map-stage の中）。印・形を選んでも地図に留まり、ここのボタンで写真の比較へ移る。
+   地図の外に差し込むと、地図が縮んで、押した印が動いた。重ねるので、地図の大きさは変わらない。
+   下端の中央寄せ（印は地図の中ほどに多いので、なるべく覆わない）。出典の表示（右下。高さ約 22px）に重ならないよう、下から 30px あける。
+   z-index は、Leaflet の部品（コントロールが 1000）より上。.app__main の isolation の中なので、サイドパネルのメニューには重ならない。
+   枠を太くして、集計の帯と見分ける（色だけに頼らない） */
+.map-selected {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 30px;
+  z-index: 1100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  width: min(100% - 16px, 520px);
+  margin: 0 auto;
+  padding: 4px 6px 4px 12px;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px var(--shadow);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.map-selected__key {
+  font-weight: 700;
+}
+
+.map-selected__id {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.map-selected__compare {
+  margin-left: auto;
+}
+
+/* ---- グラフ画面（components/chart/AreaChartView.tsx）: 地区ごとの件数の積み上げ横棒 ---- */
+.area-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  /* 親（.result-area__panel）は overflow-y: auto で、横にも切れる。フォーカスの輪（3px + 離れ 2px = 5px）が、左右・端で切れないよう、それより広い余白をとる */
+  padding: 6px;
+}
+
+/* 地区が 0 件のとき、枠自身がフォーカスを受ける。外側へ描くと親に切られるので、内側へ描く */
+.area-chart:focus-visible {
+  outline-offset: -3px;
+}
+
+.area-chart__head {
+  display: grid;
+  gap: 2px;
+}
+
+.area-chart__title {
+  font-size: 15px;
+}
+
+/* 複数の地区（区など）の条件のとき、題の近くに対象を出す */
+.area-chart__scope {
+  font-size: 13px;
+}
+
+.area-chart__scope-key {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.area-chart__hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.area-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+/* 押した状態（グラフに出す）は、太い実線の枠と太字。外した状態は、破線の枠と取り消し線（色だけで伝えない） */
+.area-chart__legend-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.area-chart__legend-btn:hover {
+  background: var(--tag-bg);
+}
+
+.area-chart__legend-btn[aria-pressed='true'] {
+  padding: 0 11px;
+  border: 2px solid var(--primary);
+  background: var(--tag-bg);
+  font-weight: 700;
+}
+
+.area-chart__legend-btn[aria-pressed='false'] {
+  border-style: dashed;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.area-chart__rows {
+  display: grid;
+  gap: 4px;
+}
+
+.area-chart__row {
+  display: grid;
+  grid-template-columns: minmax(84px, 30%) minmax(0, 1fr) 4.5em;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.area-chart__row:hover {
+  background: var(--surface-muted);
+}
+
+/* 選んだ地区の行: 太い枠・地色・太字・先頭の ✓（色だけで伝えない） */
+.area-chart__row[aria-pressed='true'] {
+  padding: 3px 9px;
+  border: 2px solid var(--primary);
+  background: var(--tag-bg);
+}
+
+.area-chart__row[aria-pressed='true'] .area-chart__name {
+  font-weight: 700;
+}
+
+.area-chart__row[aria-pressed='true'] .area-chart__name::before {
+  content: '✓ ';
+}
+
+.area-chart__name {
+  display: block;
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.area-chart__ward {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.area-chart__bar {
+  display: flex;
+  height: 18px;
+  background: var(--surface-muted);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* 3 分類を、色（--c）・縁の線（実線・破線・点線）・塗りの模様（無地・斜線・水玉）で区別する。lib/classes.ts の dash・shape の方針に合わせる */
+.area-chart__seg {
+  flex: none;
+  height: 100%;
+  border: 2px solid var(--c);
+  background: color-mix(in srgb, var(--c) 30%, var(--surface));
+}
+
+.area-chart__seg[data-class='existing_omission'] {
+  border-style: dashed;
+  background-image: repeating-linear-gradient(45deg, var(--c) 0 2px, transparent 2px 6px);
+}
+
+.area-chart__seg[data-class='uncertain'] {
+  border-style: dotted;
+  background-image: radial-gradient(circle, var(--c) 1.2px, transparent 1.6px);
+  background-size: 6px 6px;
+}
+
+.area-chart__total {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.area-chart__total strong {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.area-chart__details > summary {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.area-chart__details .table-scroll {
+  margin-top: 6px;
+}
+
+.area-chart__details .data-table tbody th[scope='row'] {
+  min-width: 8em;
+}
+
+.area-chart__details .data-table .is-num {
+  text-align: right;
+}
+
+/* 地図の上に重ねるのは、読み込み中・失敗の 1 つだけ（小さく、左上の拡大縮小ボタンの右）。タイルの通知などは、地図の下の .map-status へ移した */
 .map-overlay-top {
   position: absolute;
   left: 56px;
@@ -1359,22 +2038,20 @@ p.banner {
   font-size: 12px;
 }
 
-.map-note--soft {
-  color: var(--muted);
-}
-
 .map-note--error {
   background: var(--error-bg);
   border-color: var(--error-border);
   color: var(--error-text);
 }
 
+/* 地図の下の 1 行の帯。現在表示・案内・地図についての通知（写真が無い範囲・印で表示・候補が無い）をまとめる。長いときは折り返す */
 .map-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 16px;
-  padding: 6px 12px;
+  gap: 2px 14px;
+  padding: 2px 12px;
+  min-height: 36px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1383,6 +2060,15 @@ p.banner {
 }
 
 .map-status__hint {
+  color: var(--muted);
+}
+
+.map-status__note {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.map-status__note--soft {
   color: var(--muted);
 }
 
@@ -1400,19 +2086,27 @@ p.banner {
 
 .cand-list > summary {
   cursor: pointer;
-  min-height: 44px;
+  min-height: 36px; /* 閉じたままの高さを最小に（地図に高さを回す） */
   display: flex;
   align-items: center;
   font-weight: 500;
   color: var(--primary);
 }
 
+.cand-list__note {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 縦にスクロールする枠は、中身のフォーカスの輪（3px + 離れ 2px = 5px）を、左右・先頭・末尾で切る。輪が収まる余白（6px）を内側に取り、同じだけの負の余白で、見かけの位置を保つ */
 .cand-list__items {
   display: grid;
   gap: 4px;
   max-height: 180px;
   overflow-y: auto;
-  margin-bottom: 8px;
+  padding: 6px;
+  margin: -6px -6px 2px;
 }
 
 .cand-list__item {
@@ -1509,25 +2203,23 @@ p.banner {
   border-radius: 50%;
 }
 
-/* ---- ドロワー ---- */
+/* ---- ドロワー（候補の詳細。結果領域の「写真の比較」の中に収まる、流れの中の部品。地図に重ねない）---- */
 .drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2000;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  width: min(440px, 100vw);
+  min-width: 0;
+  min-height: 0;
   background: var(--surface);
-  border-left: 1px solid var(--border);
-  box-shadow: -8px 0 24px var(--shadow);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
   animation: slide-in 0.18s ease-out;
 }
 
 @keyframes slide-in {
   from {
-    transform: translateX(24px);
+    transform: translateY(8px);
     opacity: 0;
   }
   to {
@@ -1557,6 +2249,21 @@ p.banner {
   flex-direction: column;
   gap: 18px;
   padding: 16px;
+}
+
+/* 結果領域は広い（チャットの残り）。写真の 2 枚が画面いっぱいの正方形にならないよう、中身の幅を読みやすい長さに抑える */
+.drawer__body > * {
+  width: 100%;
+  max-width: 880px;
+}
+
+/* 「拡大」したとき（.home--expanded）は、上の 880px の上限が効く広い窓（チャットの列が 280px なので、細い帯で約 1312px 以上、サイドパネルを開いて約 1512px 以上）で、
+   最大幅を、窓の幅に応じて広げて、2 枚の写真を大きく見せる: 窓の幅の 70%（最小 1040px、最大 1440px）。固定の幅だと、広い窓で余白だけが増える。
+   上限は残す（文の行が間延びしないように）。1257px 以上に限るのは、サイドパネルを開いた 1024〜1256px が縦に積む幅で、広げる対象ではないため */
+@media (min-width: 1257px) {
+  .home--expanded .drawer__body > * {
+    max-width: clamp(1040px, 70vw, 1440px);
+  }
 }
 
 .drawer__summary {
@@ -1736,6 +2443,7 @@ p.banner {
 
 @media (max-width: 600px) {
   .app-header,
+  .auth-header,
   .banner {
     padding-left: 16px;
     padding-right: 16px;
@@ -1746,7 +2454,48 @@ p.banner {
   .home {
     padding: 12px 16px;
   }
+  .auth-main {
+    padding: 32px 16px 48px;
+  }
   .breakdown__row {
     grid-template-columns: minmax(70px, 34%) minmax(0, 1fr) 40px;
+  }
+}
+
+/* サイドパネルを開いている（data-open='true'）間は、本文が窓より 16rem 狭い。窓が 1024〜1256px のあいだ（本文は 768〜1000px）は、チャットと結果領域を縦に積む
+   （上の @media (min-width: 1000px) の、左右に並べる規則を打ち消す）。左右に並べる @media は、本文ではなく窓の幅 1000px 以上で決まり、縦に戻すのは、この規則の data-open='true' のときだけ。
+   細い帯（3.5rem）のときは、この規則が効かないので、窓が 1024〜1056px（本文が 1000px に満たない）でも左右に並ぶ。窓が 1257px 以上なら、開いたままでも並ぶ */
+@media (min-width: 1024px) and (max-width: 1256px) {
+  .app:has(.app-sidebar[data-open='true']):has(.home) {
+    height: auto;
+  }
+  .app:has(.app-sidebar[data-open='true']) .home {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    flex: none;
+    min-height: auto;
+    padding: 16px;
+  }
+  .app:has(.app-sidebar[data-open='true']) .app__main {
+    display: block;
+    overflow: visible;
+  }
+  .app:has(.app-sidebar[data-open='true']) .home > .chat {
+    height: min(78dvh, 680px);
+  }
+  .app:has(.app-sidebar[data-open='true']) .home > .result-area {
+    min-height: 560px;
+    height: 86dvh;
+  }
+  /* 縦に積むので、広げる先の列が無い。「拡大」のボタンを隠す（上の @media (min-width: 1000px) の表示を打ち消す） */
+  .app:has(.app-sidebar[data-open='true']) .result-area__expand {
+    display: none;
+  }
+  /* 広げた状態が残っていても、縦に積むときのチャットは全幅。質問の例を折り返す、狭い列向けの規則（.home--expanded）は、打ち消す */
+  .app:has(.app-sidebar[data-open='true']) .home--expanded .chat__tools {
+    flex-wrap: nowrap;
+  }
+  .app:has(.app-sidebar[data-open='true']) .home--expanded .chat__chips {
+    flex-basis: 0%;
   }
 }

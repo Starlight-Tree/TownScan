@@ -116,3 +116,42 @@ describe('ヘッダーのテーマの切り替え', () => {
     await screen.findByText('模擬モデルで応答しています');
   });
 });
+
+describe('ヘッダーのアカウント（上の横帯。サイドパネルを出さない 1023px 以下で使う）', () => {
+  it('account を渡すと、テーマの切り替えの隣（右端）に出す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(health));
+    render(
+      <HealthProvider>
+        <AppHeader account={<button type="button">アカウント</button>} />
+      </HealthProvider>,
+    );
+    const header = screen.getByRole('banner');
+    const slot = within(header).getByRole('button', { name: 'アカウント' }).parentElement!;
+    expect(slot).toHaveClass('app-header__account');
+    expect(slot.previousElementSibling).toBe(within(header).getByRole('group', { name: 'テーマ' }));
+    expect(slot.parentElement).toHaveClass('app-header__tools');
+    await screen.findByText('模擬モデルで応答しています');
+  });
+
+  it('account を渡さなければ、アカウントの場所を出さない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(health));
+    renderHeader();
+    expect(document.querySelector('.app-header__account')).toBeNull();
+    await screen.findByText('模擬モデルで応答しています');
+  });
+
+  it('バナー（合成データ・API 不通）は、<header> の外に出す（1024px 以上で <header> だけを CSS で出さなくても、バナーは残る）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...health, run: { ...health.run, kind: 'synthetic' } }));
+    renderHeader();
+    const banner = await screen.findByRole('status');
+    expect(banner.closest('header')).toBeNull();
+    expect(screen.getByRole('banner')).not.toContainElement(banner);
+  });
+
+  it('API 不通のバナーも、<header> の外', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    renderHeader();
+    const alert = await screen.findByRole('alert');
+    expect(alert.closest('header')).toBeNull();
+  });
+});

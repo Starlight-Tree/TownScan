@@ -1,23 +1,26 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import type { AreaSummary, CandidateClass, CandidateFeature } from '../../lib/api-types';
-import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
+import { isCandidateClass } from '../../lib/classes';
 import { formatNumber } from '../../lib/format';
 import {
   BASE_LAYERS,
   BASE_LAYER_ORDER,
   POLYGON_MIN_ZOOM,
+  displayStatusText,
   nextNonce,
-  drawerPad,
   type BaseLayerId,
   type MapFocus,
+  type TileStatus,
 } from '../../lib/map-config';
 import type { AsyncState } from '../../lib/use-api';
-import { ClassSwatch } from '../ClassBadge';
+import { ClassBadge } from '../ClassBadge';
+import { multiAreaName } from '../chart/area-stats';
 import { CandidateList } from './CandidateList';
-import type { TileStatus } from './LeafletMap';
+import { ALL_FILTER, areaScopeIds, type MapFilter } from '../../lib/result-view';
+import { SummaryStrip } from './SummaryStrip';
 
 // Leaflet は window を触るので、サーバー側では読み込まない
 const LeafletMap = dynamic(() => import('./LeafletMap'), {
@@ -43,7 +46,15 @@ interface Props {
   /** 一覧から選んだ（詳細を開き、その候補へ寄せる） */
   onOpen: (id: string) => void;
   onClearHighlight: () => void;
+  /** 絞り込み（地区・分類）。渡されたときは親が持つ（チャットの回答・グラフと共有する） */
+  filter?: MapFilter;
+  onFilterChange?: (next: MapFilter) => void;
+  /** 選択中の候補の「写真を比べる」を押した（親が結果領域を写真の比較へ切り替える）。無ければ、選択中の候補のカードを出さない */
+  onComparePhotos?: (id: string) => void;
 }
+
+/** 地区の選択ボックスで、複数の地区（区など）の条件を表す項目の値。選んでも何も変えない */
+const MULTI_AREA_VALUE = '__multi_area__';
 
 const TILE_NOTICE: Record<TileStatus, string | null> = {
   ok: null,
@@ -54,51 +65,74 @@ const TILE_NOTICE: Record<TileStatus, string | null> = {
 export function MapPanel(props: Props) {
   const { areas, areasState, candidatesState, focus, selectedId, highlightIds } = props;
   const [base, setBase] = useState<BaseLayerId>('photo2023');
-  const [visible, setVisible] = useState<Set<CandidateClass>>(new Set(CLASS_ORDER));
-  const [areaId, setAreaId] = useState<string>('');
   const [showFrames, setShowFrames] = useState(true);
   const [tileStatus, setTileStatus] = useState<TileStatus>('ok');
   const [zoom, setZoom] = useState(0);
   const [localFocus, setLocalFocus] = useState<MapFocus | null>(null);
+  // 絞り込み（地区・分類）は、親（HomeClient）が持つときはそれに従い、渡されなければ自分で持つ
+  const [localFilter, setLocalFilter] = useState<MapFilter>(ALL_FILTER);
+  const filter = props.filter ?? localFilter;
+  const changeFilter = (next: MapFilter) => {
+    setLocalFilter(next);
+    props.onFilterChange?.(next);
+  };
+  const areaId = filter.areaId;
+  const visible = filter.classes;
+  // 対象の地区の集合（全地区なら null）。単一の地区も、複数の地区（区など）も、同じ集合で絞る
+  const scope = useMemo(() => areaScopeIds(filter), [filter]);
+  const multiName = multiAreaName(filter);
+  // 一覧の API は地区を 1 つしか受けない。対象が 2 地区以上のときは、一覧の本体を出さない
+  const multiArea = scope !== null && scope.size > 1;
+  const listAreaId = scope !== null && scope.size === 1 ? [...scope][0]! : null;
+  const selectedLabelId = useId();
 
   const activeFocus = localFocus && (!focus || localFocus.nonce > focus.nonce) ? localFocus : focus;
 
   const allFeatures = candidatesState.status === 'ready' ? candidatesState.data : null;
+  // 選択中の候補は、絞り込みで地図から外れていても、地図の候補データにあればカードに出す
+  const selectedFeature = useMemo(
+    () => (selectedId && allFeatures ? (allFeatures.find((f) => f.properties.id === selectedId) ?? null) : null),
+    [selectedId, allFeatures],
+  );
+  // 「写真を比べる」を受ける親がいないとき（onComparePhotos が無い）は、押せないカードを出さず、読み上げもしない
+  const selectedCard = props.onComparePhotos ? selectedFeature : null;
   const features = useMemo(() => {
     if (!allFeatures) return [];
-    return allFeatures.filter(
-      (f) => visible.has(f.properties.class) && (areaId === '' || f.properties.area_id === areaId),
-    );
-  }, [allFeatures, visible, areaId]);
-
-  const counts = useMemo(() => {
-    const sum: Record<CandidateClass, number> = { confirmed_new: 0, existing_omission: 0, uncertain: 0 };
-    for (const a of areas) {
-      if (areaId !== '' && a.id !== areaId) continue;
-      for (const c of CLASS_ORDER) sum[c] += a.counts[c] ?? 0;
-    }
-    return sum;
-  }, [areas, areaId]);
-
-  const toggleClass = (c: CandidateClass) =>
-    setVisible((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      return next;
-    });
+    return allFeatures.filter((f) => visible.has(f.properties.class) && (scope === null || scope.has(f.properties.area_id)));
+  }, [allFeatures, visible, scope]);
 
   const onAreaChange = (id: string) => {
-    setAreaId(id);
+    // 複数の地区の項目は、いまの条件の表示。選び直しても何も変えない
+    if (id === MULTI_AREA_VALUE) return;
+    // 単一の地区（または全地区）へ変える。複数の地区の条件（areaIds・scope）は、ここで消す
+    changeFilter({ areaId: id, classes: filter.classes });
     const a = areas.find((x) => x.id === id);
-    if (a) setLocalFocus({ kind: 'fit', bbox: a.bbox, ids: [], padRight: drawerPad() > 0 && selectedId ? drawerPad() : 0, nonce: nextNonce() });
+    // 詳細は地図に重ならず、右の結果領域の別の画面に出る。右端をあける必要は無い
+    if (a) setLocalFocus({ bbox: a.bbox, ids: [], nonce: nextNonce() });
   };
 
+  // 一覧の API が受ける分類は 1 つだけ。2 分類を表示しているときは、一覧は分類で絞れない（一覧の見出しで言う）
   const onlyClass: CandidateClass | null = visible.size === 1 ? ([...visible][0] ?? null) : null;
   const notice = base === 'std' ? null : TILE_NOTICE[tileStatus];
 
+  // 読み込み中・失敗は、地図の上に小さく 1 つだけ重ねる（地図を覆わない）。候補と地区の一覧が両方失敗したら、1 つにまとめて、再試行で両方を取り直す
+  const candidatesError = candidatesState.status === 'error' ? candidatesState.error : null;
+  const areasError = areasState.status === 'error' ? areasState.error : null;
+  const loadFailure =
+    candidatesError || areasError
+      ? {
+          what: candidatesError && areasError ? '候補と地区の一覧' : candidatesError ? '候補' : '地区の一覧',
+          message: (candidatesError ?? areasError)!.message,
+          retry: () => {
+            if (candidatesError) props.reloadCandidates();
+            if (areasError) props.reloadAreas();
+          },
+        }
+      : null;
+
   return (
-    <section className="map-panel" aria-label="地図">
+    // 外側の tabpanel が「地図」と名乗るので、ここに同じ名前のランドマークを重ねない
+    <div className="map-panel">
       <div className="map-toolbar">
         <div className="map-toolbar__group" role="group" aria-label="地図の種類">
           {BASE_LAYER_ORDER.map((id) => (
@@ -113,17 +147,18 @@ export function MapPanel(props: Props) {
             </button>
           ))}
         </div>
-        <div className="map-toolbar__group">
+        <div className="map-toolbar__group map-toolbar__group--area">
           <label htmlFor="area-select" className="map-toolbar__label">
             地区
           </label>
           <select
             id="area-select"
             className="select"
-            value={areaId}
+            value={multiName ? MULTI_AREA_VALUE : areaId}
             onChange={(e) => onAreaChange(e.target.value)}
             disabled={areas.length === 0}
           >
+            {multiName && <option value={MULTI_AREA_VALUE}>{multiName}（複数の地区）</option>}
             <option value="">すべて（{areas.length} 地区）</option>
             {areas.map((a) => (
               <option key={a.id} value={a.id}>
@@ -137,6 +172,9 @@ export function MapPanel(props: Props) {
           解析した地区の枠
         </label>
       </div>
+
+      {/* 分類の件数と、表示の切り替え（チェックボックス）を兼ねる。地図に重ねる凡例は無い */}
+      <SummaryStrip areas={areas} filter={filter} onFilterChange={changeFilter} />
 
       <div className="map-stage">
         <LeafletMap
@@ -153,69 +191,73 @@ export function MapPanel(props: Props) {
           onZoom={setZoom}
         />
 
-        <fieldset className="legend">
-          <legend>表示する分類（色・線・形で区別）</legend>
-          {CLASS_ORDER.map((c) => (
-            <label key={c} className="legend__row">
-              <input type="checkbox" checked={visible.has(c)} onChange={() => toggleClass(c)} />
-              <ClassSwatch cls={c} />
-              <span className="legend__label">{CLASS_INFO[c].label}</span>
-              <span className="legend__count">{formatNumber(counts[c])}</span>
-            </label>
-          ))}
-        </fieldset>
+        {/* 地図の中に重ねるので、選んでも地図の大きさは変わらず、押した印が動かない。DOM では印（Leaflet の本体）より後ろ（Tab で印から近い） */}
+        {selectedCard && (
+          // 印・形を選んでも、地図に留まる。写真の比較へ移るのは、ここのボタンを押したときだけ
+          <div className="map-selected" role="group" aria-labelledby={selectedLabelId}>
+            <span id={selectedLabelId} className="map-selected__key">
+              選択中の候補
+            </span>
+            {isCandidateClass(selectedCard.properties.class) && <ClassBadge cls={selectedCard.properties.class} short />}
+            <span className="map-selected__id">{selectedCard.properties.id}</span>
+            <button
+              type="button"
+              className="btn btn--small map-selected__compare"
+              onClick={() => props.onComparePhotos?.(selectedCard.properties.id)}
+            >
+              写真を比べる
+            </button>
+          </div>
+        )}
 
-        <div className="map-overlay-top">
-          {notice && (
-            <p className="map-note" role="status">
-              {notice}
-            </p>
-          )}
-          {zoom > 0 && zoom < POLYGON_MIN_ZOOM && features.length > 0 && (
-            <p className="map-note map-note--soft">候補は印で表示しています。拡大すると建物の形が見えます。</p>
-          )}
-          {candidatesState.status === 'loading' && (
-            <p className="map-note" role="status">
-              候補を読み込んでいます…
-            </p>
-          )}
-          {candidatesState.status === 'error' && (
-            <p className="map-note map-note--error" role="alert">
-              候補を読み込めませんでした（{candidatesState.error.message}）
-              <button type="button" className="btn btn--small" onClick={props.reloadCandidates}>
-                再試行
-              </button>
-            </p>
-          )}
-          {areasState.status === 'error' && (
-            <p className="map-note map-note--error" role="alert">
-              地区の一覧を読み込めませんでした（{areasState.error.message}）
-              <button type="button" className="btn btn--small" onClick={props.reloadAreas}>
-                再試行
-              </button>
-            </p>
-          )}
-          {candidatesState.status === 'ready' && features.length === 0 && (
-            <p className="map-note">
-              {candidatesState.data.length === 0 ? '表示できる候補がありません。' : '条件に合う候補がありません（分類の選択を確かめてください）。'}
-            </p>
-          )}
+        {/* 印を選んだこと・「写真を比べる」が出たことを、読み上げに知らせる（いつも描き、文だけを替える。role=status は、下の通知に譲る） */}
+        <div className="visually-hidden" aria-live="polite" aria-atomic="true">
+          {selectedCard ? `候補 ${selectedCard.properties.id} を選びました。「写真を比べる」で写真を比べられます。` : ''}
         </div>
+
+        {(loadFailure || candidatesState.status === 'loading') && (
+          <div className="map-overlay-top">
+            {loadFailure ? (
+              <p className="map-note map-note--error" role="alert">
+                {loadFailure.what}を読み込めませんでした（{loadFailure.message}）
+                <button type="button" className="btn btn--small" onClick={loadFailure.retry}>
+                  再試行
+                </button>
+              </p>
+            ) : (
+              <p className="map-note" role="status">
+                候補を読み込んでいます…
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* 現在表示と、地図についての通知・案内を 1 つの帯にまとめる（長いときは折り返す）。最初の子は、現在表示の文 */}
       <div className="map-status">
-        <span>
-          表示中: {BASE_LAYERS[base].label}・候補 {formatNumber(features.length)} 件
-        </span>
+        <span>{displayStatusText(base, tileStatus, allFeatures ? features.length : null)}</span>
         {highlightIds.size > 0 && (
           <button type="button" className="btn btn--small" onClick={props.onClearHighlight}>
             強調表示を解除
           </button>
         )}
-        <span className="map-status__hint">候補の印・形を選ぶと、詳細が開きます。</span>
+        <span className="map-status__hint">印・形を選ぶと「写真を比べる」が出ます。</span>
+        {notice && (
+          <span className="map-status__note" role="status">
+            {notice}
+          </span>
+        )}
+        {zoom > 0 && zoom < POLYGON_MIN_ZOOM && features.length > 0 && (
+          <span className="map-status__note map-status__note--soft">候補は印で表示しています。拡大すると建物の形が見えます。</span>
+        )}
+        {candidatesState.status === 'ready' && features.length === 0 && (
+          <span className="map-status__note">
+            {candidatesState.data.length === 0 ? '表示できる候補がありません。' : '条件に合う候補がありません（分類の選択を確かめてください）。'}
+          </span>
+        )}
       </div>
 
-      <CandidateList areaId={areaId || null} cls={onlyClass} onSelect={props.onOpen} />
-    </section>
+      <CandidateList areaId={listAreaId} multiArea={multiArea} cls={onlyClass} onSelect={props.onOpen} />
+    </div>
   );
 }

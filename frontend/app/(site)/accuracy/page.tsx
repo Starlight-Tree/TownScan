@@ -1,4 +1,4 @@
-import { AccuracyView } from '../../components/AccuracyView';
+import { AccuracyView } from '../../../components/AccuracyView';
 
 export default function AccuracyPage() {
   return <AccuracyView />;

@@ -2,8 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import '@fontsource-variable/noto-sans-jp/wght.css';
 import { Inter } from 'next/font/google';
 import type { ReactNode } from 'react';
-import { AppHeader } from '../components/AppHeader';
-import { HealthProvider } from '../components/HealthProvider';
 import { THEME_INIT_SCRIPT } from '../lib/theme';
 import './globals.css';
 
@@ -18,6 +16,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
+// 画面の枠は、グループごとの layout が持つ: (site) = サイドパネルと上の横帯と本文（ログイン中の人も、そこで取る）、(auth) = ログイン画面（サイドパネルなし）。
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     // data-theme は描画前のスクリプトが付ける（サーバーの出力とは違うので、警告を止める）
@@ -29,14 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <a href="#main" className="skip-link">
           本文へ移動
         </a>
-        <HealthProvider>
-          <div className="app">
-            <AppHeader />
-            <main id="main" className="app__main" tabIndex={-1}>
-              {children}
-            </main>
-          </div>
-        </HealthProvider>
+        {children}
       </body>
     </html>
   );

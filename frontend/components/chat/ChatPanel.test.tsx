@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatResponse } from '../../lib/api-types';
-import { count, jsonResponse, mapFocus, refusal } from '../../tests/fixtures';
+import type { AreaSummary, ChatResponse } from '../../lib/api-types';
+import { AreasProvider } from '../../lib/areas-context';
+import { areas, compare, count, countWards, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
 import { ChatPanel, SUGGESTIONS } from './ChatPanel';
+import type { ChatActions } from './types';
 
 const reply = (content: string, results: ChatResponse['message']['results'] = []): ChatResponse => ({
   message: { role: 'assistant', content, results, tool_calls: [{ name: 'count_candidates', args: { cls: null } }] },
@@ -11,9 +13,21 @@ const reply = (content: string, results: ChatResponse['message']['results'] = []
 
 const fetchMock = vi.fn<typeof fetch>();
 
-function setup() {
-  const actions = { openCandidate: vi.fn(), focusMap: vi.fn() };
-  render(<ChatPanel actions={actions} />);
+function makeActions() {
+  return { openCandidate: vi.fn(), focusMap: vi.fn(), showView: vi.fn(), answered: vi.fn() } satisfies ChatActions;
+}
+
+function setup(opts: { areas?: AreaSummary[] } = {}) {
+  const actions = makeActions();
+  render(
+    opts.areas ? (
+      <AreasProvider areas={opts.areas}>
+        <ChatPanel actions={actions} />
+      </AreasProvider>
+    ) : (
+      <ChatPanel actions={actions} />
+    ),
+  );
   return { actions, input: () => screen.getByRole('textbox', { name: '質問を入力' }), send: () => screen.getByRole('button', { name: '送信' }) };
 }
 
@@ -149,6 +163,17 @@ describe('チャット', () => {
     await userEvent.type(input(), '地図で見せて{Enter}');
     await screen.findByText('地図に出します');
     await waitFor(() => expect(actions.focusMap).toHaveBeenCalledWith({ bbox: mapFocus.bbox, candidateIds: mapFocus.candidate_ids }));
+  });
+
+  it('回答に地図の表示が複数あるときは、最後のものを寄せる（最初ではない）', async () => {
+    const first = { ...mapFocus, bbox: [130.6, 32.7, 130.61, 32.71] as [number, number, number, number], candidate_ids: ['c-9-9-1'] };
+    const last = { ...mapFocus, bbox: [130.8, 32.9, 130.81, 32.91] as [number, number, number, number], candidate_ids: ['c-9-9-2', 'c-9-9-3'] };
+    fetchMock.mockResolvedValue(jsonResponse(reply('地図を 2 つ出します', [first, table, last])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '地図で見せて{Enter}');
+    await screen.findByText('地図を 2 つ出します');
+    await waitFor(() => expect(actions.focusMap).toHaveBeenCalledTimes(1));
+    expect(actions.focusMap).toHaveBeenCalledWith({ bbox: last.bbox, candidateIds: last.candidate_ids });
   });
 
   it('日本語入力の変換を確定する Enter は、送信の操作として扱わない', () => {
@@ -297,5 +322,296 @@ describe('新しい会話', () => {
     await screen.findByText('新しい答え');
     expect(screen.queryByText('古い答え')).not.toBeInTheDocument();
     expect(bodyOf(1).messages).toEqual([{ role: 'user', content: '新しい質問' }]);
+  });
+});
+
+describe('最初の画面（説明・サンプルの質問）', () => {
+  const threeAreas: AreaSummary[] = ['a', 'b', 'c'].map((id) => ({ ...areas[0]!, id, name: `地区 ${id}` }));
+  const FACT = (n: string) => `熊本市中心部の${n}地区（1 地区 = 地理院タイル 1 枚）`;
+
+  it('対象の地区数は、読み込んだ地区の数から出す。読み込み前は数を伏せる', () => {
+    const actions = makeActions();
+    const { rerender } = render(
+      <AreasProvider areas={[]}>
+        <ChatPanel actions={actions} />
+      </AreasProvider>,
+    );
+    expect(screen.getByText(FACT(''))).toBeInTheDocument();
+    expect(screen.queryByText(/\d+ 地区（/)).not.toBeInTheDocument();
+
+    rerender(
+      <AreasProvider areas={threeAreas}>
+        <ChatPanel actions={actions} />
+      </AreasProvider>,
+    );
+    expect(screen.getByText(FACT(' 3 '))).toBeInTheDocument();
+    expect(screen.queryByText(FACT(''))).not.toBeInTheDocument();
+    // 固定の 12 を出さない
+    expect(screen.queryByText(/12 地区/)).not.toBeInTheDocument();
+  });
+
+  it('対象・比較・出典と、新規出現の「候補」であって新築と断定しない旨を出す', () => {
+    setup({ areas });
+    const facts = screen.getByText('対象').closest('dl')!;
+    expect(within(facts).getByText('比較').nextElementSibling).toHaveTextContent('2018 年と 2023 年の航空写真');
+    expect(within(facts).getByText('出典').nextElementSibling).toHaveTextContent('国土地理院（地理院タイル・基盤地図情報）');
+    expect(screen.getByText(/新築と断定するものではありません/)).toBeInTheDocument();
+  });
+
+  it('答えられる質問の例と、範囲外の質問の例（断って理由を返す）を分けて見せる', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('範囲外です', [refusal])));
+    setup();
+    const refuseGroup = screen.getByText('範囲外の質問は、断って理由を返します').closest('.suggest-block') as HTMLElement;
+    expect(within(refuseGroup).getAllByRole('button').map((b) => b.textContent)).toEqual(['渋谷の新築は？']);
+    const inScope = screen.getByText('まず、こんな質問から').closest('.suggest-block') as HTMLElement;
+    expect(within(inScope).queryByRole('button', { name: '渋谷の新築は？' })).not.toBeInTheDocument();
+    expect(within(inScope).getAllByRole('button')).toHaveLength(SUGGESTIONS.length - 1);
+
+    await userEvent.click(within(refuseGroup).getByRole('button', { name: '渋谷の新築は？' }));
+    await screen.findByText('範囲外です');
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual({ messages: [{ role: 'user', content: '渋谷の新築は？' }] });
+  });
+
+  it('「解析した地区を地図で見る」を押すと、地図の画面へ切り替える', async () => {
+    const { actions } = setup({ areas });
+    await userEvent.click(screen.getByRole('button', { name: '解析した地区を地図で見る' }));
+    expect(actions.showView).toHaveBeenCalledTimes(1);
+    expect(actions.showView).toHaveBeenCalledWith('map');
+    // 質問を送ったわけではない
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('回答が届いた通知（answered）', () => {
+  it('成功して結果があれば、結果を 1 回だけ渡す。地図を寄せる呼び出しの後に呼ぶ', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数と地図です', [count, mapFocus])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '見せて{Enter}');
+    await screen.findByText('件数と地図です');
+    await waitFor(() => expect(actions.answered).toHaveBeenCalledTimes(1));
+    expect(actions.answered).toHaveBeenCalledWith([count, mapFocus]);
+    expect(actions.focusMap).toHaveBeenCalledTimes(1);
+    expect(actions.focusMap.mock.invocationCallOrder[0]!).toBeLessThan(actions.answered.mock.invocationCallOrder[0]!);
+  });
+
+  it('再描画（入力・親の再描画）では、もう一度呼ばない。次の回答では、また 1 回呼ぶ', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目', [count]))).mockResolvedValueOnce(jsonResponse(reply('2 回目', [compare])));
+    const actions = makeActions();
+    const { rerender } = render(<ChatPanel actions={actions} />);
+    const input = () => screen.getByRole('textbox', { name: '質問を入力' });
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    expect(actions.answered).toHaveBeenCalledTimes(1);
+
+    await userEvent.type(input(), 'あ');
+    rerender(<ChatPanel actions={{ ...actions }} />);
+    expect(actions.answered).toHaveBeenCalledTimes(1);
+
+    await userEvent.clear(input());
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('2 回目');
+    expect(actions.answered).toHaveBeenCalledTimes(2);
+    expect(actions.answered).toHaveBeenLastCalledWith([compare]);
+  });
+
+  it('結果が空の回答では呼ばない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('ただの返事です')));
+    const { input, actions } = setup();
+    await userEvent.type(input(), 'こんにちは{Enter}');
+    await screen.findByText('ただの返事です');
+    expect(actions.answered).not.toHaveBeenCalled();
+  });
+
+  it('results が配列でない回答でも、呼ばず、画面も壊れない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: { role: 'assistant', content: '結果なし', results: null, tool_calls: [] } }));
+    const { input, actions } = setup();
+    await userEvent.type(input(), 'こんにちは{Enter}');
+    await screen.findByText('結果なし');
+    expect(actions.answered).not.toHaveBeenCalled();
+  });
+
+  it('送信に失敗したときは呼ばない。「もう一度送る」も、失敗なら呼ばず、成功したときに 1 回だけ呼ぶ', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'だめでした' } }, 500))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'まただめでした' } }, 500))
+      .mockResolvedValueOnce(jsonResponse(reply('届きました', [count])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '質問{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'もう一度送る' }));
+    await screen.findByText('まただめでした');
+    expect(actions.answered).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'もう一度送る' }));
+    await screen.findByText('届きました');
+    expect(actions.answered).toHaveBeenCalledTimes(1);
+    expect(actions.answered).toHaveBeenCalledWith([count]);
+  });
+
+  it('「新しい会話」で捨てた返答では呼ばない', async () => {
+    let resolveFirst!: (r: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (resolveFirst = r)));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '遅い質問{Enter}');
+    await screen.findByText(/調べています/);
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    resolveFirst(jsonResponse(reply('古い答え', [count])));
+    // 捨てた返答が処理される猶予
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('古い答え')).not.toBeInTheDocument();
+    expect(actions.answered).not.toHaveBeenCalled();
+  });
+
+  it('親の処理が例外を出しても、回答は出したままにし、「送信できませんでした」にしない', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です', [count])));
+    const { input, actions } = setup();
+    actions.answered.mockImplementation(() => {
+      throw new Error('親の失敗');
+    });
+    await userEvent.type(input(), '何件？{Enter}');
+    await screen.findByText('件数です');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('未送信')).not.toBeInTheDocument();
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('回答の対象・条件の行', () => {
+  const scopeName = 'この回答の対象・条件';
+
+  it('件数の回答の文とカードのあいだに、地区・分類・写真の年を出す（地区名は地区の一覧から）', async () => {
+    const filtered = { ...count, filter: { area_id: 'z18-1-2', cls: 'uncertain' as const } };
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [filtered])));
+    const { input } = setup({ areas });
+    await userEvent.type(input(), '保留は？{Enter}');
+    const scope = await screen.findByRole('group', { name: scopeName });
+    expect(scope).toHaveTextContent('テスト地区 01');
+    expect(scope).toHaveTextContent('判定保留');
+    expect(scope).toHaveTextContent('2018・2023 年');
+    const text = screen.getByText('件数です。');
+    const card = screen.getByRole('region', { name: count.title });
+    expect(text.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scope.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('比較の回答には、比べる地区を出す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('比べました。', [compare])));
+    const { input } = setup();
+    await userEvent.type(input(), '比べて{Enter}');
+    const scope = await screen.findByRole('group', { name: scopeName });
+    expect(scope).toHaveTextContent('比べる地区');
+    expect(scope).toHaveTextContent('テスト地区 01、テスト地区 02');
+  });
+
+  it('お断り・一覧・結果なしの回答には出さない', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(reply('範囲外です', [refusal])))
+      .mockResolvedValueOnce(jsonResponse(reply('一覧です', [table])))
+      .mockResolvedValueOnce(jsonResponse(reply('ただの返事です')));
+    const { input } = setup();
+    for (const [q, answer] of [
+      ['渋谷の新築は？', '範囲外です'],
+      ['一覧', '一覧です'],
+      ['こんにちは', 'ただの返事です'],
+    ] as const) {
+      await userEvent.type(input(), `${q}{Enter}`);
+      await screen.findByText(answer);
+    }
+    expect(screen.queryByRole('group', { name: scopeName })).not.toBeInTheDocument();
+  });
+
+  it('結果の形が壊れていても、会話は壊れない（条件の行は出さない）', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const broken = { type: 'count', title: '壊れた件数', total: 1 } as unknown as ChatResponse['message']['results'][number];
+    fetchMock.mockResolvedValue(jsonResponse(reply('壊れた結果です', [broken])));
+    const { input } = setup();
+    await userEvent.type(input(), '壊れる{Enter}');
+    await screen.findByText('壊れた結果です');
+    expect(screen.queryByRole('group', { name: scopeName })).not.toBeInTheDocument();
+    expect(screen.getByRole('note', { name: '表示できない結果' })).toBeInTheDocument();
+    spy.mockRestore();
+  });
+});
+
+describe('結果カードからグラフへ', () => {
+  it('回答の件数のカードの「グラフで見る」で、グラフの画面へ切り替える', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '何件？{Enter}');
+    const card = await screen.findByRole('region', { name: count.title });
+    await userEvent.click(within(card).getByRole('button', { name: 'グラフで見る' }));
+    // そのカードの結果の条件（分類 = 新規出現、地区 = すべて）を添えて渡す
+    expect(actions.showView).toHaveBeenCalledWith('chart', { areaId: '', classes: new Set(['confirmed_new']) });
+  });
+});
+
+describe('チャットのスクロール位置（開いた直後は説明の見出しから）', () => {
+  /** jsdom には、レイアウトが無い（scrollHeight は 0）。いちばん下の位置を、決まった値にする */
+  const BOTTOM = 900;
+  const log = () => screen.getByRole('log');
+
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(BOTTOM);
+  });
+
+  it('開いた直後（発言が 1 件も無い）は、下へ動かさない。説明の見出しが見える位置（scrollTop が 0）のまま', () => {
+    setup();
+    expect(log().scrollTop).toBe(0);
+    expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
+  });
+
+  it('発言が増える（送信中・返答）たびに、いちばん下へ動かす。失敗のときも', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目'))).mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'だめでした' } }, 500));
+    const { input } = setup();
+    expect(log().scrollTop).toBe(0);
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    expect(log().scrollTop).toBe(BOTTOM);
+
+    // 利用者が上へ戻って読んでいても、新しい発言のあとは、また下へ
+    log().scrollTop = 120;
+    await userEvent.type(input(), '失敗する{Enter}');
+    await screen.findByRole('alert');
+    expect(log().scrollTop).toBe(BOTTOM);
+  });
+
+  it('「新しい会話」で発言が 0 件に戻ったら、いちばん上（説明の先頭）へ戻す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('答えです');
+    expect(log().scrollTop).toBe(BOTTOM);
+
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
+    expect(log().scrollTop).toBe(0);
+  });
+});
+
+describe('回答の対象・条件の行: 最後の条件（右の絞り込みと同じ）', () => {
+  const scopeName = 'この回答の対象・条件';
+
+  it('件数のあとに比較がある回答は、比較の条件（地区だけ。分類の行は出さない）。先の件数の条件を出さない', async () => {
+    const narrow = { ...count, filter: { area_id: 'z18-1-2', cls: 'uncertain' as const } };
+    const byWard = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: 'confirmed_new' as const } };
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数と比較です。', [narrow, byWard])));
+    const { input } = setup({ areas });
+    await userEvent.type(input(), '件数と比較{Enter}');
+    const scope = await screen.findByRole('group', { name: scopeName });
+    expect(within(scope).getByText('地区', { selector: 'dt' }).nextElementSibling).toHaveTextContent('中央区');
+    expect(within(scope).queryByText('分類', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(scope).not.toHaveTextContent('判定保留');
+    // 比べる地区の行は、比較の結果の名前（条件の行とは別）
+    expect(scope).toHaveTextContent('比べる地区');
+    expect(scope).toHaveTextContent('テスト地区 01、テスト地区 02');
+  });
+
+  it('比較のあとに件数がある回答は、件数の条件（地区と分類）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('比較と件数です。', [compare, countWards])));
+    const { input } = setup({ areas });
+    await userEvent.type(input(), '比較と件数{Enter}');
+    const scope = await screen.findByRole('group', { name: scopeName });
+    expect(within(scope).getByText('地区', { selector: 'dt' }).nextElementSibling).toHaveTextContent('中央区');
+    expect(within(scope).getByText('分類', { selector: 'dt' }).nextElementSibling).toHaveTextContent('すべて');
   });
 });

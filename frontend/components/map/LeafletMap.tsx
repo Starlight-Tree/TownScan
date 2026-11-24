@@ -21,11 +21,10 @@ import {
   toLatLngs,
   type BaseLayerId,
   type MapFocus,
+  type TileStatus,
 } from '../../lib/map-config';
 import { formatArea } from '../../lib/format';
 import { readCssColor, useThemeVersion } from '../../lib/theme-colors';
-
-export type TileStatus = 'ok' | 'partial' | 'none';
 
 export interface LeafletMapProps {
   base: BaseLayerId;
@@ -80,7 +79,7 @@ function markerIcon(cls: CandidateClass, mark: Mark): L.DivIcon {
 
 export default function LeafletMap(props: LeafletMapProps) {
   const { base, areas, features, showFrames, selectedId, highlightIds, focus } = props;
-  // テーマが変わるたびに増える。色は JS の値として Leaflet に渡しているので、増えたら線と塗りを描き直す（印・凡例・ツールチップは CSS の変数なので、自然に追従する）
+  // テーマが変わるたびに増える。色は JS の値として Leaflet に渡しているので、増えたら線と塗りを描き直す（印・集計の帯の分類の印・ツールチップは CSS の変数なので、自然に追従する）
   const themeVersion = useThemeVersion();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -123,6 +122,9 @@ export default function LeafletMap(props: LeafletMapProps) {
     const onZoomEnd = () => callbacks.current.onZoom(map.getZoom());
     map.on('zoomend', onZoomEnd);
     onZoomEnd();
+    // 枠の大きさが変わったら地図に知らせる（Leaflet は window の大きさしか見ない）。結果領域の「拡大」で、チャットの列が狭まって地図の枠が広がる（戻すと縮む）ため。
+    // invalidateSize は、中心と縮尺を変えずに、枠・タイルを描き直す。
+    // タブで隠れても枠は 0×0 にならない（結果領域の CSS は display: none でなく visibility: hidden）ので、0 を避ける処理や、見えるまで待つ処理は要らない
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => map.invalidateSize()) : null;
     ro?.observe(el);
     return () => {
@@ -200,22 +202,6 @@ export default function LeafletMap(props: LeafletMapProps) {
     };
   }, [areas, showFrames, themeVersion]);
 
-  // ---- 初回: 12 地区が収まるように寄せる ----
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || fittedRef.current || areas.length === 0) return;
-    const box = areasBBox(areas);
-    if (!box) return;
-    fittedRef.current = true;
-    map.fitBounds(
-      [
-        [box[1], box[0]],
-        [box[3], box[2]],
-      ],
-      { padding: [40, 40], maxZoom: 17, animate: false },
-    );
-  }, [areas]);
-
   // ---- 候補（広く見るときは印、拡大すると形） ----
   useEffect(() => {
     const map = mapRef.current;
@@ -244,7 +230,7 @@ export default function LeafletMap(props: LeafletMapProps) {
       const marker = L.marker(poly.getBounds().getCenter(), {
         icon: markerIcon(cls, 'normal'),
         keyboard: true,
-        title: `${info.short}・${formatArea(f.properties.area_m2)}（Enter で詳細）`,
+        title: `${info.short}・${formatArea(f.properties.area_m2)}（Enter で選ぶ）`,
       });
       marker.on('click', () => callbacks.current.onSelect(id));
       polys.addLayer(casing);
@@ -306,30 +292,44 @@ export default function LeafletMap(props: LeafletMapProps) {
     }
   }, [selectedId, highlightIds, features, themeVersion]);
 
-  // ---- 寄せる・見える位置へずらす ----
+  // ---- 寄せる ----
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focus) return;
-    if (focus.kind === 'fit') {
-      const [w, s, e, n] = focus.bbox;
-      map.fitBounds(
-        [
-          [s, w],
-          [n, e],
-        ],
-        {
-          maxZoom: 19,
-          paddingTopLeft: [32, 32],
-          paddingBottomRight: [32 + focus.padRight, 32],
-        },
-      );
-    } else {
-      const latlng = L.latLng(focus.point[1], focus.point[0]);
-      map.panInside(latlng, { paddingTopLeft: [40, 40], paddingBottomRight: [40 + focus.padRight, 40] });
-    }
+    // チャット・選択が先に地図を動かしたので、全地区への初回の寄せは要らない（後から来た地区の一覧で、動かした位置を戻さない）
+    fittedRef.current = true;
+    const [w, s, e, n] = focus.bbox;
+    map.fitBounds(
+      [
+        [s, w],
+        [n, e],
+      ],
+      {
+        maxZoom: 19,
+        paddingTopLeft: [32, 32],
+        paddingBottomRight: [32, 32],
+      },
+    );
     // nonce が変わるたびに 1 回だけ動かす
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.nonce]);
+
+  // ---- 初回: 全地区が収まるように、1 度だけ寄せる ----
+  // 地区の一覧が届いたとき、まだ誰も地図を動かしていなければ。上の寄せる処理が先に動いていれば（fittedRef が立つ）、何もしない
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || fittedRef.current || areas.length === 0) return;
+    const box = areasBBox(areas);
+    if (!box) return;
+    fittedRef.current = true;
+    map.fitBounds(
+      [
+        [box[1], box[0]],
+        [box[3], box[2]],
+      ],
+      { padding: [40, 40], maxZoom: 17, animate: false },
+    );
+  }, [areas]);
 
   return (
     <div

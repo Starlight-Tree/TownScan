@@ -3,22 +3,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { ApiError, postChat } from '../../lib/api';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
+import { useAreas } from '../../lib/areas-context';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { useHealth } from '../HealthProvider';
+import { AnswerScope } from './AnswerScope';
 import { buildRequestMessages, MAX_CONTENT_LENGTH } from './history';
 import { ResultCard } from './ResultCard';
-import { isMapFocus, type ChatEntry, type ResultActions } from './types';
+import { isMapFocus, type ChatActions, type ChatEntry, type ResultActions } from './types';
 
-export const SUGGESTIONS = [
+/** 答えられる質問の例 */
+const IN_SCOPE_SUGGESTIONS = [
   '新規出現の候補は何件ありますか？',
   '地区ごとの候補数を比べて',
   '面積の大きい候補を一覧にして',
   'いちばん大きい候補の写真を見せて',
   'このアプリの精度は？',
-  '渋谷の新築は？',
 ];
 
+/** 範囲外の質問の例。押すと、断って理由を返す（最初の画面で「断る」ことも見せる） */
+const OUT_OF_SCOPE_SUGGESTIONS = ['渋谷の新築は？'];
+
+export const SUGGESTIONS = [...IN_SCOPE_SUGGESTIONS, ...OUT_OF_SCOPE_SUGGESTIONS];
+
 interface Props {
-  actions: Pick<ResultActions, 'openCandidate' | 'focusMap'>;
+  actions: ChatActions;
 }
 
 interface Failure {
@@ -42,10 +50,11 @@ export function ChatPanel({ actions }: Props) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // 新しい発言・状態の変化のあと、いちばん下へ
+  // 新しい発言・状態の変化のあと、いちばん下へ。発言が 1 件も無い間（説明の画面だけ）は、下へ動かさない:
+  // 開いた直後に下まで送ると、説明の見出しから読み始められない。「新しい会話」で 0 件に戻ったときは、説明の先頭へ戻す
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTop = entries.length === 0 ? 0 : el.scrollHeight;
   }, [entries, sending, failure]);
 
   const request = useCallback(
@@ -71,6 +80,15 @@ export function ChatPanel({ actions }: Props) {
         // 地図の表示が返ってきたら、すぐ地図を寄せる
         const focus = [...results].reverse().find(isMapFocus);
         if (focus) actions.focusMap({ bbox: focus.bbox, candidateIds: focus.candidate_ids });
+        // 回答が届いたことを、結果の領域へ 1 回だけ伝える（合う画面・絞り込みへ切り替える）。
+        // 親の処理の失敗は、送信の失敗ではない（回答は届いて画面に出ている）ので、「送信できませんでした」にしない
+        if (results.length > 0) {
+          try {
+            actions.answered(results);
+          } catch (err) {
+            console.error('回答の通知に失敗しました', err);
+          }
+        }
       } catch (e) {
         if (ctrl.signal.aborted) return;
         const err = e instanceof ApiError ? e : new ApiError('送信に失敗しました。', 0, 'unknown');
@@ -128,7 +146,7 @@ export function ChatPanel({ actions }: Props) {
   return (
     <section className="chat" aria-label="チャット">
       <div className="chat__scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions" aria-busy={sending}>
-        {entries.length === 0 && <Welcome onPick={send} />}
+        {entries.length === 0 && <Welcome onPick={send} onShowMap={() => actions.showView('map')} />}
         {entries.map((entry) =>
           entry.role === 'user' ? (
             <div key={entry.id} className={entry.failed ? 'msg msg--user msg--failed' : 'msg msg--user'}>
@@ -140,6 +158,12 @@ export function ChatPanel({ actions }: Props) {
             <div key={entry.id} className="msg msg--assistant">
               <span className="visually-hidden">TownScan: </span>
               {entry.content && <p className="msg__text">{entry.content}</p>}
+              {entry.results && entry.results.length > 0 && (
+                // 条件の行が壊れても、回答とカードは出す
+                <ErrorBoundary fallback={() => null}>
+                  <AnswerScope results={entry.results} />
+                </ErrorBoundary>
+              )}
               {entry.results?.map((r, i) => <ResultCard key={i} result={r} actions={resultActions} />)}
               {entry.tool_calls && entry.tool_calls.length > 0 && (
                 <details className="provenance provenance--tools">
@@ -220,7 +244,9 @@ export function ChatPanel({ actions }: Props) {
   );
 }
 
-function Welcome({ onPick }: { onPick: (text: string) => void }) {
+function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShowMap: () => void }) {
+  // 地区の数は、読み込んだ地区の一覧から出す（読み込めていない間は、数を伏せる）
+  const { areas } = useAreas();
   return (
     <div className="welcome">
       <h2 className="welcome__title">熊本の街の変化を、写真と会話で調べる</h2>
@@ -230,7 +256,11 @@ function Welcome({ onPick }: { onPick: (text: string) => void }) {
       <dl className="welcome__facts">
         <div>
           <dt>対象</dt>
-          <dd>熊本市中心部の 12 地区（1 地区 = 地理院タイル 1 枚）</dd>
+          <dd>{areas.length > 0 ? `熊本市中心部の ${areas.length} 地区（1 地区 = 地理院タイル 1 枚）` : '熊本市中心部の地区（1 地区 = 地理院タイル 1 枚）'}</dd>
+        </div>
+        <div>
+          <dt>比較</dt>
+          <dd>2018 年と 2023 年の航空写真</dd>
         </div>
         <div>
           <dt>出典</dt>
@@ -240,10 +270,27 @@ function Welcome({ onPick }: { onPick: (text: string) => void }) {
       <p className="welcome__caution">
         結果は「新規出現の<b>候補</b>」です。写真から機械が見つけたもので、新築と断定するものではありません。
       </p>
+      <div className="welcome__actions">
+        <button type="button" className="btn" onClick={onShowMap}>
+          解析した地区を地図で見る
+        </button>
+      </div>
       <div className="suggest-block">
         <span className="suggest-block__label">まず、こんな質問から</span>
         <ul className="suggest-list">
-          {SUGGESTIONS.map((s) => (
+          {IN_SCOPE_SUGGESTIONS.map((s) => (
+            <li key={s}>
+              <button type="button" className="chip" onClick={() => onPick(s)}>
+                {s}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="suggest-block suggest-block--refuse">
+        <span className="suggest-block__label">範囲外の質問は、断って理由を返します</span>
+        <ul className="suggest-list">
+          {OUT_OF_SCOPE_SUGGESTIONS.map((s) => (
             <li key={s}>
               <button type="button" className="chip" onClick={() => onPick(s)}>
                 {s}

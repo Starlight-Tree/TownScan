@@ -16,12 +16,20 @@ interface Props {
   onClose: () => void;
   onShowOnMap: (detail: CandidateDetail) => void;
   onLoaded?: (detail: CandidateDetail) => void;
+  /** 開いたとき見出しへフォーカスを移す（既定 true）。チャットの回答から自動で開くときは false（入力欄のフォーカスを奪わない） */
+  autoFocus?: boolean;
 }
 
-/** 候補の詳細（右からのドロワー）。2018・2023 の切り出し、分類の説明、根拠の数字 */
-export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded }: Props) {
+/**
+ * 候補の詳細。右の結果領域の「写真の比較」の中に収まる、流れの中の部品（地図に重ならない）。
+ * 2018・2023 の切り出し、分類の説明、根拠の数字。重なりの表示（ドロワー）をやめたが、名前は変えない（差分を小さく保つ）
+ */
+export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, autoFocus = true }: Props) {
+  const rootRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const openerRef = useRef<Element | null>(null);
+  // 開いた時点の指定だけを使う。あとで変わっても、効果を作り直さない（作り直すと、閉じるときの戻し先の処理が走ってしまう）
+  const autoFocusRef = useRef(autoFocus);
   const onLoadedRef = useRef(onLoaded);
   const { state, reload } = useAsync((signal) => getCandidate(candidateId, signal), [candidateId]);
 
@@ -29,8 +37,10 @@ export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded }:
     onLoadedRef.current = onLoaded;
   });
 
-  // 開いたら見出しへフォーカスを移し、閉じたら元の場所へ戻す
+  // 開いたら見出しへフォーカスを移し、閉じたら元の場所へ戻す（地図の「写真を比べる」から開いたときは、同じ更新の中で ResultArea の layout effect が、この effect より先にフォーカスを写真の比較のタブへ移す。だから覚える場所はそのタブで、タブへ戻る）。
+  // autoFocus が false（チャットの回答から自動で開くとき）は、どちらもしない。入力欄にあるフォーカスを奪わず、閉じたときに戻す「元の場所」も覚えない
   useEffect(() => {
+    if (!autoFocusRef.current) return;
     openerRef.current = document.activeElement;
     headingRef.current?.focus();
     return () => {
@@ -43,16 +53,30 @@ export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded }:
     if (state.status === 'ready') onLoadedRef.current?.(state.data);
   }, [state]);
 
+  /**
+   * 閉じる（「閉じる」ボタン・Esc）。閉じる直前にフォーカスが詳細の中にあれば、先に、この詳細が入っている tabpanel を名づけているタブ（aria-labelledby。
+   * 結果領域では「写真の比較」のタブ）へ移す。詳細が外れると、フォーカスのあった要素ごと消えて、フォーカスが body に落ちるため
+   * （開いたとき戻し先を覚えなかった autoFocus=false の詳細、たとえば検出画像の回答で自動で開いたものは、上の effect が戻さない）。
+   * 戻し先を覚えている詳細（チャットの「詳細」ボタンから開いた）は、外れるときに上の effect が覚えた場所へ戻す。それがあとに働くので、そちらが優先される
+   */
+  const close = () => {
+    const root = rootRef.current;
+    if (root?.contains(document.activeElement)) {
+      const tabId = root.closest('[role="tabpanel"]')?.getAttribute('aria-labelledby')?.split(/\s+/)[0];
+      (tabId ? document.getElementById(tabId) : null)?.focus();
+    }
+    onClose();
+  };
+
   return (
-    <aside
+    <section
+      ref={rootRef}
       className="drawer"
-      role="dialog"
-      aria-modal="false"
       aria-labelledby="drawer-title"
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
-          onClose();
+          close();
         }
       }}
     >
@@ -60,7 +84,7 @@ export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded }:
         <h2 id="drawer-title" ref={headingRef} tabIndex={-1} className="drawer__title">
           候補の詳細
         </h2>
-        <button type="button" className="btn" onClick={onClose}>
+        <button type="button" className="btn" onClick={close}>
           閉じる
         </button>
       </header>
@@ -86,7 +110,7 @@ export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded }:
         )}
         {state.status === 'ready' && <DetailBody detail={state.data} onShowOnMap={onShowOnMap} />}
       </div>
-    </aside>
+    </section>
   );
 }
 

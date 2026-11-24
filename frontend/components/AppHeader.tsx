@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { useHealth } from './HealthProvider';
 import { ThemeSwitch } from './ThemeSwitch';
 
@@ -11,8 +12,12 @@ const NAV = [
   { href: '/about', label: 'このアプリについて' },
 ] as const;
 
-/** 全画面の上部: ナビ、模擬モデルの表示、合成データ・API 不通のバナー */
-export function AppHeader() {
+/**
+ * 1023px 以下の上の横帯（ブランド・3 つのページ・状態の表示・テーマの切り替え・アカウント）と、合成データ・API 不通のバナー。
+ * 1024px 以上は、左のサイドパネル（AppSidebar）が同じ役目をするので、横帯（`<header>`）だけを CSS で出さない（globals.css）。バナーは、どちらの幅でも本文の上に出す。
+ * `account` は、アカウントのメニュー（サーバーの layout が渡す AccountMenu）。渡さなければ出さない。
+ */
+export function AppHeader({ account }: { account?: ReactNode }) {
   const pathname = usePathname();
   const { state, reload } = useHealth();
   const health = state.status === 'ready' ? state.data : null;
@@ -43,6 +48,7 @@ export function AppHeader() {
             {health && health.llm !== 'mock' && <span className="pill">モデル: {health.llm}</span>}
           </div>
           <ThemeSwitch />
+          {account ? <div className="app-header__account">{account}</div> : null}
         </div>
       </header>
       {synthetic && (

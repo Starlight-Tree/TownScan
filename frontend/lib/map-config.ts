@@ -1,4 +1,5 @@
 import type { BBox, CandidateFeature, CandidateGeometry, AreaSummary } from './api-types';
+import { formatNumber } from './format';
 
 // 地図タイルは、仕様 §7 のとおり地理院から直接読む（API の呼び出しではないので、同じオリジンの縛りの外）。
 const GSI_XYZ = 'https://cyberjapandata.gsi.go.jp/xyz';
@@ -37,6 +38,23 @@ export const BASE_LAYERS: Record<BaseLayerId, BaseLayerDef> = {
 
 export const BASE_LAYER_ORDER: BaseLayerId[] = ['photo2023', 'photo2018', 'std'];
 
+/** 写真のタイルが、いま見えている範囲に届いたか。ok=すべて、partial=一部は標準地図、none=1 枚も無い */
+export type TileStatus = 'ok' | 'partial' | 'none';
+
+/**
+ * 地図の下の「現在表示」の文。選んだ地図の種類（base）と、実際に見えているもの（タイルの有無）を区別して言う。
+ * candidateCount が null のときは、候補がまだ地図に出ていない（読み込み中・失敗）
+ */
+export function displayStatusText(base: BaseLayerId, tile: TileStatus, candidateCount: number | null): string {
+  const def = BASE_LAYERS[base];
+  const std = BASE_LAYERS.std.label;
+  let map = def.label;
+  if (def.photo && tile === 'partial') map = `${def.label}（一部は${std}）`;
+  if (def.photo && tile === 'none') map = `${std}（この範囲には ${def.label}がありません）`;
+  const cands = candidateCount === null ? '候補はまだ表示できていません' : `候補 ${formatNumber(candidateCount)} 件`;
+  return `表示中: ${map}・${cands}`;
+}
+
 export const STD_URL = BASE_LAYERS.std.url;
 
 export const ATTRIBUTION =
@@ -58,17 +76,12 @@ export const nextNonce = () => ++nonceCounter;
 
 // ---- 地図の操作要求 ----
 
-export type MapFocus =
-  | { kind: 'fit'; bbox: BBox; ids: string[]; padRight: number; nonce: number }
-  | { kind: 'reveal'; point: [lon: number, lat: number]; padRight: number; nonce: number };
-
-/** ドロワーが地図の右側をふさぐ幅（広い画面だけ） */
-export const DRAWER_WIDTH = 440;
-export const WIDE_MIN_WIDTH = 900;
-
-export function drawerPad(): number {
-  return typeof window !== 'undefined' && window.innerWidth >= WIDE_MIN_WIDTH ? DRAWER_WIDTH : 0;
-}
+/**
+ * 地図を動かす要求（bbox へ寄せる）。nonce が変わるたびに 1 回だけ動かす。
+ * 詳細は地図に重ならない（結果領域の別の画面に出る）ので、寄せるときに右端をあける欄（padRight）は持たない。
+ * 動かし方は 1 通りだけなので、種類を表す欄（kind）も持たない。
+ */
+export type MapFocus = { bbox: BBox; ids: string[]; nonce: number };
 
 // ---- 幾何 ----
 

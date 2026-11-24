@@ -226,6 +226,8 @@ describe.each([
     ['muted', 'bg'], ['muted', 'surface'], ['muted', 'surface-muted'],
     ['faint', 'input-bg'],
     ['primary', 'surface'], ['primary', 'bg'],
+    // サイドパネル: 開いている画面の項目（主色の文字を --tag-bg の地に）と、ツールチップ（--bg の文字を --text の地に）
+    ['primary', 'tag-bg'], ['bg', 'text'],
     ['on-primary', 'primary'],
     ['tag-text', 'tag-bg'],
     ['error-text', 'error-bg'],

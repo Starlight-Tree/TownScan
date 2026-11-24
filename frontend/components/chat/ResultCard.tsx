@@ -17,11 +17,11 @@ import type { ResultActions } from './types';
 function renderResult(result: ToolResult, actions: ResultActions) {
   switch (result.type) {
     case 'count':
-      return <CountCard result={result} />;
+      return <CountCard result={result} actions={actions} />;
     case 'table':
       return <TableCard result={result} actions={actions} />;
     case 'compare':
-      return <CompareCard result={result} />;
+      return <CompareCard result={result} actions={actions} />;
     case 'map_focus':
       return <MapFocusCard result={result} actions={actions} />;
     case 'detection_image':

@@ -178,12 +178,23 @@ export interface ToolCall {
 export type TableCell = string | number | boolean | null;
 export type TableRow = { id?: string } & Record<string, TableCell | undefined>;
 
+/**
+ * 回答の絞り込み条件（backend の _filter_info）。地区が 1 つなら area_id、2 つ以上（区など）なら area_ids、全地区なら両方とも無い。
+ * scope は表示用の名前（「中央区」「全地区」など）で、API の値をそのまま出す
+ */
+export interface ResultFilter {
+  area_id?: string | null;
+  area_ids?: string[] | null;
+  cls?: CandidateClass | null;
+  scope?: string | null;
+}
+
 export interface CountResult {
   type: 'count';
   title: string;
   total: number;
   breakdown: Array<{ key: string; label: string; value: number }>;
-  filter: { area_id?: string | null; cls?: CandidateClass | null };
+  filter: ResultFilter;
   provenance: Provenance;
 }
 
@@ -195,6 +206,8 @@ export interface TableResult {
   total: number;
   shown: number;
   provenance: Provenance;
+  /** backend は表にも付ける（古い応答には無い） */
+  filter?: ResultFilter;
 }
 
 export interface CompareResult {
@@ -202,6 +215,8 @@ export interface CompareResult {
   title: string;
   items: Array<{ area_id: string; name: string; counts: Record<string, number> }>;
   provenance: Provenance;
+  /** backend は比較にも付ける（古い応答には無い）。cls は並べ替えの分類 */
+  filter?: ResultFilter;
 }
 
 export interface MapFocusResult {

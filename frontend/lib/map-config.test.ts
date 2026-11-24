@@ -6,6 +6,7 @@ import {
   BASE_LAYER_ORDER,
   BLANK_TILE,
   areasBBox,
+  displayStatusText,
   geometryBBox,
   nextNonce,
   toLatLngs,
@@ -69,5 +70,50 @@ describe('幾何', () => {
     expect(unionBBox([])).toBeNull();
     expect(unionBBox([[0, 0, 1, 1], [2, -1, 3, 0.5]])).toEqual([0, -1, 3, 1]);
     expect(areasBBox(areas)).toEqual(areas[0]!.bbox);
+  });
+});
+
+describe('areasBBox（全地区の枠の和。初回の表示範囲）', () => {
+  const box = (w: number, s: number, e: number, n: number): [number, number, number, number] => [w, s, e, n];
+
+  it('地区が 0 件なら null（いまの表示のまま）', () => {
+    expect(areasBBox([])).toBeNull();
+  });
+
+  it('複数の地区の枠をすべて含む外接矩形を返す。順序に依らない', () => {
+    const list = [
+      { ...areas[0]!, id: 'a', bbox: box(130.70, 32.80, 130.71, 32.81) },
+      { ...areas[0]!, id: 'b', bbox: box(130.65, 32.83, 130.68, 32.85) },
+      { ...areas[0]!, id: 'c', bbox: box(130.72, 32.78, 130.75, 32.79) },
+    ];
+    expect(areasBBox(list)).toEqual([130.65, 32.78, 130.75, 32.85]);
+    expect(areasBBox([...list].reverse())).toEqual([130.65, 32.78, 130.75, 32.85]);
+  });
+});
+
+describe('displayStatusText（地図の下の「現在表示」）', () => {
+  it('写真がそろっているとき: 選んだ種類と候補の件数', () => {
+    expect(displayStatusText('photo2023', 'ok', 18)).toBe('表示中: 2023 年の写真・候補 18 件');
+    expect(displayStatusText('photo2018', 'ok', 0)).toBe('表示中: 2018 年の写真・候補 0 件');
+  });
+
+  it('写真が一部しか無いとき: 見えているのは一部が標準地図', () => {
+    expect(displayStatusText('photo2023', 'partial', 18)).toBe('表示中: 2023 年の写真（一部は標準地図）・候補 18 件');
+  });
+
+  it('写真がまったく無いとき: 選んだ種類ではなく、実際に見えている標準地図を言い、理由を添える', () => {
+    expect(displayStatusText('photo2023', 'none', 18)).toBe('表示中: 標準地図（この範囲には 2023 年の写真がありません）・候補 18 件');
+    expect(displayStatusText('photo2018', 'none', 1)).toBe('表示中: 標準地図（この範囲には 2018 年の写真がありません）・候補 1 件');
+  });
+
+  it('標準地図を選んでいるとき: タイルの状態は関係ない', () => {
+    for (const tile of ['ok', 'partial', 'none'] as const) {
+      expect(displayStatusText('std', tile, 5)).toBe('表示中: 標準地図・候補 5 件');
+    }
+  });
+
+  it('件数は千の区切り。候補が届いていない（null）ときは、0 件と言わない', () => {
+    expect(displayStatusText('std', 'ok', 1234)).toBe('表示中: 標準地図・候補 1,234 件');
+    expect(displayStatusText('photo2023', 'ok', null)).toBe('表示中: 2023 年の写真・候補はまだ表示できていません');
   });
 });

@@ -1,30 +1,14 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
-import { chooseTheme, clearTheme, themeChoice } from '../lib/theme';
-import type { Theme } from '../lib/theme';
+import { selectTheme, useThemeChoice } from './theme-store';
 import { THEME_OPTIONS } from './themeOptions';
 
-// 選んだテーマは localStorage と <html data-theme> にあり、React の外にある。切り替えたときだけ、ここから知らせる
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function serverChoice(): Theme | 'system' {
-  return 'system';
-}
-
 /**
- * テーマの切り替え（ライト / ダーク / システム）。上部ヘッダーの右端（状態の表示の隣）で使う。選ぶと localStorage に保存し、以後は OS より優先する。「システム」で OS に従う状態へ戻す。
- * 保存値は、描画のあとに読む（サーバーの出力と最初の描画は「システム」で始め、ハイドレーションのずれを避ける。JobNavi は useEffect で読む。TownScan は、同じ動きを useSyncExternalStore で書いた）。
+ * テーマの切り替え（ライト / ダーク / システム）。上の横帯（1023px 以下）の右端（状態の表示の隣）と、ログイン画面の上の帯で使う。選ぶと localStorage に保存し、以後は OS より優先する。「システム」で OS に従う状態へ戻す。
+ * 保存値は、描画のあとに読む（theme-store.ts）。1024px 以上のサイドパネルでは、アカウントのメニュー（AccountMenu）の中に、同じ選択がある。
  */
 export function ThemeSwitch() {
-  const choice = useSyncExternalStore(subscribe, themeChoice, serverChoice);
+  const choice = useThemeChoice();
 
   return (
     <div role="group" aria-label="テーマ" className="theme-switch">
@@ -40,11 +24,7 @@ export function ThemeSwitch() {
             aria-pressed={choice === option.value}
             aria-label={option.label}
             title={option.label}
-            onClick={() => {
-              if (option.value === 'system') clearTheme();
-              else chooseTheme(option.value);
-              for (const listener of listeners) listener();
-            }}
+            onClick={() => selectTheme(option.value)}
           >
             {option.icon}
           </button>

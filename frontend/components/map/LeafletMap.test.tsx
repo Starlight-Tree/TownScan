@@ -1,6 +1,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import L from 'leaflet';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CandidateFeature } from '../../lib/api-types';
 import { areas } from '../../tests/fixtures';
 import { nextNonce } from '../../lib/map-config';
@@ -115,13 +116,10 @@ describe('Leaflet の地図', () => {
     expect(container.querySelector('.leaflet-container')).not.toBeNull();
   });
 
-  it('寄せる・見える位置へずらす要求を受けても落ちない', () => {
+  it('寄せる要求を受けても落ちない', () => {
     const { rerender } = render(<LeafletMap {...props()} />);
     act(() => {
-      rerender(<LeafletMap {...props({ focus: { kind: 'fit', bbox: [130.7, 32.8, 130.701, 32.801], ids: ['c-1-2-1'], padRight: 440, nonce: nextNonce() } })} />);
-    });
-    act(() => {
-      rerender(<LeafletMap {...props({ focus: { kind: 'reveal', point: [130.7, 32.8], padRight: 440, nonce: nextNonce() } })} />);
+      rerender(<LeafletMap {...props({ focus: { bbox: [130.7, 32.8, 130.701, 32.801], ids: ['c-1-2-1'], nonce: nextNonce() } })} />);
     });
   });
 
@@ -279,5 +277,149 @@ describe('地図の色（テーマ）', () => {
     const tip = container.querySelector('.leaflet-tooltip');
     expect(tip).not.toBeNull();
     expect(tip!.getAttribute('style') ?? '').not.toMatch(/background|color/);
+  });
+});
+
+// ---- 初回の表示範囲（全地区）と、枠の大きさが変わる地図（結果領域の拡大） ----
+
+const areaAt = (id: string, bbox: [number, number, number, number]) => ({ ...areas[0]!, id, bbox });
+const twoAreas = [areaAt('a', [130.6, 32.7, 130.65, 32.75]), areaAt('b', [130.8, 32.85, 130.9, 32.95])];
+const focusFit = (bbox: [number, number, number, number]) => ({ bbox, ids: [], nonce: nextNonce() });
+const boundsOf = (arg: L.LatLngBoundsExpression) => L.latLngBounds(arg as L.LatLngTuple[]).toBBoxString();
+
+describe('初回の表示範囲', () => {
+  it('地区の一覧が届いたら、全地区の枠の和へ 1 度だけ寄せる。0 件のあいだは動かさない', () => {
+    const fit = vi.spyOn(L.Map.prototype, 'fitBounds');
+    const { rerender } = render(<LeafletMap {...props({ areas: [] })} />);
+    expect(fit).not.toHaveBeenCalled();
+
+    rerender(<LeafletMap {...props({ areas: twoAreas })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(boundsOf(fit.mock.calls[0]![0])).toBe('130.6,32.7,130.9,32.95');
+
+    // 地区の一覧を取り直しても、利用者が動かした地図を戻さない
+    rerender(<LeafletMap {...props({ areas: [...twoAreas] })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+  });
+
+  it('チャットや選択が先に地図を動かしていたら、地区の一覧が届いても、全地区へは寄せない', () => {
+    const fit = vi.spyOn(L.Map.prototype, 'fitBounds');
+    const focus = focusFit([130.7, 32.8, 130.701, 32.801]);
+    const { rerender } = render(<LeafletMap {...props({ areas: [], focus })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    rerender(<LeafletMap {...props({ areas: twoAreas, focus })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(boundsOf(fit.mock.calls[0]![0])).toBe('130.7,32.8,130.701,32.801');
+  });
+
+  it('寄せるときの余白は、四方とも 32px。右端をあける欄（padRight）は持たない（詳細は地図に重ならない）', () => {
+    const fit = vi.spyOn(L.Map.prototype, 'fitBounds');
+    render(<LeafletMap {...props({ focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit.mock.calls[0]![1]).toMatchObject({ paddingTopLeft: [32, 32], paddingBottomRight: [32, 32], maxZoom: 19 });
+  });
+
+  it('地区の一覧と寄せる要求が同時なら、要求だけを実行する（一度全体を見せて、すぐ動かすことをしない）', () => {
+    const fit = vi.spyOn(L.Map.prototype, 'fitBounds');
+    render(<LeafletMap {...props({ areas: twoAreas, focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    expect(boundsOf(fit.mock.calls[0]![0])).toBe('130.7,32.8,130.701,32.801');
+  });
+});
+
+describe('結果領域の拡大・縮小（地図の枠の大きさが変わるとき）', () => {
+  let size = { w: 800, h: 600 };
+  let fire: () => void = () => {};
+  const disconnect = vi.fn();
+
+  beforeEach(() => {
+    size = { w: 800, h: 600 };
+    disconnect.mockClear();
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => size.w });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => size.h });
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          fire = cb;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {
+          // 本物の ResizeObserver は、止めたあとは通知しない
+          disconnect();
+          fire = () => {};
+        }
+      },
+    );
+  });
+
+  afterEach(() => {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 600 });
+    vi.unstubAllGlobals();
+  });
+
+  const resizeTo = (w: number, h: number) => {
+    size = { w, h };
+    act(() => fire());
+  };
+
+  it('枠の大きさが変わるたびに、地図へ知らせる（invalidateSize）。地図の大きさが、新しい枠に追従する', () => {
+    const invalidate = vi.spyOn(L.Map.prototype, 'invalidateSize');
+    const mapOf = vi.spyOn(L, 'map');
+    render(<LeafletMap {...props({ areas: twoAreas })} />);
+    const map = mapOf.mock.results[0]!.value as L.Map;
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(map.getSize().x).toBe(800);
+
+    resizeTo(1200, 600);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(map.getSize().x).toBe(1200);
+
+    resizeTo(600, 600);
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(map.getSize().x).toBe(600);
+  });
+
+  it('広げても縮めても、地図の中心と縮尺は変わらない。元の大きさへ戻せば、表示範囲も元のとおり', () => {
+    const mapOf = vi.spyOn(L, 'map');
+    render(<LeafletMap {...props({ areas: twoAreas, focus: focusFit([130.7, 32.8, 130.71, 32.81]) })} />);
+    const map = mapOf.mock.results[0]!.value as L.Map;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const bounds = map.getBounds().toBBoxString();
+    // 中心は、画面の 1 ピクセル未満のずれまで同じ（Leaflet は枠の変化を整数のピクセルで補正するので、緯度経度では丸め分がずれる）
+    const driftPx = () => map.project(map.getCenter(), zoom).distanceTo(map.project(center, zoom));
+
+    // 結果領域を「拡大」: チャットの列が狭まり、地図の枠が横に広がる
+    resizeTo(1200, 600);
+    expect(map.getZoom()).toBe(zoom);
+    expect(driftPx()).toBeLessThan(1);
+    expect(map.getBounds().toBBoxString()).not.toBe(bounds); // 広い枠には、より広い範囲が映る
+
+    // もう一度押して、元の幅へ
+    resizeTo(800, 600);
+    expect(map.getZoom()).toBe(zoom);
+    expect(driftPx()).toBeLessThan(1);
+    expect(map.getBounds().toBBoxString()).toBe(bounds);
+  });
+
+  it('寄せる要求は、すぐ実行する（枠の大きさを待たない）。大きさが変わっても、寄せ直さない', () => {
+    const fit = vi.spyOn(L.Map.prototype, 'fitBounds');
+    const { rerender } = render(<LeafletMap {...props({ areas: [] })} />);
+    rerender(<LeafletMap {...props({ areas: [], focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
+    expect(fit).toHaveBeenCalledTimes(1);
+    resizeTo(1200, 600);
+    expect(fit).toHaveBeenCalledTimes(1);
+  });
+
+  it('アンマウントすると、観測をやめる（片付けた地図に触れない）', () => {
+    const invalidate = vi.spyOn(L.Map.prototype, 'invalidateSize');
+    const { unmount } = render(<LeafletMap {...props({ areas: twoAreas })} />);
+    unmount();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(() => resizeTo(1200, 600)).not.toThrow();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });
