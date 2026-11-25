@@ -677,13 +677,6 @@ p.banner {
   cursor: not-allowed;
 }
 
-.chip--compact {
-  min-height: 36px;
-  padding: 4px 12px;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
 .seg-btn {
   min-height: 44px;
   padding: 0 12px;
@@ -938,28 +931,55 @@ p.banner {
 
 .chat__tools {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  justify-content: flex-end;
   padding: 0 var(--chat-pad);
 }
 
-.chat__chips {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  gap: 8px;
-  overflow-x: auto;
-  /* 横にスクロールする枠は、縦の辺も切る（overflow-x: auto で、縦も auto になる）。質問の例の輪（3px + 離れ 2px = 5px）が、上・左右・下で収まる余白（6px）を内側に取り、
-     同じだけの負の余白で、見かけの位置を保つ（下は、これまでの余白 4px のまま）。キーボードで枠の外の例へ進んだときも、輪が見える位置までスクロールする */
-  padding: 6px;
-  margin: -6px -6px -2px;
-  scroll-padding: 6px;
+/* 「新しい会話」は、サイドパネルの無い幅（1023px 以下）だけで見せる。1024px 以上は、サイドパネルの「新しい会話」（DocuNavi と同じ位置）が同じ処理を呼ぶ */
+@media (min-width: 1024px) {
+  .chat__tools {
+    display: none;
+  }
 }
 
 .chat__reset {
   flex-shrink: 0;
   margin-left: 0;
   white-space: nowrap;
+}
+
+/* 続けて聞く（DocuNavi の .follow-ups・.follow-up と同じ宣言。--accent は TownScan の --primary）: 回答と結果カードより目立たせない（枠なし・小さめ・控えめな色）。
+   見出しの文字は出さない（読み上げ用の名前は aria-label）。回答との区切りの線は、この直前に引く */
+.follow-ups {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  align-self: center;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.follow-up {
+  padding: 0.15rem 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.follow-up::before {
+  content: '↳ ';
+}
+
+.follow-up:hover {
+  color: var(--primary);
+  text-decoration: underline;
 }
 
 /* ---- 入力欄（DocuNavi の Composer と同じ。components/chat/Composer.tsx）----

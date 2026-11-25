@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, postChat } from '../../lib/api';
 import type { AnswerRef, ExpandRequest } from '../../lib/answer-view';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
@@ -201,6 +201,14 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
     [send, focusComposer],
   );
 
+  // 続けて聞く: 回答のあと（返答待ち・失敗のときは出さない）に、まだ聞いていない質問の例を最大 3 件（DocuNavi の followUpQuestions と同じ規則）
+  const lastEntry = entries[entries.length - 1];
+  const followUps = useMemo(() => {
+    if (sending || failure || lastEntry?.role !== 'assistant') return [];
+    const asked = new Set(entries.filter((e) => e.role === 'user').map((e) => e.content.trim()));
+    return IN_SCOPE_SUGGESTIONS.filter((q) => !asked.has(q)).slice(0, 3);
+  }, [entries, sending, failure, lastEntry?.role]);
+
   return (
     <section
       className="chat"
@@ -263,6 +271,23 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
             </div>
           );
         })}
+        {followUps.length > 0 && (
+          <div className="follow-ups" role="group" aria-label="続けて聞く">
+            {followUps.map((q) => (
+              <button
+                key={q}
+                type="button"
+                className="follow-up"
+                onClick={() => {
+                  send(q);
+                  focusComposer();
+                }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
         {sending && (
           <div className="msg msg--assistant msg--pending" role="status">
             <span className="dots" aria-hidden="true">
@@ -285,23 +310,8 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
       </div>
 
       {entries.length > 0 && (
+        // 「新しい会話」は、サイドパネルの無い幅（1023px 以下）だけで見える（1024px 以上はサイドパネルのボタン。CSS で隠す）
         <div className="chat__tools">
-          <div className="chat__chips" aria-label="質問の例">
-            {SUGGESTIONS.slice(0, 4).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="chip chip--compact"
-                onClick={() => {
-                  send(s);
-                  focusComposer();
-                }}
-                disabled={sending}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
           <button type="button" className="btn btn--small chat__reset" onClick={reset}>
             新しい会話
           </button>

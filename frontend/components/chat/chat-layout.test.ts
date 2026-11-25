@@ -58,28 +58,11 @@ describe('チャット欄の規則: 読み上げ用の span が、文書の高�
 });
 
 describe('チャット欄のスクロールする枠: 中身のフォーカスの輪が、枠の辺で切れない', () => {
-  /** 行頭から始まる規則（`\n.sel {`）の本文。同じ selector を後ろに持つ、入れ子の規則（たとえば `.foo .chat__chips`）は含めない */
+  /** 行頭から始まる規則（`\n.sel {`）の本文。同じ selector を後ろに持つ、入れ子の規則（たとえば `.foo .chat__scroll`）は含めない */
   function ruleBody(selector: string): string {
     const start = css.indexOf(`\n${selector} {`);
     expect(start, selector).toBeGreaterThanOrEqual(0);
     return css.slice(start, css.indexOf('}', start));
-  }
-
-  /** 上・右・下・左の 4 辺（px）。shorthand（1〜4 個）と、辺ごとの指定の両方を読む */
-  function edges(body: string, property: 'padding' | 'margin'): [number, number, number, number] {
-    const sides = ['top', 'right', 'bottom', 'left'] as const;
-    const out: [number, number, number, number] = [0, 0, 0, 0];
-    const short = new RegExp(`(?:^|[\\s;{])${property}\\s*:\\s*([^;]+);`).exec(body);
-    if (short) {
-      const v = short[1]!.trim().split(/\s+/).map((x) => Number.parseFloat(x));
-      const [t, r = t, b = t, l = r] = v as [number, number?, number?, number?];
-      out.splice(0, 4, t, r, b!, l!);
-    }
-    sides.forEach((side, i) => {
-      const long = new RegExp(`(?:^|[\\s;{])${property}-${side}\\s*:\\s*(-?[\\d.]+)px`).exec(body);
-      if (long) out[i] = Number.parseFloat(long[1]!);
-    });
-    return out;
   }
 
   // 輪の出ている長さ: 全体の :focus-visible の outline の太さ + 離れ（3px + 2px = 5px）
@@ -109,24 +92,5 @@ describe('チャット欄のスクロールする枠: 中身のフォーカス�
     const narrow = /@media \(max-width: 420px\) \{\s*\.chat__scroll \{\s*padding:\s*([\d.]+)rem;/.exec(css);
     expect(narrow, '420px 以下の .chat__scroll').not.toBeNull();
     expect(Number(narrow![1]) * 16).toBeGreaterThanOrEqual(ring());
-  });
-
-  it('.chat__chips（overflow-x: auto。縦も切れる）: 上・左右・下に、輪が収まる余白を取り、上・左右は同じだけの負の余白で位置を保つ', () => {
-    const body = ruleBody('.chat__chips');
-    expect(body).toMatch(/overflow-x\s*:\s*auto/);
-    const padding = edges(body, 'padding');
-    const margin = edges(body, 'margin');
-    for (const side of padding) expect(side).toBeGreaterThanOrEqual(ring());
-    expect(margin[0]).toBe(-padding[0]);
-    expect(margin[1]).toBe(-padding[1]);
-    expect(margin[3]).toBe(-padding[3]);
-    // 下は、これまでの余白（padding-bottom: 4px）と同じだけ、枠の下に残す
-    expect(padding[2] + margin[2]).toBe(4);
-  });
-
-  it('.chat__chips: キーボードで枠の外の例へ進んだとき、輪が見える位置までスクロールする（scroll-padding が輪の長さ以上）', () => {
-    const m = /scroll-padding\s*:\s*(\d+)px/.exec(ruleBody('.chat__chips'));
-    expect(m, 'scroll-padding').not.toBeNull();
-    expect(Number(m![1])).toBeGreaterThanOrEqual(ring());
   });
 });

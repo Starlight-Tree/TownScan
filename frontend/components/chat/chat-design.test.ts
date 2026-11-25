@@ -56,8 +56,12 @@ describe('チャットの幅: 会話・質問の例の行・入力欄が、同�
     expect(r).toContainEqual(['padding-bottom', 'max(1rem, env(safe-area-inset-bottom))']);
   });
 
-  it('.chat__tools（質問の例と「新しい会話」の行）も、同じ列に収まる', () => {
+  it('.chat__tools（「新しい会話」の行）も、同じ列に収まる', () => {
     expect(rule('.chat__tools')).toContainEqual(['padding', '0 var(--chat-pad)']);
+  });
+
+  it('「新しい会話」の行は、サイドパネルのある幅（1024px 以上）では隠す（DocuNavi のチャットには無い。サイドパネルの同じボタンが処理を呼ぶ）', () => {
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{\s*\.chat__tools \{\s*display: none;\s*\}\s*\}/);
   });
 
   it('420px 以下は、DocuNavi と同じ 0.75rem に詰める', () => {
@@ -95,6 +99,45 @@ describe('質問の吹き出し（.msg--user。DocuNavi の .message-question）
       ['outline', '2px dashed var(--error)'],
       ['outline-offset', '2px'],
     ]);
+  });
+});
+
+describe('続けて聞く（.follow-ups・.follow-up。DocuNavi の同名の規則）: 最後の回答の下に、枠なしの小さい文字で並べる', () => {
+  it('.follow-ups: 縦の列・左寄せ・列の幅いっぱい・上に区切りの線（宣言が DocuNavi と同じ）', () => {
+    expect(rule('.follow-ups')).toEqual([
+      ['display', 'flex'],
+      ['flex-direction', 'column'],
+      ['align-items', 'flex-start'],
+      ['gap', '0.1rem'],
+      ['width', '100%'],
+      ['align-self', 'center'],
+      ['padding-top', '0.7rem'],
+      ['border-top', '1px solid var(--border)'],
+    ]);
+  });
+
+  it('.follow-up: 枠・背景なし・0.85rem・控えめな色（--text-muted）。先頭に「↳ 」。触れると主色（DocuNavi の --accent。TownScan の --primary）と下線', () => {
+    expect(rule('.follow-up')).toEqual([
+      ['padding', '0.15rem 0'],
+      ['border', '0'],
+      ['background', 'none'],
+      ['color', 'var(--text-muted)'],
+      ['font', 'inherit'],
+      ['font-size', '0.85rem'],
+      ['line-height', '1.5'],
+      ['text-align', 'left'],
+      ['cursor', 'pointer'],
+    ]);
+    expect(rule('.follow-up::before')).toEqual([['content', "'↳ '"]]);
+    expect(rule('.follow-up:hover')).toEqual([
+      ['color', 'var(--primary)'],
+      ['text-decoration', 'underline'],
+    ]);
+  });
+
+  it('入力欄の上の、丸い質問の例の行（.chat__chips・.chip--compact）は、もう無い', () => {
+    expect(css).not.toContain('.chat__chips');
+    expect(css).not.toContain('.chip--compact');
   });
 });
 

@@ -723,16 +723,67 @@ describe('キーボードの操作: 押したボタンが消えても、フォ�
     expect(input()).toHaveFocus();
   });
 
-  it('会話の下の質問の例（小さいほう）を押したときも、入力欄へ', async () => {
+  it('回答の下の「続けて聞く」の質問を押したときも、入力欄へ', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
     setup();
     await userEvent.type(input(), 'ひとつめ{Enter}');
     await screen.findByText('答えです');
-    const compact = within(screen.getByLabelText('質問の例')).getByRole('button', { name: SUGGESTIONS[1]! });
-    compact.focus();
+    const next = within(screen.getByRole('group', { name: '続けて聞く' })).getByRole('button', { name: SUGGESTIONS[1]! });
+    next.focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(input()).toHaveFocus();
+  });
+
+  describe('続けて聞く（回答の下。DocuNavi の .follow-ups と同じ位置・規則）', () => {
+    const group = () => screen.queryByRole('group', { name: '続けて聞く' });
+
+    it('最初の画面（発言なし）と、返答を待つあいだには出さない。回答が届くと、会話の中の、最後の回答の下に出る', async () => {
+      let resolve!: (r: Response) => void;
+      fetchMock.mockReturnValue(new Promise<Response>((r) => (resolve = r)));
+      setup();
+      expect(group()).toBeNull();
+      await userEvent.type(input(), 'ひとつめ{Enter}');
+      await screen.findByText(/調べています/);
+      expect(group()).toBeNull();
+      resolve(jsonResponse(reply('答えです')));
+      const answer = (await screen.findByText('答えです')).closest('[data-entry="assistant"]')!;
+      const g = group()!;
+      expect(g).not.toBeNull();
+      // 入力欄の上の行ではなく、回答と同じ会話の中（role="log"）の、回答の次
+      expect(g.closest('[role="log"]')).not.toBeNull();
+      expect(answer.nextElementSibling).toBe(g);
+    });
+
+    it('まだ聞いていない質問の例を、最大 3 件。聞いたばかりの質問は出さない', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
+      setup();
+      await userEvent.type(input(), `${SUGGESTIONS[0]!}{Enter}`);
+      await screen.findByText('答えです');
+      const names = within(group()!).getAllByRole('button').map((b) => b.textContent);
+      expect(names).toEqual([SUGGESTIONS[1], SUGGESTIONS[2], SUGGESTIONS[3]]);
+    });
+
+    it('失敗のあとは出さない（「もう一度送る」だけ）。押すと、その質問を送る', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(reply('答えです')));
+      setup();
+      await userEvent.type(input(), 'ひとつめ{Enter}');
+      await screen.findByText('答えです');
+      fetchMock.mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'だめでした' } }, 500));
+      await userEvent.click(within(group()!).getByRole('button', { name: SUGGESTIONS[1]! }));
+      await screen.findByRole('alert');
+      expect(group()).toBeNull();
+      expect(JSON.parse(String(fetchMock.mock.calls[1]![1]!.body)).messages.at(-1)).toEqual({ role: 'user', content: SUGGESTIONS[1] });
+    });
+
+    it('入力欄の上に、丸い質問の例の行は出ない（「新しい会話」のボタンだけが残る）', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
+      setup();
+      await userEvent.type(input(), 'ひとつめ{Enter}');
+      await screen.findByText('答えです');
+      expect(screen.queryByLabelText('質問の例')).toBeNull();
+      expect(screen.getByRole('button', { name: '新しい会話' })).toBeInTheDocument();
+    });
   });
 
   it('「新しい会話」を Enter で押すと、ボタンが消えても、入力欄へフォーカスが移る', async () => {
