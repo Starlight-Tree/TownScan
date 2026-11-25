@@ -53,7 +53,7 @@ export function ResultArea({ view, onViewChange, panels, trailing }: Props) {
   };
 
   return (
-    <section className="result-area" aria-label="結果">
+    <div className="result-area">
       {/* 帯は、タブの列（tablist）と、右端の部品（閉じるボタン）を並べる。tablist には、タブだけを入れる */}
       <div className="result-area__bar">
         <div className="result-area__tabs" role="tablist" aria-label="結果の見せ方">
@@ -99,6 +99,6 @@ export function ResultArea({ view, onViewChange, panels, trailing }: Props) {
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }

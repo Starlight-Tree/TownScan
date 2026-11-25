@@ -63,7 +63,9 @@ function scrollTopForAnswer(box: HTMLElement): number {
   const answerTop = offsetWithin(box, answer);
   const question = nodes.length > 1 ? nodes[nodes.length - 2] : undefined;
   if (question && question.dataset.entry === 'user') {
-    const questionTop = offsetWithin(box, question);
+    // 質問の時刻（直前の <time>）は質問の外にある。時刻から合わせないと、時刻が欄の上に隠れる
+    const time = question.previousElementSibling;
+    const questionTop = offsetWithin(box, time instanceof HTMLElement && time.matches('time.chat__time') ? time : question);
     if (answerTop - questionTop <= box.clientHeight / 3) return questionTop;
   }
   return answerTop;

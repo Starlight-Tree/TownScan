@@ -640,22 +640,24 @@ describe('長い回答が届いたあとのスクロール位置（質問か回�
     vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(VIEW);
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       const entry = this.getAttribute('data-entry');
-      const box = entry === 'assistant' ? boxes.answer : entry === 'user' ? boxes.question : this.getAttribute('role') === 'log' ? boxes.log : { top: 0, height: 0 };
+      // 質問の時刻（<time class="chat__time">）は、質問の 24px 上に出る
+      const isTime = this.matches('time.chat__time');
+      const box = entry === 'assistant' ? boxes.answer : entry === 'user' ? boxes.question : isTime ? { top: boxes.question.top - 24, height: 20 } : this.getAttribute('role') === 'log' ? boxes.log : { top: 0, height: 0 };
       // 本物のブラウザと同じく、発言の画面上の位置は、チャット欄のスクロール量の分だけ上へ動く
-      const scrolled = entry ? (this.closest('[role="log"]')?.scrollTop ?? 0) : 0;
+      const scrolled = entry || isTime ? (this.closest('[role="log"]')?.scrollTop ?? 0) : 0;
       const top = box.top - scrolled;
       return { top, height: box.height, bottom: top + box.height, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
     });
   }
 
-  it('欄より長い回答は、いちばん下まで送らず、質問の先頭が見える位置に合わせる（結論の最初の文が隠れない）', async () => {
-    // 枠の上端 50。質問は、中身の先頭から 700px 下、回答はその 54px 下から 900px の高さ（欄の 400px を超える）
+  it('欄より長い回答は、いちばん下まで送らず、質問（とその時刻）の先頭が見える位置に合わせる（結論の最初の文が隠れない）', async () => {
+    // 枠の上端 50。質問は、中身の先頭から 700px 下（時刻はその 24px 上 = 676px）、回答はその 54px 下から 900px の高さ（欄の 400px を超える）
     layout({ log: { top: 50, height: VIEW }, question: { top: 750, height: 40 }, answer: { top: 804, height: 900 } });
     fetchMock.mockResolvedValue(jsonResponse(reply('長い回答です', [table])));
     const { input } = setup();
     await userEvent.type(input(), '一覧{Enter}');
     await screen.findByText('長い回答です');
-    expect(log().scrollTop).toBe(700);
+    expect(log().scrollTop).toBe(676);
   });
 
   it('質問が長い（欄の 3 分の 1 を超える）ときは、回答の先頭に合わせる', async () => {
@@ -686,7 +688,7 @@ describe('長い回答が届いたあとのスクロール位置（質問か回�
     expect(log().scrollTop).toBe(BOTTOM);
     resolve(jsonResponse(reply('長い回答です', [table])));
     await screen.findByText('長い回答です');
-    expect(log().scrollTop).toBe(700);
+    expect(log().scrollTop).toBe(676);
   });
 
   it('失敗のときは、いちばん下（エラーと「もう一度送る」が見える）', async () => {
