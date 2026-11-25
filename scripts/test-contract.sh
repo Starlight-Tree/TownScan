@@ -2,15 +2,15 @@
 # 契約の検査（contract/）を、使い捨ての環境で 1 つのコマンドで流す（ホストの Docker を使う）。仕様: contract/README.md・docs/decisions/0005-api-in-go.md
 # 使い方: scripts/test-contract.sh [python|go] [pytest の引数...]   例: scripts/test-contract.sh python -k chat -x
 #   対象（省略時は python）: 契約を満たすことを確かめる API の実装。
-#     python  いまの API（backend/ のイメージの runtime）。
+#     python  FastAPI 版の API（backend/ のイメージの runtime。消す予定）。
 #     go      Go の API（api/）。既定はローカルの docunavi-dev でビルドして alpine に載せる（GO_IMAGE_BUILD=local。取得なし）。api/Dockerfile を使うなら GO_IMAGE_BUILD=dockerfile。
 #
 # やること（どの対象でも同じ。API のコードは、対象のイメージの中だけ。検査は HTTP だけで叩く）:
 #   1. イメージを作る: 検査を流すイメージ（contract/Dockerfile。pytest・PyJWT・Pillow だけで、アプリのコードは無い）、
-#      データを読み込むイメージ（backend/ の runtime。`python -m app.load` は、API が Go になっても Python の仕事）、対象の API のイメージ。
+#      データを読み込むイメージ（pipeline/loader.Dockerfile の runtime。`python -m pipeline.load`。API が Go でも Python の仕事）、対象の API のイメージ。
 #   2. 使い捨ての Postgres（townscan-contract-db・mem_limit 256m・データは tmpfs）を、外へ出られない専用ネットワーク（--internal）で起動する。
-#   3. 合成データ（backend/tests/synthetic.py の run と写真タイル。画像の 404 を確かめる故障つき）を、専用ボリュームに書き、
-#      `python -m app.load --run` で DB へ入れる。
+#   3. 合成データ（contract/synthetic.py の run と写真タイル。画像の 404 を確かめる故障つき）を、専用ボリュームに書き、
+#      `python -m pipeline.load --run` で DB へ入れる。
 #   4. API の「構成」ごとに、API を起動 → 検査の pytest を流す → API を止める（contract/README.md の「API の構成」。既定は次の順）:
 #        empty（データ無し）→ main（認証あり・全検査の本体）→ history（会話の履歴。対象が go のときだけ）→
 #        noauth・badauth（認証の設定が無い・不正）→ jwksdown（JWKS に届かない）→ dbdown（DB が止まる）
@@ -49,9 +49,9 @@ API="$PREFIX-api"
 RUNNER="$PREFIX-runner"   # 検査を流すコンテナの名前。偽の JWKS サーバーがこの中で動き、API はこの名前で JWKS を取りに来る
 VOL="$PREFIX-work"        # 合成データ（run と写真タイル）を置くボリューム
 RUNNER_IMAGE="$PREFIX-runner"
-LOADER_IMAGE="$PREFIX-api-python"  # データの読み込み（app.load）に使う。対象が python のときは、API のイメージでもある
+LOADER_IMAGE="$PREFIX-loader"  # データの読み込み（pipeline.load）に使うイメージ（pipeline/loader.Dockerfile）
 DBNAME=townscan_contract
-SYNTHETIC=backend/tests/synthetic.py
+SYNTHETIC=contract/synthetic.py
 HISTORY_USERS="${CONTRACT_HISTORY_USERS:-200}"   # 検査用の利用者の人数。auth_user に ct_user_000001〜 の形で入れる（contract/support/fakes.py の fresh_user）
 case "$HISTORY_USERS" in ""|*[!0-9]*|0) echo "CONTRACT_HISTORY_USERS は 1 以上の整数です（実際: ${HISTORY_USERS}）" >&2; exit 2 ;; esac
 # 既定の構成の並び。history（会話の履歴）は、履歴の経路を持つ Go の API だけ（Python の API には入れない）
@@ -81,7 +81,7 @@ DB_URL="postgresql://townscan:$PW@$DB:5432/$DBNAME"
 TARGET_PORT=8000
 case "$TARGET" in
   python)
-    TARGET_IMAGE="$LOADER_IMAGE"
+    TARGET_IMAGE="$PREFIX-api-python"
     target_build() { docker build --quiet --target runtime -t "$TARGET_IMAGE" backend >/dev/null; }
     ;;
   go)
@@ -138,8 +138,8 @@ runner_run() { # runner_run <docker run の追加引数...> -- <コマンド...>
 started=$SECONDS
 echo "== イメージを作る（対象: ${TARGET}）"
 docker build --quiet -t "$RUNNER_IMAGE" contract >/dev/null
-docker build --quiet --target runtime -t "$LOADER_IMAGE" backend >/dev/null
-[ "$TARGET_IMAGE" = "$LOADER_IMAGE" ] || target_build
+docker build --quiet --target runtime -f pipeline/loader.Dockerfile -t "$LOADER_IMAGE" pipeline >/dev/null
+target_build
 
 echo "== 使い捨ての Postgres を起動する（${DB}・mem_limit 256m・外へ出られないネットワーク）"
 docker network create --internal "$NET" >/dev/null
@@ -159,7 +159,7 @@ echo "== 合成データを書く（run と写真タイル。画像の 404 を�
 runner_run --user 0:0 -v "$VOL:/work" -v "$PWD/$SYNTHETIC:/synthetic/synthetic.py:ro" "$RUNNER_IMAGE" \
   python /contract/prepare_data.py --synthetic /synthetic/synthetic.py --out /work
 
-loader_run() { # loader_run <コマンド...> — データの読み込みに使うイメージ（backend の runtime。DB へ届く）
+loader_run() { # loader_run <コマンド...> — データの読み込みに使うイメージ（pipeline/loader.Dockerfile の runtime。DB へ届く）
   docker run --rm --network "$NET" --memory 256m --memory-swap 256m --cap-drop ALL --security-opt no-new-privileges \
     --read-only --tmpfs /tmp -v "$VOL:/work:ro" -e DATABASE_URL="$DB_URL" "$LOADER_IMAGE" "$@"
 }
@@ -205,8 +205,8 @@ SQL
 }
 
 load_data() {
-  echo "== データを読み込む（python -m app.load --run /work/run）"
-  loader_run python -m app.load --run /work/run
+  echo "== データを読み込む（python -m pipeline.load --run /work/run）"
+  loader_run python -m pipeline.load --run /work/run
   seed_users
   LOADED=1
 }
@@ -216,7 +216,7 @@ run_phase() { # run_phase <構成>
   phase_env "$variant"
   if [ "$variant" = empty ]; then
     # 空の DB: 表だけがある（API の実装が表を作る・作らないに依らない）。データはまだ読み込まない
-    loader_run python -c "import os, psycopg; from app.db import apply_schema; apply_schema(psycopg.connect(os.environ['DATABASE_URL'], autocommit=True))"
+    loader_run python -c "import os, psycopg; from pipeline.db import apply_schema; apply_schema(psycopg.connect(os.environ['DATABASE_URL'], autocommit=True))"
   elif [ "$LOADED" = 0 ]; then
     load_data
   fi

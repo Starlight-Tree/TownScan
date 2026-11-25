@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# backend のテストを 1 つのコマンドで再現する（ホストの Docker を使う）。
-# 使い方: scripts/test-backend.sh [pytest の引数...]   例: scripts/test-backend.sh -k chat -x
+# ローダーの DB のテスト（pipeline/dbtests）と、スクリプトのテスト（scripts/tests）を、1 つのコマンドで再現する（ホストの Docker を使う）。
+# 使い方: scripts/test-loader.sh [pytest の引数...]   例: scripts/test-loader.sh -k loader -x
 #
-# やること: テスト用イメージ（backend/Dockerfile の test）を作る → 使い捨ての Postgres（townscan-test-db・mem_limit 256m・
+# やること: テスト用イメージ（pipeline/loader.Dockerfile の test）を作る → 使い捨ての Postgres（townscan-test-db・mem_limit 256m・
 # データは tmpfs）を専用ネットワークで起動 → その中でテストを流す → 終わったら DB とネットワークを止めて消す。
 # 他のコンテナ・ネットワークには触らない（名前が townscan-test-* のものだけ）。DB は公開しない。
 set -euo pipefail
@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 
 DB=townscan-test-db
 NET=townscan-test-net
-IMG=townscan-backend-test
+IMG=townscan-loader-test
 RUNNER=townscan-test-runner
 PW="$(openssl rand -hex 12)"  # 使い捨てのパスワード（DB と一緒に消える。表示しない）
 
@@ -23,7 +23,7 @@ trap cleanup EXIT
 cleanup  # 前回の残りがあれば片付ける（名前が townscan-test-* のものだけ）
 
 echo "== テスト用イメージを作る"
-docker build --quiet --target test -t "$IMG" backend >/dev/null
+docker build --quiet --target test -f pipeline/loader.Dockerfile -t "$IMG" pipeline >/dev/null
 
 echo "== 使い捨ての Postgres を起動する（${DB}・mem_limit 256m）"
 docker network create --internal "$NET" >/dev/null
@@ -41,13 +41,12 @@ done
 
 echo "== テストを流す"
 set +e
-# dev-up.sh・login-secrets.sh のテスト（tests/test_dev_up.py・tests/test_login_secrets.py）が読めるよう、スクリプトを読み取り専用で渡す
-# （偽の docker・infisical で流すので、本物の docker・infisical は使わない）
+# リポジトリを読み取り専用で重ねる（テストとスクリプトは /repo から読む。dev-up.sh・login-secrets.sh のテストは偽の docker・infisical で流すので、
+# 本物の docker・infisical は使わない）
 docker run --rm --name "$RUNNER" --network "$NET" --memory 384m \
-  -v "$PWD/scripts/dev-up.sh:/scripts/dev-up.sh:ro" -e DEV_UP_SCRIPT=/scripts/dev-up.sh \
-  -v "$PWD/scripts/login-secrets.sh:/scripts/login-secrets.sh:ro" -e LOGIN_SECRETS_SCRIPT=/scripts/login-secrets.sh \
+  -v "$PWD:/repo:ro" -w /repo \
   -e TEST_DATABASE_URL="postgresql://townscan:$PW@$DB:5432/townscan_test" \
-  "$IMG" python -m pytest -q "$@"
+  "$IMG" python -m pytest -q -p no:cacheprovider --rootdir /repo pipeline/dbtests scripts/tests "$@"
 status=$?
 set -e
 

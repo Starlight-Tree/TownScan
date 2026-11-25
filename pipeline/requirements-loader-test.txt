@@ -1,0 +1,8 @@
+# ローダーの DB のテスト（pipeline/dbtests）と、スクリプトのテスト（scripts/tests）用。本番のイメージには入れない。固定版。
+-r requirements-loader.txt
+iniconfig==2.3.1
+packaging==26.4
+pillow==13.0.0
+pluggy==1.7.0
+Pygments==2.21.0
+pytest==9.2.0

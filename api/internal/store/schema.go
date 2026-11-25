@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// DB の定義。backend/db/schema.sql・backend/db/auth.sql の写し（Python の API を消すまで、正本は backend/db/。
-// store_test.go の TestSchemaMatchesBackend が、同じ内容かを確かめる）。どちらも何度流しても同じ（IF NOT EXISTS）。
+// DB の定義。pipeline/sql/schema.sql・pipeline/sql/auth.sql（ローダーが使う）の写し。
+// store_test.go の TestSchemaMatchesLoaderCopy が、同じ内容かを確かめる。どちらも何度流しても同じ（IF NOT EXISTS）。
 // auth.sql は、画面のサーバー（Better Auth）が使う表で、api が作る約束（spec-prototype §2.1）。
 
 //go:embed sql/schema.sql
@@ -18,12 +18,12 @@ var schemaSQL string
 //go:embed sql/auth.sql
 var authSQL string
 
-// history.sql は、会話の履歴の表（Go の API だけが使う。backend/db/ に写しは無い）。auth_user を参照するので、authSQL のあとに流す。
+// history.sql は、会話の履歴の表（Go の API だけが使う。pipeline/sql/ に写しは無い）。auth_user を参照するので、authSQL のあとに流す。
 //
 //go:embed sql/history.sql
 var historySQL string
 
-// 同時に流れても（api の起動とローダー）スキーマ適用が競合しないための鍵。backend/app/db.py の _SCHEMA_LOCK_KEY と同じ値
+// 同時に流れても（api の起動とローダー）スキーマ適用が競合しないための鍵。pipeline/db.py の _SCHEMA_LOCK_KEY と同じ値
 const schemaLockKey int64 = 704_218_001
 
 // ApplySchema は、schema.sql・auth.sql・history.sql を、この順に 1 つのトランザクションで流す。どれも冪等（既存の表・行は変えない）なので、

@@ -3,7 +3,7 @@
 #   http://127.0.0.1:3500            # 画面（web）
 #   http://127.0.0.1:8500/api/health # API（Go。仕様のページは無い。契約は docs/spec-prototype.md §4.4 と contract/）
 # FastAPI 版の API に替える（切り替え中の比較用。消す予定）: scripts/dev-up.sh --api python（上書きは compose.python-api.yaml。仕様ページは /api/docs）。
-# データの読み込み（pipeline の出力 → DB）は Python の仕事: docker compose run --rm loader python -m app.load --run /data/townscan/run1/out
+# データの読み込み（pipeline の出力 → DB）は Python の仕事: docker compose run --rm loader python -m pipeline.load --run /data/townscan/run1/out
 # ポートは 127.0.0.1 だけに公開する。他のローカルのサービス（JobNavi 3200/8200、ShopOrder 3400/8400、DocuNavi 5433）と重ねない。変えない。
 # db は公開しない。Docker VM の空きが少ない（約 0.5 GB）ため、mem_limit を付けてある（db 256m・api 1g・web 512m）。api の 1g は、Go の JSON の読み込みが本文の大きさの数十倍のメモリーを使うため（本文の上限は 4 MiB。api/README.md）。
 # ログイン（任意。Better Auth・Google だけ）: web が画面のサーバーの中で動かし、api は web の JWKS で JWT を検証するだけ。仕様: docs/spec-prototype.md §2.1
@@ -82,10 +82,11 @@ services:
     restart: unless-stopped
 
   # データの読み込み（pipeline の出力 → DB）。Python の仕事（ADR 0005）。常駐しない（profiles: tools）。
-  # 使い方: docker compose run --rm loader python -m app.load --run /data/townscan/run1/out [--check]
+  # 使い方: docker compose run --rm loader python -m pipeline.load --run /data/townscan/run1/out [--check]
   loader:
     build:
-      context: ./backend
+      context: ./pipeline
+      dockerfile: loader.Dockerfile
       target: runtime
     profiles: ["tools"]
     labels:

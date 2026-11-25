@@ -1,0 +1,4 @@
+# ローダー（pipeline/load.py）だけの依存。固定版。pipeline の解析の依存（../requirements.txt）とは別。
+psycopg==3.3.9
+psycopg-binary==3.3.9
+typing_extensions==4.16.0

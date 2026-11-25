@@ -171,10 +171,10 @@ done
 if [ -f data/townscan/run1/out/run.json ]; then
   echo "== 実データを読み込む（同じ run_id なら置き換え）"
   docker compose build loader
-  docker compose run --rm -T loader python -m app.load --run /data/townscan/run1/out
+  docker compose run --rm -T loader python -m pipeline.load --run /data/townscan/run1/out
 else
   echo "== 実データ（data/townscan/run1/out/run.json）がまだ無いので、読み込みは飛ばします。"
-  echo "   pipeline の出力を置いたあとで: docker compose run --rm -T loader python -m app.load --run /data/townscan/run1/out"
+  echo "   pipeline の出力を置いたあとで: docker compose run --rm -T loader python -m pipeline.load --run /data/townscan/run1/out"
 fi
 
 # 6. 結果

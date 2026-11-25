@@ -72,10 +72,10 @@ func marshal(t *testing.T, v any) string {
 
 // ---- スキーマ ----
 
-func TestSchemaMatchesBackend(t *testing.T) {
-	dir := os.Getenv("BACKEND_DB_DIR")
+func TestSchemaMatchesLoaderCopy(t *testing.T) {
+	dir := os.Getenv("PIPELINE_SQL_DIR")
 	if dir == "" {
-		t.Skip("BACKEND_DB_DIR が未設定のため、backend/db/ との一致の検査を飛ばします（scripts/test-go.sh は読み取り専用でマウントして設定する）")
+		t.Skip("PIPELINE_SQL_DIR が未設定のため、pipeline/sql/ との一致の検査を飛ばします（scripts/test-go.sh は読み取り専用でマウントして設定する）")
 	}
 	for name, embedded := range map[string]string{"schema.sql": schemaSQL, "auth.sql": authSQL} {
 		want, err := os.ReadFile(dir + "/" + name)
@@ -83,7 +83,7 @@ func TestSchemaMatchesBackend(t *testing.T) {
 			t.Fatal(err)
 		}
 		if string(want) != embedded {
-			t.Errorf("internal/store/sql/%s が backend/db/%s と違います（写しを更新してください）", name, name)
+			t.Errorf("internal/store/sql/%s が pipeline/sql/%s と違います（写しを更新してください）", name, name)
 		}
 	}
 }

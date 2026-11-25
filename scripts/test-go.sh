@@ -6,7 +6,7 @@
 # やること（失敗したら、その時点で止まる）:
 #   1. gofmt -l（出力があれば失敗）  2. go vet ./...
 #   3. 使い捨ての Postgres（tsgo-test-db・mem_limit 256m・データは tmpfs・公開しない）を、外へ出られないネットワークで起動し、
-#      backend/db/schema.sql・auth.sql の写しが一致することも確かめながら、go test -race -count=1 ./... を流す
+#      pipeline/sql/schema.sql・auth.sql の写しが一致することも確かめながら、go test -race -count=1 ./... を流す
 #      （DB のテストは、テストごとに新しいデータベースを作る。TEST_DATABASE_URL を渡すので、skip されない）
 # Go は、ローカルのイメージ docunavi-dev（/usr/local/go に 1.26.x。ダウンロード不要）で流す。ホストのユーザーで動かすので、作業ツリーに root 所有のファイルは残らない。
 # モジュールは、Docker の名前つきボリューム townscan-gomodcache（GOMODCACHE=/gomod）から読む。流すときは GOPROXY=off・外へ出られないネットワークなので、
@@ -113,7 +113,7 @@ LOG="$(mktemp)"
 set +e
 go_in_docker "$NET" off --name "$RUNNER" \
   -e TEST_DATABASE_URL="postgresql://townscan:$PW@$DB:5432/townscan_test" \
-  -e BACKEND_DB_DIR=/backend-db -v "$ROOT/backend/db:/backend-db:ro" \
+  -e PIPELINE_SQL_DIR=/pipeline-sql -v "$ROOT/pipeline/sql:/pipeline-sql:ro" \
   -- test -race -count=1 -v "${@:-./...}" >"$LOG" 2>&1
 status=$?
 set -e
