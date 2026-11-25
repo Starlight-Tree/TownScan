@@ -159,13 +159,19 @@ describe('チャット', () => {
     });
   });
 
-  it('日本語入力の変換を確定する Enter は、送信の操作として扱わない', () => {
-    setup();
-    const input = screen.getByRole('textbox', { name: '質問を入力' });
-    // 既定の動作を止められたら false が返る
-    expect(fireEvent.keyDown(input, { key: 'Enter', isComposing: true })).toBe(false);
-    expect(fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })).toBe(false);
-    expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(true);
+  it('日本語入力の変換を確定する Enter は、送信の操作として扱わない（送らず、入力もそのまま）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('届きました')));
+    const { input } = setup();
+    await userEvent.type(input(), 'へんかんちゅう');
+    // 変換の確定の Enter（isComposing）と、Safari が確定後に送る keyCode 229 の Enter: 送らない
+    expect(fireEvent.keyDown(input(), { key: 'Enter', isComposing: true })).toBe(true);
+    expect(fireEvent.keyDown(input(), { key: 'Enter', keyCode: 229 })).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(input()).toHaveValue('へんかんちゅう');
+    // 確定したあとの Enter は送る。既定の動作（改行の挿入）は止める
+    expect(fireEvent.keyDown(input(), { key: 'Enter' })).toBe(false);
+    expect(await screen.findByText('届きました')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('空白だけの質問は送らない', async () => {
@@ -882,5 +888,205 @@ describe('最初の画面: 地区の大きさ・分類の意味・「候補」�
     expect(document.querySelector('.chat__footnote')).toBeNull();
     expect(screen.queryByText(/模擬モデルで応答しています/)).not.toBeInTheDocument();
     expect(screen.queryByText(/ツールの結果をそのまま出しています/)).not.toBeInTheDocument();
+  });
+});
+
+describe('入力欄（DocuNavi の Composer と同じ作り: 枠の中の伸びる入力と、丸い送信ボタン）', () => {
+  const bodyOf = (call: number) => JSON.parse(String(fetchMock.mock.calls[call]![1]?.body)) as { messages: { role: string; content: string }[] };
+
+  it('1 つの枠（.chat__field）の中に、1 行から始まる入力（textarea）と、丸いアイコンだけの送信ボタン。名前は「送信」、見える文字は無い', () => {
+    const { input, send } = setup();
+    expect(input().tagName).toBe('TEXTAREA');
+    expect(input()).toHaveAttribute('id', 'chat-input');
+    expect(input()).toHaveAttribute('rows', '1');
+    expect(input()).toHaveAttribute('maxlength', '2000');
+    expect(input()).toHaveAttribute('placeholder', '例: 新規出現の候補は何件ありますか？');
+    const field = input().closest('.chat__field') as HTMLElement;
+    expect(field).not.toBeNull();
+    expect(field).toContainElement(send());
+    // 送信ボタンは、枠の下の行（.chat__footer）の右。DocuNavi の btn btn-primary btn-icon（TownScan の名前は btn--primary・btn--icon）
+    expect(send().closest('.chat__footer')).toBe(field.querySelector('.chat__footer'));
+    expect(send()).toHaveAttribute('type', 'submit');
+    expect(send()).toHaveAttribute('title', '送信（Enter）');
+    expect(send()).toHaveClass('btn', 'btn--primary', 'btn--icon');
+    expect(send()).toHaveTextContent('');
+    expect(send().querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    // 以前の、文字の「送信」ボタンと、別の 1 行入力（.input）は無い
+    expect(document.querySelector('input.input')).toBeNull();
+    expect(screen.queryByText('送信')).not.toBeInTheDocument();
+  });
+
+  it('送信ボタンは、空・空白だけの間は押せない。入力があれば押せる', async () => {
+    const { input, send } = setup();
+    expect(send()).toBeDisabled();
+    await userEvent.type(input(), '   ');
+    expect(send()).toBeDisabled();
+    await userEvent.type(input(), 'あ');
+    expect(send()).toBeEnabled();
+    await userEvent.clear(input());
+    expect(send()).toBeDisabled();
+  });
+
+  it('Enter で送る。送ったあと入力は空に戻る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('届きました')));
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    expect(await screen.findByText('届きました')).toBeInTheDocument();
+    expect(bodyOf(0).messages).toEqual([{ role: 'user', content: 'ひとつめ' }]);
+    expect(input()).toHaveValue('');
+  });
+
+  it('Shift+Enter は改行（送らない）。そのあと Enter で、改行を含めて 1 つの質問として送る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('届きました')));
+    const { input } = setup();
+    await userEvent.type(input(), '1 行目{Shift>}{Enter}{/Shift}2 行目');
+    expect(input()).toHaveValue('1 行目\n2 行目');
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Shift+Enter の既定の動作（改行）は止めない。Enter の既定の動作は止める
+    expect(fireEvent.keyDown(input(), { key: 'Enter', shiftKey: true })).toBe(true);
+    await userEvent.type(input(), '{Enter}');
+    await screen.findByText('届きました');
+    expect(bodyOf(0).messages).toEqual([{ role: 'user', content: '1 行目\n2 行目' }]);
+  });
+
+  it('送信ボタンで送ると、ボタンは押せなくなるが、フォーカスは入力欄へ戻る（body へ落ちない）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('届きました')));
+    const { input, send } = setup();
+    await userEvent.type(input(), 'ひとつめ');
+    await userEvent.click(send());
+    await screen.findByText('届きました');
+    expect(input()).toHaveFocus();
+    expect(input()).toHaveValue('');
+  });
+
+  it('返答を待つ間は、ボタンも Enter も送らない。入力した文は消えない', async () => {
+    fetchMock.mockReturnValue(new Promise<Response>(() => {}));
+    const { input, send } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText(/調べています/);
+    await userEvent.type(input(), 'ふたつめ');
+    expect(send()).toBeDisabled();
+    await userEvent.type(input(), '{Enter}');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(input()).toHaveValue('ふたつめ');
+  });
+
+  it('入力に合わせて高さを伸ばす（scrollHeight に合わせる）。高さを測れない環境では、CSS の既定のまま', async () => {
+    const { input } = setup();
+    // jsdom には、レイアウトが無い（scrollHeight は 0）
+    expect(input().style.height).toBe('auto');
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(120);
+    await userEvent.type(input(), 'あ');
+    expect(input().style.height).toBe('120px');
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(300);
+    await userEvent.type(input(), 'い');
+    expect(input().style.height).toBe('300px');
+  });
+
+  it('見えない見出し（label）で「質問を入力」と名前が付く', () => {
+    setup();
+    const label = document.querySelector('label[for="chat-input"]') as HTMLElement;
+    expect(label).toHaveTextContent('質問を入力');
+    expect(label).toHaveClass('visually-hidden');
+  });
+});
+
+describe('質問の時刻（質問の前に、中央に薄く出す。DocuNavi の MessageList と同じ）', () => {
+  const bodyOf = (call: number) => JSON.parse(String(fetchMock.mock.calls[call]![1]?.body)) as { messages: { role: string; content: string }[] };
+  const log = () => screen.getByRole('log');
+  /** チャット欄の直下の並び（時刻・質問・回答）。待ち表示などは除く */
+  const sequence = () =>
+    Array.from(log().children)
+      .map((el) => (el.tagName === 'TIME' ? 'time' : el.getAttribute('data-entry')))
+      .filter(Boolean);
+
+  // 本物の時計に頼らない: Date だけを止める（setTimeout などは、そのまま）
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 25, 9, 5));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('質問の前にだけ <time class="chat__time"> を出す（回答の前には出さない）。時刻は送った時刻の ISO 8601', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目'))).mockResolvedValueOnce(jsonResponse(reply('2 回目')));
+    const { input } = setup();
+    expect(document.querySelector('time')).toBeNull(); // 最初の画面には出さない
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    vi.setSystemTime(new Date(2026, 10, 25, 9, 7));
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('2 回目');
+
+    expect(sequence()).toEqual(['time', 'user', 'assistant', 'time', 'user', 'assistant']);
+    const times = Array.from(document.querySelectorAll('time'));
+    expect(times.map((t) => t.textContent)).toEqual(['今日 9:05', '今日 9:07']);
+    expect(times.map((t) => t.getAttribute('datetime'))).toEqual([new Date(2026, 10, 25, 9, 5).toISOString(), new Date(2026, 10, 25, 9, 7).toISOString()]);
+    for (const t of times) {
+      expect(t).toHaveClass('chat__time');
+      expect(t.nextElementSibling).toHaveAttribute('data-entry', 'user');
+    }
+    for (const a of document.querySelectorAll('[data-entry="assistant"]')) expect(a.previousElementSibling?.tagName).not.toBe('TIME');
+  });
+
+  it('表示は、描き直すたびに今の時刻と比べる（日が替われば、前の質問は「昨日」）', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目'))).mockResolvedValueOnce(jsonResponse(reply('2 回目')));
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    vi.setSystemTime(new Date(2026, 10, 26, 8, 0));
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('2 回目');
+    expect(Array.from(document.querySelectorAll('time')).map((t) => t.textContent)).toEqual(['昨日 9:05', '今日 8:00']);
+  });
+
+  it('送信に失敗した質問にも時刻は付く。「もう一度送る」で届いても、時刻は変わらない（付け直さない）', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'だめでした' } }, 500)).mockResolvedValueOnce(jsonResponse(reply('届きました')));
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByRole('alert');
+    expect(screen.getByText('未送信')).toBeInTheDocument();
+    expect(Array.from(document.querySelectorAll('time')).map((t) => t.textContent)).toEqual(['今日 9:05']);
+
+    vi.setSystemTime(new Date(2026, 10, 25, 9, 30));
+    await userEvent.click(screen.getByRole('button', { name: 'もう一度送る' }));
+    await screen.findByText('届きました');
+    expect(sequence()).toEqual(['time', 'user', 'assistant']);
+    expect(Array.from(document.querySelectorAll('time')).map((t) => t.textContent)).toEqual(['今日 9:05']);
+  });
+
+  it('「新しい会話」で、時刻も消える', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('届きました')));
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('届きました');
+    expect(document.querySelector('time')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    expect(document.querySelector('time')).toBeNull();
+  });
+
+  it('時刻（sentAt）は、API へ送らない。履歴は、これまでどおり役割と本文だけ', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目'))).mockResolvedValueOnce(jsonResponse(reply('2 回目')));
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('2 回目');
+
+    for (const call of [0, 1]) {
+      const raw = String(fetchMock.mock.calls[call]![1]?.body);
+      expect(raw).not.toContain('sentAt');
+      expect(raw).not.toContain('sent_at');
+      expect(raw).not.toContain('2026'); // 時刻の文字列（ISO 8601）も入っていない
+      expect(Object.keys(JSON.parse(raw) as object)).toEqual(['messages']);
+      for (const m of bodyOf(call).messages) expect(Object.keys(m).sort()).toEqual(['content', 'role']);
+    }
+    // 2 つ目の質問の本文は、履歴（1 つ目の質問・回答）と今の質問だけ
+    expect(bodyOf(1).messages).toEqual([
+      { role: 'user', content: 'ひとつめ' },
+      { role: 'assistant', content: '1 回目' },
+      { role: 'user', content: 'ふたつめ' },
+    ]);
   });
 });

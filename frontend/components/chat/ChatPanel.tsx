@@ -1,18 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, postChat } from '../../lib/api';
 import type { AnswerRef, ExpandRequest } from '../../lib/answer-view';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
+import { formatSentAt } from '../../lib/sentAt';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useRegisterNewConversation } from '../NewConversation';
 import { AnswerScope } from './AnswerScope';
 import { TILE_SIDE_TEXT } from './area-scale';
 import { ClassDefinitions } from './ClassGuide';
-import { buildRequestMessages, MAX_CONTENT_LENGTH } from './history';
+import { Composer } from './Composer';
+import { buildRequestMessages } from './history';
 import { ResultCard } from './ResultCard';
-import { CHAT_INPUT_ID, type ChatActions, type ChatEntry, type ResultActions } from './types';
+import type { ChatActions, ChatEntry, ResultActions } from './types';
 
 /** 答えられる質問の例 */
 const IN_SCOPE_SUGGESTIONS = [
@@ -78,7 +80,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   // 再送する中身と、画面上のどの発言か（失敗の印をつけ外しするため）
   const retryRef = useRef<{ messages: ChatRequestMessage[]; entryId: string } | null>(null);
@@ -138,15 +140,18 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
     [],
   );
 
+  /** 質問を送る。受け付けたら true（空・返答待ちのときは false で、入力欄の文を残す） */
   const send = useCallback(
-    (raw: string) => {
+    (raw: string): boolean => {
       const text = raw.trim();
-      if (!text || sending) return;
+      if (!text || sending) return false;
       const messages = buildRequestMessages(entries, text);
       const entryId = newId();
-      setEntries((prev) => [...prev, { id: entryId, role: 'user', content: text }]);
+      // 時刻は、質問を作ったこの端末で付ける（表示だけに使う。API へは送らない: messages は buildRequestMessages が役割と本文だけで作る）
+      setEntries((prev) => [...prev, { id: entryId, role: 'user', content: text, sentAt: new Date().toISOString() }]);
       setInput('');
       void request(messages, entryId);
+      return true;
     },
     [entries, request, sending],
   );
@@ -186,15 +191,13 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
     [actions, send],
   );
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    send(input);
-  };
-
-  // 日本語入力の変換を確定する Enter では送らない
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault();
-  };
+  // 入力欄から送る。送信ボタンで送ると、ボタンが押せなくなってフォーカスが body へ落ちるので、入力欄へ戻す（指で触る端末では移さない）
+  const submit = useCallback(
+    (text: string) => {
+      if (send(text)) focusComposer();
+    },
+    [send, focusComposer],
+  );
 
   return (
     <section
@@ -215,13 +218,22 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
             onShowMap={(opener) => actions.expand(null, { type: 'view', view: 'map' }, opener)}
           />
         )}
-        {entries.map((entry) =>
-          entry.role === 'user' ? (
-            <div key={entry.id} data-entry="user" className={entry.failed ? 'msg msg--user msg--failed' : 'msg msg--user'}>
-              <span className="visually-hidden">あなた: </span>
-              {entry.content}
-              {entry.failed && <span className="msg__note">未送信</span>}
-            </div>
+        {entries.map((entry) => {
+          // 質問の前に、その時刻を薄く出す（時刻の無い発言・読めない値には出さない）
+          const sentLabel = entry.role === 'user' && entry.sentAt ? formatSentAt(entry.sentAt, new Date()) : null;
+          return entry.role === 'user' ? (
+            <Fragment key={entry.id}>
+              {sentLabel && entry.sentAt && (
+                <time className="chat__time" dateTime={entry.sentAt}>
+                  {sentLabel}
+                </time>
+              )}
+              <div data-entry="user" className={entry.failed ? 'msg msg--user msg--failed' : 'msg msg--user'}>
+                <span className="visually-hidden">あなた: </span>
+                {entry.content}
+                {entry.failed && <span className="msg__note">未送信</span>}
+              </div>
+            </Fragment>
           ) : (
             <div key={entry.id} data-entry="assistant" className="msg msg--assistant">
               <span className="visually-hidden">TownScan: </span>
@@ -247,8 +259,8 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
                 </details>
               )}
             </div>
-          ),
-        )}
+          );
+        })}
         {sending && (
           <div className="msg msg--assistant msg--pending" role="status">
             <span className="dots" aria-hidden="true">
@@ -294,26 +306,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
         </div>
       )}
 
-      <form className="chat__composer" onSubmit={onSubmit}>
-        <label htmlFor={CHAT_INPUT_ID} className="visually-hidden">
-          質問を入力
-        </label>
-        <input
-          id={CHAT_INPUT_ID}
-          ref={inputRef}
-          type="text"
-          className="input"
-          autoComplete="off"
-          placeholder="例: 新規出現の候補は何件ありますか？"
-          maxLength={MAX_CONTENT_LENGTH}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <button type="submit" className="btn btn--primary" disabled={sending || input.trim() === ''}>
-          送信
-        </button>
-      </form>
+      <Composer value={input} onChange={setInput} pending={sending} onSend={submit} inputRef={inputRef} />
     </section>
   );
 }

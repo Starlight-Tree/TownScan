@@ -96,13 +96,19 @@ describe('チャット欄のスクロールする枠: 中身のフォーカス�
     expect(ring()).toBe(5);
   });
 
-  it('.chat__scroll（overflow-y: auto）: 左に、輪が収まる余白を取り、同じだけの負の余白で、見かけの位置を保つ', () => {
+  it('.chat__scroll（overflow-y: auto）: 左右の余白は --chat-pad で、その下限（1.25rem）も、狭い画面の余白（0.75rem）も、輪より大きい。見かけの位置を保つ負の余白は要らない', () => {
     const body = ruleBody('.chat__scroll');
     expect(body).toMatch(/overflow-y\s*:\s*auto/);
-    const padding = edges(body, 'padding');
-    const margin = edges(body, 'margin');
-    expect(padding[3]).toBeGreaterThanOrEqual(ring());
-    expect(margin[3]).toBe(-padding[3]);
+    expect(/(?:^|[\s;{])padding\s*:\s*([^;]+);/.exec(body)?.[1]?.trim()).toBe('1.5rem var(--chat-pad) 1.5rem');
+    expect(/(?:^|[\s;{])margin(?:-left)?\s*:/.test(body)).toBe(false);
+    // --chat-pad は max(1.25rem, …)。下限の 1.25rem（20px）が、輪の長さ以上
+    const floor = /--chat-pad:\s*max\(\s*([\d.]+)rem\s*,/.exec(readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8'));
+    expect(floor, '--chat-pad の下限').not.toBeNull();
+    expect(Number(floor![1]) * 16).toBeGreaterThanOrEqual(ring());
+    // 420px 以下の余白（0.75rem = 12px）も、輪の長さ以上
+    const narrow = /@media \(max-width: 420px\) \{\s*\.chat__scroll \{\s*padding:\s*([\d.]+)rem;/.exec(css);
+    expect(narrow, '420px 以下の .chat__scroll').not.toBeNull();
+    expect(Number(narrow![1]) * 16).toBeGreaterThanOrEqual(ring());
   });
 
   it('.chat__chips（overflow-x: auto。縦も切れる）: 上・左右・下に、輪が収まる余白を取り、上・左右は同じだけの負の余白で位置を保つ', () => {

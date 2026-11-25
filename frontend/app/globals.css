@@ -13,6 +13,10 @@
   --text: #1f2328;
   --muted: #5c6470;
   --faint: #6a717c;
+  /* 会話の文字の色（DocuNavi と同じ値）。回答の本文は少し淡く、強調だけ濃く（ダークは本文を少し暗く、強調を白く）。--text-muted は --muted と同じ値で、DocuNavi での名前（質問の時刻の色） */
+  --text-muted: #5c6470;
+  --text-body: #4a515b;
+  --text-strong: #0f1216;
   --primary: #2c4fcf;
   --primary-dark: #1f3bab;
   --tag-bg: #e9eefc;
@@ -28,9 +32,14 @@
   --input-border: #8a919b;
   --danger: #a32020;
   --shadow: rgba(15, 18, 22, 0.14);
+  /* チャットの入力欄の枠の影（DocuNavi の .composer-field と同じ値。色の直書きは、この定義だけに置く） */
+  --field-shadow: rgb(0 0 0 / 0.05);
   /* 拡大ビュー（ダイアログ）の後ろの暗い部分。ライトでも、下のページを沈ませる濃さ */
   --scrim: rgba(15, 18, 22, 0.55);
   --radius: 12px;
+  /* 会話の本文の幅（DocuNavi と同じ 46rem = 736px）と、左右の余白。余白は、会話・質問の例の行・入力欄で同じ式（幅が余れば中央に寄せ、足りなければ 1.25rem） */
+  --chat-w: 46rem;
+  --chat-pad: max(1.25rem, calc((100% - var(--chat-w)) / 2));
   /* 欧文は Inter、日本語は Noto Sans JP の可変フォント（どちらも app/layout.tsx が読み込む）。読み込み前・失敗時は、OS の標準書体 */
   --font: var(--font-inter), 'Noto Sans JP Variable', system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
 
@@ -66,6 +75,9 @@
     --text: #e6e8eb;
     --muted: #9aa1ab;
     --faint: #8a919b;
+    --text-muted: #9aa1ab;
+    --text-body: #c3c8d0;
+    --text-strong: #ffffff;
     --primary: #8aa2ff;
     --primary-dark: #a9baff;
     --tag-bg: #232a45;
@@ -81,6 +93,7 @@
     --input-border: #6a717c;
     --danger: #ff8a80;
     --shadow: rgba(0, 0, 0, 0.55);
+    --field-shadow: rgb(0 0 0 / 0.05);
     --scrim: rgba(0, 0, 0, 0.7);
     --class-new: #ff8a57;
     --class-omit: #34d399;
@@ -107,6 +120,9 @@
   --text: #e6e8eb;
   --muted: #9aa1ab;
   --faint: #8a919b;
+  --text-muted: #9aa1ab;
+  --text-body: #c3c8d0;
+  --text-strong: #ffffff;
   --primary: #8aa2ff;
   --primary-dark: #a9baff;
   --tag-bg: #232a45;
@@ -122,6 +138,7 @@
   --input-border: #6a717c;
   --danger: #ff8a80;
   --shadow: rgba(0, 0, 0, 0.55);
+  --field-shadow: rgb(0 0 0 / 0.05);
   --scrim: rgba(0, 0, 0, 0.7);
   --class-new: #ff8a57;
   --class-omit: #34d399;
@@ -189,7 +206,8 @@ a:hover {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -392,7 +410,7 @@ code {
 
 /* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
    1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
-   開いた表示だと、本文は窓より 16rem 狭い。チャット（`/`）は 1 列だけなので、サイドパネルの開閉で、本文の並びを切り替える規則は無い（チャットが、残りの幅の中央に最大 760px で収まる） */
+   開いた表示だと、本文は窓より 16rem 狭い。チャット（`/`）は 1 列だけなので、サイドパネルの開閉で、本文の並びを切り替える規則は無い（チャットは、残りの幅の中央に、幅 46rem の列で収まる） */
 .app-sidebar { display: none; }
 .app-rail-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -603,6 +621,17 @@ p.banner {
   margin-left: 8px;
 }
 
+/* 丸いアイコンだけのボタン（チャットの送信）。DocuNavi の .btn-icon と同じ。min-height は、上の .btn の 44px を外す（DocuNavi の .btn には無い。無いと縦長の楕円になる） */
+.btn--icon {
+  display: inline-grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  min-height: 0;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+}
+
 .input,
 .select {
   min-height: 44px;
@@ -690,12 +719,13 @@ p.banner {
 
 /* ---- 画面 `/` ----
    チャットの 1 列だけ。常設の結果領域は無い（地図・グラフ・写真の比較は、結果カードのボタンで開く拡大ビュー。下の .expanded-view）。
-   幅 1000px 以上は、中央に最大 760px。それ未満は全幅 */
+   チャットは、枠も背景も持たず、本文の領域いっぱいに広がる（ページの地が見える）。会話・質問の例の行・入力欄は、幅 46rem（--chat-w）の列を中央に置く（DocuNavi と同じ。左右の余白は --chat-pad）。
+   幅 1000px 以上は、本文の高さいっぱい。それ未満は、下の @media で高さを決める */
 .home {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  padding: 16px;
+  padding: 0;
 }
 
 .home > .chat {
@@ -704,12 +734,9 @@ p.banner {
 
 @media (min-width: 1000px) {
   .home {
-    grid-template-columns: minmax(0, 760px);
     grid-template-rows: minmax(0, 1fr);
-    justify-content: center;
     flex: 1;
     min-height: 0;
-    padding: 16px 24px;
   }
   .home > .chat {
     height: auto;
@@ -891,12 +918,7 @@ p.banner {
 .chat {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   min-height: 0;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
 }
 
 .chat__scroll {
@@ -908,18 +930,17 @@ p.banner {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-right: 4px;
-  /* overflow-y: auto の枠は、辺で中身のフォーカスの輪（3px + 離れ 2px = 5px）を切る。左の先頭に接する部品（「地図で見る」・質問の例・「使ったツール」）の輪が収まる余白（6px）を内側に取り、
-     同じだけの負の余白で、見かけの位置を保つ（右は、失敗した発言の破線の枠（4px）に合わせた余白のまま） */
-  padding-left: 6px;
-  margin-left: -6px;
+  gap: 1.5rem;
+  /* 会話の本文は読みやすい幅（--chat-w）に収め、広い画面では中央に置く（DocuNavi の .message-list と同じ）。左右の余白は、質問の例の行・入力欄と同じ式。
+     overflow-y: auto の枠は、辺で中身のフォーカスの輪（3px + 離れ 2px = 5px）を切るが、左右の余白は 1.25rem（20px）以上あるので、輪は収まる（上の余白も同じ） */
+  padding: 1.5rem var(--chat-pad) 1.5rem;
 }
 
 .chat__tools {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  padding: 0 var(--chat-pad);
 }
 
 .chat__chips {
@@ -941,24 +962,111 @@ p.banner {
   white-space: nowrap;
 }
 
+/* ---- 入力欄（DocuNavi の Composer と同じ。components/chat/Composer.tsx）----
+   角丸の枠（.chat__field）の中に、伸びる入力（textarea）と、下の行（右に丸い送信ボタン）。枠は、フォーカスが中にあるあいだ、主色の縁と輪で示す */
 .chat__composer {
-  display: flex;
-  gap: 8px;
+  padding: 0.25rem var(--chat-pad) 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  background: var(--bg);
 }
 
+.chat__input {
+  display: block;
+  width: 100%;
+  min-height: 2.9rem;
+  /* 長い文は、入力に合わせて伸ばす（Composer.tsx）。上限を超えたら、中でスクロールする */
+  max-height: 13rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  /* DocuNavi の本文は 16px（TownScan の body は 15px）。入力の文字を、会話の文字（1rem）にそろえる。16px 未満だと、iOS が入力の拡大を始める */
+  font-size: 1rem;
+  line-height: 1.65;
+  overflow-y: auto;
+  resize: none;
+}
+
+.chat__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.chat__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* DocuNavi は、左に「質問対象」の行（.composer-footer-start）があり、space-between で右へ寄る。TownScan には左の行が無いので、右へ寄せる */
+  margin-left: auto;
+}
+
+/* 入力欄。範囲の表示を枠の中に入れるため、枠線は textarea ではなく外側に付ける */
+.chat__field {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 1px 2px var(--field-shadow);
+}
+
+.chat__field:focus-within {
+  border-color: var(--primary);
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.chat__field .chat__input {
+  border: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: transparent;
+}
+
+.chat__field .chat__input:focus-visible {
+  outline: none;
+}
+
+/* 入力欄の下の行（右に送信ボタン）は、枠の中に入れる */
+.chat__field .chat__footer {
+  margin-top: 0;
+  padding: 0.35rem 0.6rem 0.5rem;
+}
+
+@media (max-width: 420px) {
+  .chat__scroll {
+    padding: 0.75rem;
+  }
+
+  .chat__tools,
+  .chat__composer {
+    padding-inline: 0.75rem;
+  }
+}
 
 .msg {
   font-size: 14px;
   line-height: 1.7;
 }
 
+/* 質問の前の時刻の区切り（中央・小さく・薄く）。.chat__scroll の gap は 1.5rem なので、回答との間を保ったまま、質問に寄せる（DocuNavi の .message-time と同じ） */
+.chat__time {
+  display: block;
+  margin-bottom: -0.75rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* 質問は、枠なしの無彩色の淡い背景（右寄せ。回答の本文を主役にする。DocuNavi の .message-question と同じ）。文字は通常の色 */
 .msg--user {
   align-self: flex-end;
-  max-width: 88%;
-  background: var(--primary);
-  color: var(--on-primary);
-  border-radius: 12px 12px 2px 12px;
-  padding: 10px 14px;
+  max-width: 85%;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius) var(--radius) 0.25rem var(--radius);
+  background: var(--surface-muted);
+  font-size: 1rem;
+  line-height: 1.7;
   overflow-wrap: anywhere;
 }
 
@@ -980,15 +1088,27 @@ p.banner {
   gap: 10px;
 }
 
+/* 回答の本文は、枠で囲まず、少し淡い色（--text-body）で読ませる（DocuNavi の .message-assistant と同じ大きさ・行間・色）。
+   回答の入れ物（.msg--assistant）には掛けない: 中の結果カード・条件の帯・表・質問の例は、自分の大きさを持つか、入れ物の文字を引き継ぐので、掛けると変わってしまう */
 .msg__text {
+  font-size: 1rem;
+  line-height: 1.85;
+  color: var(--text-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+.msg__text strong {
+  color: var(--text-strong);
+}
+
+/* 待っている間の「調べています…」。大きさ・行間は回答の本文と同じ（色は、本文より弱い --muted） */
 .msg--pending {
   flex-direction: row;
   align-items: center;
   gap: 10px;
+  font-size: 1rem;
+  line-height: 1.85;
   color: var(--muted);
 }
 

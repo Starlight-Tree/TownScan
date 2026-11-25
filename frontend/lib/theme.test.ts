@@ -114,7 +114,8 @@ describe('globals.css のダークの値（2 か所と、直書きの色）', ()
 
   it('ダークは、ライトと同じ変数をすべて定義している（定義漏れで、ライトの色が残らない）', () => {
     const names = (block: string) => declarations(block).map((d) => d.split(':')[0]);
-    const colorNames = names(lightBlock).filter((n) => n !== '--radius' && n !== '--font');
+    // 色でない変数（角丸・書体・会話の本文の幅と余白）は、ダークで変えない（ライトにだけある）
+    const colorNames = names(lightBlock).filter((n) => !['--radius', '--font', '--chat-w', '--chat-pad'].includes(n as string));
     expect(colorNames.length).toBeGreaterThan(30);
     expect([...names(darkManualBlock)].sort()).toEqual([...colorNames].sort());
   });
@@ -130,6 +131,41 @@ describe('globals.css のダークの値（2 か所と、直書きの色）', ()
     expect(lightBlock).toContain('color-scheme: light dark;');
     expect(css).toContain(":root[data-theme='light'] { color-scheme: light; }");
     expect(css).toContain(":root[data-theme='dark'] { color-scheme: dark; }");
+  });
+
+  // チャットの見た目を DocuNavi にそろえるための変数。値は DocuNavi の frontend/src/styles.css の :root と同じ（--accent は TownScan の --primary、--accent-text は --on-primary）
+  it('会話の文字の色（--text-muted・--text-body・--text-strong）は、DocuNavi と同じ値で、ライトとダークの 3 か所にある。--text-muted は --muted と同じ値', () => {
+    const light = varsOf(lightBlock);
+    expect(light['--text-muted']).toBe('#5c6470');
+    expect(light['--text-body']).toBe('#4a515b');
+    expect(light['--text-strong']).toBe('#0f1216');
+    for (const dark of [varsOf(darkMediaBlock), varsOf(darkManualBlock)]) {
+      expect(dark['--text-muted']).toBe('#9aa1ab');
+      expect(dark['--text-body']).toBe('#c3c8d0');
+      expect(dark['--text-strong']).toBe('#ffffff');
+    }
+    expect(light['--text-muted']).toBe(light['--muted']);
+    expect(varsOf(darkManualBlock)['--text-muted']).toBe(varsOf(darkManualBlock)['--muted']);
+  });
+
+  it('DocuNavi と同じ値の変数: 地・面・枠・主色・主色の上の文字（TownScan の --primary は DocuNavi の --accent）。差が出たらここで気づく', () => {
+    const docunavi = {
+      light: { '--bg': '#f6f7f9', '--surface': '#ffffff', '--surface-muted': '#eef0f3', '--border': '#e1e4e9', '--text': '#1f2328', '--primary': '#2c4fcf', '--on-primary': '#ffffff' },
+      dark: { '--bg': '#15171b', '--surface': '#1b1d21', '--surface-muted': '#22252a', '--border': '#2a2e35', '--text': '#e6e8eb', '--primary': '#8aa2ff', '--on-primary': '#101319' },
+    };
+    expect(varsOf(lightBlock)).toMatchObject(docunavi.light);
+    expect(varsOf(darkMediaBlock)).toMatchObject(docunavi.dark);
+    expect(varsOf(darkManualBlock)).toMatchObject(docunavi.dark);
+  });
+
+  it('会話の本文の幅は DocuNavi と同じ 46rem、左右の余白も同じ式（幅が余れば中央に寄せ、足りなければ 1.25rem）', () => {
+    const light = varsOf(lightBlock);
+    expect(light['--chat-w']).toBe('46rem');
+    expect(light['--chat-pad']).toBe('max(1.25rem, calc((100% - var(--chat-w)) / 2))');
+  });
+
+  it('入力欄の枠の影（--field-shadow）は DocuNavi の .composer-field と同じ値で、色の直書きは変数の定義だけにある', () => {
+    for (const block of [lightBlock, darkMediaBlock, darkManualBlock]) expect(varsOf(block)['--field-shadow']).toBe('rgb(0 0 0 / 0.05)');
   });
 
   it('色の直書き（#xxxxxx・rgba）は、変数の定義だけに置く（本体は var(--…) を使う）', () => {
@@ -224,6 +260,8 @@ describe.each([
   const textPairs: Array<[string, string]> = [
     ['text', 'bg'], ['text', 'surface'], ['text', 'surface-muted'], ['text', 'tag-bg'],
     ['muted', 'bg'], ['muted', 'surface'], ['muted', 'surface-muted'],
+    // チャット: 回答の本文（--text-body）・強調（--text-strong）は地（--bg）の上、質問の時刻（--text-muted）も地の上、質問の文字（--text）は質問の背景（--surface-muted）の上
+    ['text-body', 'bg'], ['text-body', 'surface'], ['text-strong', 'bg'], ['text-strong', 'surface'], ['text-muted', 'bg'], ['text-muted', 'surface'],
     ['faint', 'input-bg'],
     ['primary', 'surface'], ['primary', 'bg'],
     // サイドパネル: 開いている画面の項目（主色の文字を --tag-bg の地に）と、ツールチップ（--bg の文字を --text の地に）

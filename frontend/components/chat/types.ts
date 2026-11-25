@@ -38,6 +38,11 @@ export interface ChatEntry {
   content: string;
   /** 送信に失敗した発言（サーバーには届いていない。次の質問の履歴に含めない） */
   failed?: boolean;
+  /**
+   * 質問を送った時刻（ISO 8601）。利用者の発言だけが持ち、端末で作る（回答には付けない）。質問の前に、薄い時刻として出す（lib/sentAt.ts）。
+   * 画面の表示のためだけの値で、API へは送らない（履歴は役割と本文だけ。history.ts）
+   */
+  sentAt?: string;
   results?: ToolResult[];
   tool_calls?: ToolCall[];
 }

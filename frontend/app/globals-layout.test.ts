@@ -47,17 +47,21 @@ const decl = (body: string, property: string): string | null => {
 };
 
 describe('チャット（`/`）は 1 列だけ（常設の結果領域も、左右に並べる・縦に積む切り替えも無い）', () => {
-  it('基本は 1 列。幅 1000px 以上は、中央に最大 760px の 1 列（チャットは、本文の残りの高さをすべて使う）', () => {
+  it('基本は 1 列で、枠も余白も持たない。幅 1000px 以上も同じ 1 列で、本文の高さいっぱい（幅の上限は .home に無い。会話の本文を 46rem の列に収めるのは、チャットの中の --chat-pad）', () => {
     const home = ruleIn(css, '.home');
     expect(decl(home, 'grid-template-columns')).toBe('minmax(0, 1fr)');
+    expect(decl(home, 'padding')).toBe('0');
     // 同じ条件の @media が複数ある（本文の高さの規則など）。チャットの 1 列の規則を持つ方を取る
     const wide = mediaBlocks('@media (min-width: 1000px)').find((b) => b.includes('.home > .chat'))!;
     expect(wide).toBeDefined();
     const body = ruleIn(wide, '.home');
-    expect(decl(body, 'grid-template-columns')).toBe('minmax(0, 760px)');
-    expect(decl(body, 'justify-content')).toBe('center');
+    // 列の幅（旧: minmax(0, 760px)）と、それを中央に置く指定は無い。幅いっぱいの 1 列のまま
+    expect(decl(body, 'grid-template-columns')).toBeNull();
+    expect(decl(body, 'justify-content')).toBeNull();
+    expect(decl(body, 'padding')).toBeNull();
     expect(decl(body, 'flex')).toBe('1');
     expect(decl(ruleIn(wide, '.home > .chat'), 'height')).toBe('auto');
+    expect(css).not.toContain('760px');
   });
 
   it('1000px 未満（ページ全体がスクロールする幅）: チャットは、内容が少なければ縮み、増えたら 64dvh（640px）で止まって中でスクロールする', () => {
