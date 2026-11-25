@@ -1,13 +1,13 @@
-"""契約の検査に使うデータを DIR に書く（API には入れない。入れるのは `python -m app.load --run DIR/run`）。
+"""契約の検査に使うデータを DIR に書く（API には入れない。入れるのは `python -m pipeline.load --run DIR/run`）。
 
-  DIR/run/    pipeline の出力の形（合成データ。backend/tests/synthetic.py の write_run）
+  DIR/run/    pipeline の出力の形（合成データ。contract/synthetic.py の write_run）
   DIR/tiles/  写真タイル（synthetic.py の write_tiles）に、画像の 404 を確かめるための故障を 3 つ足したもの
   DIR/outside.png  TILES_DIR の外にある、正しい PNG（シンボリックリンクの行き先）
 
 故障（support/expected.py の TILE_FAULTS と同じ）:
   A2 試験町の 2018 年 = ファイルが無い / A3 仮想町の 2018 年 = PNG ではないファイル / A3 仮想町の 2023 年 = TILES_DIR の外を指すリンク
 
-使い方: python contract/prepare_data.py --synthetic backend/tests/synthetic.py --out DIR
+使い方: python contract/prepare_data.py --synthetic contract/synthetic.py --out DIR
 （Pillow が要る。scripts/test-contract.sh は、contract のイメージの中で流す。アプリの API のコードは使わない）
 """
 
@@ -30,7 +30,7 @@ def load_synthetic(path: Path):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--synthetic", required=True, type=Path, help="合成データの生成スクリプト（backend/tests/synthetic.py）")
+    ap.add_argument("--synthetic", required=True, type=Path, help="合成データの生成スクリプト（contract/synthetic.py）")
     ap.add_argument("--out", required=True, type=Path, help="書き出す先（空のディレクトリ）")
     ns = ap.parse_args()
 

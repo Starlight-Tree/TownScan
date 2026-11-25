@@ -15,7 +15,7 @@ Next.js 16（App Router・TypeScript strict・Node 24）。仕様は [../docs/sp
 ## ログイン（任意。Better Auth・Google だけ）
 
 ログインは**任意**。しなくても、チャット・地図・精度は、今までどおり使える（ログインの有無で、機能や API の応答は変わらない）。ログインすると、サイドパネルの下のアカウントに、プロフィール画像（無い・読めないときは人型アイコン。`https://` の画像だけ表示）・メール・ログアウトが出る。
-JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、この画面のサーバーの中で動き、`pg` の接続プールで、TownScan の Postgres の `auth_` の表（`backend/db/auth.sql`）に入れる。
+JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、この画面のサーバーの中で動き、`pg` の接続プールで、TownScan の Postgres の `auth_` の表（`pipeline/sql/auth.sql`）に入れる。
 
 | 場所 | 役目 |
 |---|---|

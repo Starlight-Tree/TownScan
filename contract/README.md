@@ -1,8 +1,8 @@
 # contract/ — API の契約の検査
 
-TownScan の API（`/api/*`）が、**HTTP から見える振る舞い**を満たしているかを確かめる pytest。起動中の API へ HTTP だけで叩く。API の実装の言語に依らず、アプリのコード（`backend/`・将来の `api/`）は import しない。
-いまの Python（FastAPI）の API で全件合格することを確かめてから、Go の API（`docs/decisions/0005-api-in-go.md`）が同じ検査に合格することを、置き換えの条件にする（`docs/plan.md` の PG 段の出口条件①②）。
-**契約は、いまの振る舞いを固定する。** Python の API の本物のバグは契約にしない（見つけたら直すか、報告する）。
+TownScan の API（`/api/*`）が、**HTTP から見える振る舞い**を満たしているかを確かめる pytest。起動中の API へ HTTP だけで叩く。API の実装の言語に依らず、アプリのコード（`api/`）は import しない。
+契約は、最初の Python（FastAPI）の API で全件合格することを確かめてから、Go の API（`docs/decisions/0005-api-in-go.md`）が同じ検査に合格することを、置き換えの条件にした（`docs/plan.md` の PG 段の出口条件①②。Python の API は 2026-11-25 に消した）。
+**契約は、いまの振る舞いを固定する。** API の本物のバグは契約にしない（見つけたら直すか、報告する）。
 
 ## 流し方
 
@@ -14,8 +14,8 @@ CONTRACT_PHASES=main scripts/test-contract.sh python -k chat -x   # 開発用: �
 CONTRACT_PHASES=history scripts/test-contract.sh go -k h_l5       # 開発用: 履歴の構成だけ（Go だけ）。同時に別の作業が流すときは CONTRACT_PREFIX も変える
 ```
 
-`scripts/test-contract.sh` がやること（どの実装でも同じ）: ① 検査を流すイメージ（`contract/Dockerfile`。pytest・PyJWT・Pillow だけ）と、データの読み込みのイメージ（`backend/` の runtime。`python -m app.load` は API が Go になっても Python の仕事）と、対象の API のイメージを作る
-→ ② 使い捨ての Postgres（`townscan-contract-db`・mem_limit 256m・データは tmpfs）を、外へ出られない専用ネットワーク（`--internal`）で起動 → ③ 合成データを書いて（`contract/prepare_data.py`）、`python -m app.load --run` で DB へ入れ、**検査用の利用者 200 人を `auth_user` へ入れる**（構成 `history` が使う。下の「データの準備」）
+`scripts/test-contract.sh` がやること（どの実装でも同じ）: ① 検査を流すイメージ（`contract/Dockerfile`。pytest・PyJWT・Pillow だけ）と、データの読み込みのイメージ（`pipeline/loader.Dockerfile` の runtime。`python -m pipeline.load` は、API が Go でも Python の仕事）と、対象の API のイメージを作る
+→ ② 使い捨ての Postgres（`townscan-contract-db`・mem_limit 256m・データは tmpfs）を、外へ出られない専用ネットワーク（`--internal`）で起動 → ③ 合成データを書いて（`contract/prepare_data.py`）、`python -m pipeline.load --run` で DB へ入れ、**検査用の利用者 200 人を `auth_user` へ入れる**（構成 `history` が使う。下の「データの準備」）
 → ④ 構成ごとに、API を起動して検査を流して止める → ⑤ 結果の表を出し、`townscan-contract-*` を全部消す。ポートは公開しない（ホストの 8500・3500・5432 に触れない）。外への通信・実 API は無い（`LLM_PROVIDER=mock`）。
 API のログは、失敗した構成のときだけ末尾を出す。所要は、イメージが作ってあれば約 1 分（うち、DB が止まったときの検査 `dbdown` が約 30 秒。接続の待ちが各 10 秒前後かかる）。`history` は、Go の API が履歴を実装したあとの所要を、まだ測っていない（Go の API が履歴を持たない間は、検査そのものは約 1 秒で落ちる）。
 
@@ -29,7 +29,7 @@ API_BASE_URL=http://127.0.0.1:8600 CONTRACT_VARIANT=main python -m pytest contra
 |---|---|
 | `API_BASE_URL` | 叩く API（既定 `http://127.0.0.1:8500`）。合成データの run（`synthetic-test`）が入っていなければ、検査を始めずに止まる（開発用の API に流して、大量の失敗を出さないため） |
 | `CONTRACT_VARIANT` | API の構成（下の表。既定 `main`）。自分の構成の検査だけが流れる（ほかは `deselected`） |
-| `CONTRACT_FEATURES` | この API が持つ機能（空白かカンマ区切り。いまは `history` だけ）。機能の印 `@pytest.mark.history` の付いた検査は、ここに `history` が無いと、構成が合っていても `deselected`（Python の API に履歴の検査を流さない仕組み）。`scripts/test-contract.sh` は、対象が `go` のときだけ `history` を渡す。自分で起動した Go の API に流すときは、自分で付ける。構成 `history` を `CONTRACT_FEATURES` 無しで流すと、空振りさせずに止める |
+| `CONTRACT_FEATURES` | この API が持つ機能（空白かカンマ区切り。いまは `history` だけ）。機能の印 `@pytest.mark.history` の付いた検査は、ここに `history` が無いと、構成が合っていても `deselected`（履歴を持たない API に履歴の検査を流さない仕組み）。`scripts/test-contract.sh` は `history` を渡す。自分で起動した Go の API に流すときは、自分で付ける。構成 `history` を `CONTRACT_FEATURES` 無しで流すと、空振りさせずに止める |
 | `CONTRACT_USER_POOL` | 履歴の検査用の利用者の人数（既定 200）。`auth_user` に入れた人数と同じにする（`scripts/test-contract.sh` は `CONTRACT_HISTORY_USERS`〔既定 200〕を、入れる側と検査の側の両方に渡す）。使い切ると、`fresh_user()` がはっきり失敗する |
 | `CONTRACT_JWKS_BIND`・`CONTRACT_JWKS_PORT` | 偽の JWKS サーバー（検査のプロセスの中）の待ち受け先（既定 `0.0.0.0:8901`）。API の `AUTH_JWKS_URL` がここを指す |
 | `CONTRACT_AUTH_ISSUER` | 偽の画面のサーバーの発行元（既定 `https://auth.contract.test`）。API の `AUTH_ISSUER` と同じにする |
@@ -38,7 +38,7 @@ API_BASE_URL=http://127.0.0.1:8600 CONTRACT_VARIANT=main python -m pytest contra
 ## API の構成（variant）
 
 API は、環境変数（`compose.yaml` の api と同じ名前）だけで構成される。構成ごとに API を起動し直して、その構成の検査だけを流す（`@pytest.mark.variant(...)`。付けなければ `main`）。
-**機能の印 `@pytest.mark.history`**（構成の印とは別）は、会話の履歴の検査（H-系）に付ける。`CONTRACT_FEATURES` に `history` が無いときは、構成が合っていても外す。履歴は Go の API にだけ入れる（ADR 0006 の D8）ので、Python の API には流さない。既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す H-A5〜A7 も、この印で Python の API から外す（印が無いと、履歴の経路を持たない Python の API〔404〕に流れて落ちる）。
+**機能の印 `@pytest.mark.history`**（構成の印とは別）は、会話の履歴の検査（H-系）に付ける。`CONTRACT_FEATURES` に `history` が無いときは、構成が合っていても外す。履歴は Go の API にだけ入れる（ADR 0006 の D8）ので、履歴を持たない API には流さない。既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す H-A5〜A7 も、この印で Python の API から外す（印が無いと、履歴の経路を持たない Python の API〔404〕に流れて落ちる）。
 
 | 構成 | API の起動時の設定 | 確かめること | 検査 |
 |---|---|---|---|
@@ -83,11 +83,11 @@ API の起動時の設定（対象に関わらず同じ）: `DATABASE_URL`・`TI
 
 ## データの準備
 
-検査が読み戻すデータは、`backend/tests/synthetic.py` の合成データ（`kind=synthetic`、run_id `synthetic-test`）。`scripts/test-contract.sh` は、`contract/prepare_data.py` で書いて、`python -m app.load --run` で入れる。手で用意するなら:
+検査が読み戻すデータは、`contract/synthetic.py` の合成データ（`kind=synthetic`、run_id `synthetic-test`）。`scripts/test-contract.sh` は、`contract/prepare_data.py` で書いて、`python -m pipeline.load --run` で入れる。手で用意するなら:
 
 ```sh
-python contract/prepare_data.py --synthetic backend/tests/synthetic.py --out DIR   # DIR/run（pipeline の出力）・DIR/tiles（写真）・DIR/outside.png。Pillow が要る
-python -m app.load --run DIR/run                                                    # DATABASE_URL の DB へ（backend/ で）
+python contract/prepare_data.py --synthetic contract/synthetic.py --out DIR   # DIR/run（pipeline の出力）・DIR/tiles（写真）・DIR/outside.png。Pillow が要る
+python -m pipeline.load --run DIR/run                                              # DATABASE_URL の DB へ（リポジトリの直下で）
 # API は TILES_DIR=DIR/tiles で起動する
 ```
 
@@ -108,28 +108,15 @@ FROM generate_series(1, 200) AS n;
 1. **`api/Dockerfile` に `runtime` ターゲット**を作る。コンテナの 8000 番で `/api/*` を待ち受け、引数なしの起動で動く。環境変数は `compose.yaml` の api と同じ名前: `DATABASE_URL`・`TILES_DIR`・`LLM_PROVIDER`（`mock`）・`AUTH_ISSUER`・`AUTH_JWKS_URL`・`AUTH_AUDIENCE`。イメージは非 root で動くこと（読み取り専用のルートファイルシステムと、書き込めない `/work` で起動する）。
 2. `scripts/test-contract.sh` の「対象」の節（`case "$TARGET"`）は、`go` で `api/Dockerfile` があれば、`docker build --target runtime -t townscan-contract-api-go api` で作って流す形になっている（`TARGET_IMAGE`・`TARGET_PORT`・`target_build` の 3 つが差し込み口）。違う作り方・ポートなら、そこを直す。`api/` がまだ無いので、本物の Go のイメージでは確かめていない: `api/Dockerfile` が無いときの「未対応」（終了コード 2）と、一時的に置いた `FROM` が Python のイメージだけの `api/Dockerfile` で `go` の経路が最後まで流れることまで確かめた（その `api/` は消してある）。
 3. 実装が先に `scripts/test-contract.sh go` で流れる（読み取り → 認証 → 検出画像 → チャットの順に実装するなら、`-k` と `CONTRACT_PHASES` で、できたところから流す。構成 `main` の検査には、すべてのエンドポイントが入っている）。
-4. **スキーマの適用**: 構成 `empty` は、表を先に作ってから（`app.db.apply_schema`）API を起動する。Python の API は起動時にも `schema.sql`・`auth.sql` を適用する（`auth_` の表は画面のサーバーが使う）。Go の API が適用するか、別の経路（ローダー・起動の手順）が適用するかは、置き換えのときに決める（契約は HTTP だけなので、どちらでも通る。**決めないと、画面のログインが `auth_` の表を見つけられない**）。
-5. `compose.yaml` の api を Go のイメージに替えたあと、`scripts/verify.sh`（`contract` の段を含む全段）と `scripts/dev-up.sh` の実機で、画面の操作が従来どおりであることを確かめる（ADR 0005 の「結果」6）。Python の API を消したら、`scripts/test-contract.sh` の `python` の対象と、下の「残す検査」を整理する。
+4. **スキーマの適用**: 構成 `empty` は、表を先に作ってから（`pipeline.db.apply_schema`）API を起動する。Go の API は起動時にも `schema.sql`・`auth.sql`・`history.sql` を適用する（`auth_` の表は画面のサーバーが使う）。
 
 偽の JWKS サーバー（`support/fakes.py`）は検査のプロセスの中で動き、API はコンテナの名前（`townscan-contract-runner`）で取りに来る。鍵は実行ごとに作る（EC P-256 を 2 つ。使えない鍵: EdDSA・RSA・P-384・kid 無し・暗号化用）。**同じ API に続けて流すと、API が前の実行の鍵を覚えているので（10 分。未知の鍵 ID の取り直しは 60 秒に 1 回まで）、`/api/me` の検査が落ちることがある**（API を起動し直す。`scripts/test-contract.sh` は毎回起動し直す）。
 
-履歴（構成 `history`）は、Go の API が実装するまで、この検査の側が先に書いてある（仕様 §8 の E9）。Go の API には、履歴の表（`api/internal/store/sql/history.sql`）を起動時に適用する経路が要る（契約は HTTP だけなので、どの経路でもよい）。Python の API を消したら、機能の印の仕組み（`CONTRACT_FEATURES`・`@pytest.mark.history`）は外せる（履歴を常に流す）。
+履歴（構成 `history`）は、Go の API が実装した（仕様 §8 の E9。履歴の表 `api/internal/store/sql/history.sql` は起動時に適用される）。Python の API を消したので、機能の印の仕組み（`CONTRACT_FEATURES`・`@pytest.mark.history`）は外してよい（履歴を常に流す）。外すかは未決。
 
-## 実装の内部の検査として残すもの（`backend/tests/`。契約にしない）
+## 実装の内部の検査
 
-HTTP から見えない・実装の言語に依存する検査は、`backend/tests/` に残す。Go の `api/` は、同じ観点を Go のテスト（`go test -race`）で持つ。
-
-| ファイル | 残すもの | 理由 |
-|---|---|---|
-| `test_api.py` | 想定外の例外が 500 `internal_error`（詳細を漏らさない）・DB の例外の変換・OpenAPI が `/api` 配下にあること | 例外を起こす差し込み（monkeypatch）が要る・FastAPI の機能。DB 停止の 503 は契約（`dbdown`） |
-| `test_chat.py` | ツールの登録表（`ToolRegistry`）・ツールの引数の検証・`limit` の丸め・`refuse` の reason の正規化・`guard_numbers` に落ちる偽の返答・`focus_map` の地図用 ID の上限（5000 件。切ったときだけ、タイトルに「N 件のうち上位 M 件」） | Python のクラスに依存・内部の関数を直接呼ぶ・5000 件のデータが要る。数字の検査は、模擬モデルの全返答で契約が確かめる |
-| `test_image.py` | `tile_file`・`crop_box`・`_dashed` の単体 | Python の内部の関数。結果（位置・範囲・線種）は契約が画素で確かめる |
-| `test_me.py` | OpenAPI に載ること・ログに URL・例外の文字列・トークンが出ないこと | FastAPI の機能・ログは HTTP から見えない |
-| `test_jwt_auth.py` | `JwtVerifier` の単体: JWKS の保持（10 分）・未知の kid の取り直し（60 秒に 1 回）・失敗後の 5 秒の間隔・前の鍵で続ける・本文の上限（1 MB）・取得の待ち（3 秒）・JWKS が JSON でない／空 | 時間に依存する・内部の状態 |
-| `test_auth_schema.py` | `auth.sql` の列・型・冪等・既存の行を消さないこと | DB の表の検査（HTTP から見えない） |
-| `test_config.py`・`test_gemini.py`・`test_mock_model.py`・`test_guard.py`・`test_loader.py`・`test_dev_up.py`・`test_login_secrets.py` | 設定の読み取り・Gemini の窓口（再試行・27 秒の期限・502）・模擬モデルの規則の単体・数字の検査の単体・ローダー・スクリプト | 内部の関数・偽の外部サーバーが要る・Python（解析側）に残る |
-
-Go の `api/` に Gemini の窓口ができた（2026-11-25）。その検査（再試行・期限・502・キーが出ない）は、契約に足さず、Go のテストに持つ（`api/internal/chat/gemini_test.go`・`api/cmd/api/gemini_test.go`。偽の Gemini は `net/http/httptest`）。契約は、実 API を呼ばない・`LLM_PROVIDER=mock` だけのまま。
+HTTP から見えない・実装の言語に依存する検査（例外の変換・ツールの登録表・JWKS の保持・設定の読み取り・Gemini の窓口の再試行と期限）は、契約に足さず、Go のテスト（`api/`。`go test -race`）が持つ。Gemini の検査は `api/internal/chat/gemini_test.go`・`api/cmd/api/gemini_test.go`（偽の Gemini は `net/http/httptest`）。契約は、実 API を呼ばない・`LLM_PROVIDER=mock` だけ。ローダー・スキーマ・スクリプトの検査は `pipeline/dbtests/`・`scripts/tests/`（`scripts/test-loader.sh`）。
 
 ## ファイル
 

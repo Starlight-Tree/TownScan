@@ -58,7 +58,7 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 | api | `AUTH_ISSUER` | JWT の `iss`。`compose.yaml` が web の `BETTER_AUTH_URL` と同じ値を渡す |
 | api | `AUTH_JWKS_URL` | api のコンテナから届く web の JWKS（compose の中では `http://web:3000/api/auth/jwks`。`iss` とは別の URL） |
 
-- **DB**: Better Auth の表は `auth_` 付きの 5 つ（`auth_user`・`auth_session`・`auth_account`・`auth_verification`・`auth_jwks`）。列名・型・外部キーは、JobNavi の `backend/app/migrations/0004_better_auth.sql`（Better Auth 1.7.18 が決めた camelCase の列名。引用符つき）の 5 つの表と同じ。`users` への列追加は TownScan には無い（アプリ側にプロフィールの表を持たない）。`auth_user.lastName`・`firstName` は JobNavi のプロフィール用の追加列で、TownScan のコードは読み書きしない（あっても無くてもよい。NULL 可）。置き場は `backend/db/auth.sql`（冪等: `CREATE TABLE IF NOT EXISTS`・`CREATE INDEX IF NOT EXISTS`。`DROP`・`TRUNCATE` は書かない）。すでにあるボリュームにも入る形で適用する（適用の方法は、`schema.sql` の適用の仕組みに合わせる。実装の側が決め、そこに書く）。`auth_` の表を読み書きするのは web だけで、api は読まない（JWT を検証して `sub`・`email`・`name`・`picture` を使うだけ）。**ただし、会話の履歴のために、api は `auth_user.id` の存在だけを読む**（外部キーと、LLM を呼ぶ前の存在の確認。`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.3・§4.3。仕様のみで、実装は Go への切り替えのあと）。
+- **DB**: Better Auth の表は `auth_` 付きの 5 つ（`auth_user`・`auth_session`・`auth_account`・`auth_verification`・`auth_jwks`）。列名・型・外部キーは、JobNavi の `backend/app/migrations/0004_better_auth.sql`（Better Auth 1.7.18 が決めた camelCase の列名。引用符つき）の 5 つの表と同じ。`users` への列追加は TownScan には無い（アプリ側にプロフィールの表を持たない）。`auth_user.lastName`・`firstName` は JobNavi のプロフィール用の追加列で、TownScan のコードは読み書きしない（あっても無くてもよい。NULL 可）。置き場は `pipeline/sql/auth.sql`（ローダー用）と、その写し `api/internal/store/sql/auth.sql`（Go の API が起動時に適用する。一致をテストが確かめる。冪等: `CREATE TABLE IF NOT EXISTS`・`CREATE INDEX IF NOT EXISTS`。`DROP`・`TRUNCATE` は書かない）。すでにあるボリュームにも入る形で適用する（適用の方法は、`schema.sql` の適用の仕組みに合わせる。実装の側が決め、そこに書く）。`auth_` の表を読み書きするのは web だけで、api は読まない（JWT を検証して `sub`・`email`・`name`・`picture` を使うだけ）。**ただし、会話の履歴のために、api は `auth_user.id` の存在だけを読む**（外部キーと、LLM を呼ぶ前の存在の確認。`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.3・§4.3。仕様のみで、実装は Go への切り替えのあと）。
 - **`BETTER_AUTH_SECRET` は、決めたら変えない。** DB の `auth_jwks` の署名鍵（暗号化して入れる）と、Google のトークン（`auth_account`）の暗号化に使う。変えると、保存済みの鍵が読めなくなり、全員がログアウトに見える（web のログに `Failed to decrypt private key`）。直すには `auth_jwks` の行を消す必要があり、承認が要る。`scripts/dev-up.sh` は、`.env` にあれば触らず、空の行があるときは重複を作らずに止まる。`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET` は、作らない・読まない・表示しない。
 - **未設定のときの動き**: `BETTER_AUTH_SECRET`・`BETTER_AUTH_URL`・`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`DATABASE_URL` のどれかが空（または `BETTER_AUTH_SECRET` が 32 文字未満・URL の形が違う）なら、`/login` は「まだ設定されていません」と出し（ボタンは出さない）、`/api/auth/*` は 503。api は `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無ければ `/api/me` が 503。**形が不正なとき**（http(s) の URL でない・ホストが無い・読めない形。例: `BETTER_AUTH_URL` を `localhost:3500` と書いた。`compose.yaml` はその値をそのまま `AUTH_ISSUER` へ渡す）も同じ扱い: api は**起動を止めず**、変数名だけ（値は入れない）を警告として 1 行ログに出し、検証を無効にして（`/api/me` は 503）、ほかの入口は動く（api が起動のたびに落ち続けると、web が api の healthy を待つため、チャット・地図まで使えなくなる）。`AUTH_AUDIENCE` は形の検査が無い文字列で、空なら `townscan`。**どの場合も、いまの機能（チャット・地図・詳細・精度・このアプリについて）は壊れない**（`compose.yaml` は、`GOOGLE_*` が空でも起動できる）。
 - **実際の Google ログイン**は、利用者が OAuth クライアントを作って `.env` に書いたあとに、手で確かめる（自動テストは Better Auth と Google をモックする。本物の Google との往復はテストしない）。
@@ -110,7 +110,7 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 
 #### 2.3.2 表の設計
 
-DDL は §4.3。置き場は `api/internal/store/sql/history.sql`（実装済み。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。
+DDL は §4.3。置き場は `api/internal/store/sql/history.sql`（実装済み。Go だけが使う表。`pipeline/sql/` には置かない。`TestSchemaMatchesLoaderCopy` の対象にしない）。
 
 - **主キーは `(user_id, id)`。** `id` は画面が作る（§2.3.4）ので、別の人が同じ `id` を使っても、別の会話になる（衝突も、他人の会話の存在の確認もできない）。DocuNavi の `<利用者 ID>:<thread_id>` と同じ効果を、連結した文字列ではなく列で持つ。
 - **外部キーは `auth_user.id`（制約名 `conversations_user_fk`。`ON DELETE CASCADE`）。** 利用者の行が消えれば、会話も発言も消える（§2.3.7）。`auth_` の表は、これまでどおり web だけが書く。API は、履歴のために **`auth_user.id` の存在だけ**を読む（`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.1）。JWT は有効でも `auth_user` に行が無いとき（消された直後の 15 分間など）の**書き込み**（`conversation_id` つきの chat）は、**LLM を呼ぶ前**の存在の確認で **401** にする（§2.3.3・§2.3.4）。保存の段で外部キー違反（SQLSTATE 23503）になるのは、その確認の直後に行が消える競合だけで、**制約名が `conversations_user_fk` のときだけ 401**。読み取り（一覧・発言の取得・削除）は、行を確かめず、空・404 のままでよい（`auth_user` を余計に読まない）。
@@ -177,7 +177,7 @@ DDL は §4.3。置き場は `api/internal/store/sql/history.sql`（実装済み
 |---|---|---|
 | 一覧の件数 | 50 | DocuNavi の値（`MAX_THREADS`）と同じ |
 | 題名 | 40 文字まで・超えたら 39 文字＋「…」（コードポイントで数える） | DocuNavi と同じ（`MAX_TITLE_LENGTH`） |
-| 質問 1 件 | 2000 文字 | 既存（`backend/app/routes.py` の `ChatMessage`）。DocuNavi も同じ |
+| 質問 1 件 | 2000 文字。Go の API は、NFKC に正規化したあとの長さでも数える（正規化の前の数え方も残す） | 既存の上限（旧 Python の API の `ChatMessage`）。DocuNavi も同じ |
 | 会話 ID | 128 文字・`^[A-Za-z0-9_-]+$` | DocuNavi と同じ（表の `CHECK` にも入れる） |
 | 要求に含める発言の数 | API は 500 件まで（`MAX_CHAT_MESSAGES`。既存）。画面は 40 件（`MAX_MESSAGES`。既存）。文脈に使うのは末尾 20 件（`CONTEXT_MESSAGES`。既存） | 既存のまま |
 | 1 会話の発言数 | **500 件（決定）。** 超えたら 422 `conversation_full`（LLM を呼ぶ前に数え、保存のトランザクションの中でも数え直す）。1 往復で 2 件増えるので、保存済みが 500 件の会話に、続きは送れない | **根拠は、既存の `MAX_CHAT_MESSAGES`（1 要求の入力の上限）の流用で、保存の大きさ・読み出しの大きさからは導いていない。** DocuNavi には上限が無いが足す。TownScan は `results` を丸ごと持つ。1 回の `map_focus` だけで候補 ID を最大 5000 件（`MAX_FOCUS_IDS`）含みうる。ID 1 件を約 20 バイトと見積もると、1 回で約 100 KB、回答 250 件がすべてそうだと 1 会話で約 25 MB（`GET …/messages` の応答の大きさ）になりうる（実測ではなく見積もり）。実データは候補が少なく（ADR 0005 の実測は 18 候補）、この大きさにはならない見込み。バイト数や `results` の上限は、初版では足さない（実測のあとに決める） |
@@ -199,7 +199,7 @@ TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`fro
 
 **本人だけ:**
 
-- 利用者は、**検証に通った JWT の `sub` だけ**から決める。`sub` は `[A-Za-z0-9_-]{8,64}`（`backend/app/jwt_auth.py` の `_USER_ID`）。要求の本文・クエリ・パスの値は使わない。
+- 利用者は、**検証に通った JWT の `sub` だけ**から決める。`sub` は `[A-Za-z0-9_-]{8,64}`（`api/internal/auth` の `sub` の規則）。要求の本文・クエリ・パスの値は使わない。
 - すべての問い合わせの条件に `user_id = $sub` を入れる。会話は `(user_id, id)` で引くので、他人の `id` を知っていても、別の（存在しない）会話として扱われる。**無い会話と他人の会話は、同じ 404 で、本文も同じ**（存在を確かめさせない。DocuNavi と同じ）。
 - 他人と同じ `conversation_id` で `POST /api/chat` しても、他人の会話には届かない（自分の会話が新しくできる）。
 - SQL は、パラメータで渡す。応答・ログに、例外の文字列・接続先・SQL を出さない。
@@ -219,7 +219,7 @@ TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`fro
 - 本人の削除は `DELETE`（物理削除）。会話・発言が、DB の現行のデータから消える。「消した印」だけを付ける作りにしない。保存時の 50 件の整理と、保存期間の掃除も、同じ物理削除。
 - 利用者の行（`auth_user`）が消えれば、`CASCADE` で会話・発言も消える。TownScan に、利用者を消す画面は無い（`/update-user` も閉じている）。運用者が消すときは、`auth_user` の行を消せば足りる。
 - 同じ ID でもう一度話しかけても、前の発言は戻らない（新しい会話として始まる）。
-- **残りうるもの（確かめていない）:** Postgres は、消した行の領域を、自動の掃除（autovacuum）が回収するまで、ディスク上に残しうる（一般知識。今回の調査ではない）。DB のバックアップ・ダンプからは消えない。TownScan の docs・scripts・`backend/app` には、DB のバックアップの手順が見当たらない（`git grep`。CLAUDE.md の `backups/` の中身は読んでいない）。バックアップを作るようになったら、保存期間と合わせて決める。
+- **残りうるもの（確かめていない）:** Postgres は、消した行の領域を、自動の掃除（autovacuum）が回収するまで、ディスク上に残しうる（一般知識。今回の調査ではない）。DB のバックアップ・ダンプからは消えない。TownScan の docs・scripts・`api/` には、DB のバックアップの手順が見当たらない（`git grep`。CLAUDE.md の `backups/` の中身は読んでいない）。バックアップを作るようになったら、保存期間と合わせて決める。
 - ログアウトしても、保存した会話は消えない。「全部消す」操作は作らない（上限と保存期間が消す）。
 
 #### 2.3.8 保存期間と件数の上限
@@ -240,7 +240,8 @@ TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`fro
 |---|---|
 | `pipeline/` | 後処理（ベクトル化・基盤地図情報の読み込み・評価・差分と 3 分類・地区名）。出力は §4.1 |
 | `pipeline/colab/` | Colab 側の推論スクリプト（**メインのセッションが担当。触らない**） |
-| `backend/` | FastAPI・DB スキーマ・ローダー・ツール・チャット（模擬モデル。任意で Gemini）・画像切り出し |
+| `api/` | Go の API（ADR 0005）: DB の読み取り・ツール・チャット（模擬モデル。任意で Gemini）・画像切り出し・認証・会話の履歴 |
+| `pipeline/load.py`・`pipeline/sql/` | DB へのローダー（`python -m pipeline.load`）と DB スキーマ（`schema.sql`・`auth.sql`） |
 | `frontend/` | Next.js（App Router・TypeScript）。`frontend/Dockerfile` を含む |
 | `compose.yaml`・`.env.example`・`scripts/dev-up.sh` | backend の担当 |
 | `scripts/verify.sh`・`.github/` | 最後に統合役が配線（それまで触らない） |
@@ -285,7 +286,7 @@ reason: "new_absent_2018" | "present_2018" | "ambiguous" | "edge"
 
 `runs(run_id pk, kind, created_at, model, params jsonb, notes)`・`areas(id pk, run_id, z, x, y, west, south, east, north, centroid_lon, centroid_lat, name, ward, municipality, name_source)`・`buildings(id bigserial pk, run_id, area_id, year, area_m2, prob_mean, geom jsonb)`・`candidates(id text pk, run_id, area_id, class, area_m2, west, south, east, north, centroid_lon, centroid_lat, geom jsonb, evidence jsonb, reason)`・`metrics(run_id pk, body jsonb)`。`class` は CHECK 制約。ローダーは冪等（同じ run_id を入れ直すと置き換える。トランザクション）。表示する現在の run は「最新の created_at」。
 
-**会話の履歴の表 2 つ**（§2.3。**実装済み**。表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（新設の予定。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴は、その SQL の並びの `authSQL` のあとに `historySQL` を足す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
+**会話の履歴の表 2 つ**（§2.3。**実装済み**。表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（新設の予定。Go だけが使う表。`pipeline/sql/` には置かない。`TestSchemaMatchesLoaderCopy` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴は、その SQL の並びの `authSQL` のあとに `historySQL` を足す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
 
 **承認の関門:** `historySQL` を `go:embed` へ足すコミットを main へ入れると、次の API の起動で、**すでにあるボリュームの DB に表が入る**。表の追加の承認は、この関門を通る承認として扱う（マージの前に、適用先の DB と影響を示す）。Python のローダー（`python -m app.load`）の `apply_schema` は、この表を作らない（使わない）。
 
@@ -346,14 +347,14 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 `GET /api/me`（§2.1 の JWT。ほかの入口は `Authorization` を見ない・ログインを要さない〔**例外: `conversation_id` つきの `POST /api/chat` と、履歴の 3 本。§2.3・下の「会話の履歴の API」**。`conversation_id` を付けない `POST /api/chat` は、今までどおり `Authorization` を見ない〕。**いまの機能は、ログインなしで今まどおり使える**）:
 
 - 成功 200: `{sub, email, name, picture}`。`sub` は JWT の `sub`（必須）。`email`・`name`・`picture` は、JWT に無い・空・文字列でない・下の整形の規則に合わないときは `null`。応答に `Cache-Control: no-store`。
-  - 整形の規則（実装は `backend/app/jwt_auth.py` の `_identity`。`email`・`picture` は前後の空白を除いてから見る）: `picture` は、claim `picture`（無ければ `image`）が `https://` で始まる 2048 文字までのときだけ（それ以外は `null`）。`email` は、`@` を含む 254 文字までのときだけ（含まない・254 文字を超えるときは `null`）。`name` は、印字できない文字（制御文字のほか、全角空白・ゼロ幅の文字も）を除いて、100 文字までに切る（空になれば `null`）。JWT の `email_verified` は読まない。JWT の中身・`Authorization` の値は、ログにも応答にも出さない（ログに残すのは失敗の種類だけ）。
+  - 整形の規則（実装は `api/internal/auth/identity.go`。`email`・`picture` は前後の空白を除いてから見る）: `picture` は、claim `picture`（無ければ `image`）が `https://` で始まる 2048 文字までのときだけ（それ以外は `null`）。`email` は、`@` を含む 254 文字までのときだけ（含まない・254 文字を超えるときは `null`）。`name` は、印字できない文字（制御文字のほか、全角空白・ゼロ幅の文字も）を除いて、100 文字までに切る（空になれば `null`）。JWT の `email_verified` は読まない。JWT の中身・`Authorization` の値は、ログにも応答にも出さない（ログに残すのは失敗の種類だけ）。
 - **401** `{error:{code:"unauthorized", message}}`（固定の文。理由は返さない。`WWW-Authenticate: Bearer` を付ける）: `Authorization` が無い・`Bearer` でない・JWT が壊れている・署名が合わない・`alg` が ES256 でない・`aud`／`iss`／`exp`／`sub` が合わない（期限切れを含む）。
 - **503** `{error:{code:"unavailable", message}}`: `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無い、または URL の形が不正（ログインの設定が無い扱い。起動は止まらない。§2.1。JWT の有無を見る前に返す）、または JWKS を取りに行けず前に取れた鍵も無い。ほかの入口には影響しない。
 - 使うのはアカウントのロジック（ログインの確認・JWT と JWKS の疎通の確かめ）だけ。チャット・地図・詳細・精度などの入口は、これを呼ばず、これに依存しない。
 
 **会話の履歴の API**（§2.3。**Go の API に実装済み。Python の API には入れない**。保存の動き・検査の順・上限は §2.3.4・§2.3.5）:
 
-- **共通**: ログインは `Authorization: Bearer <JWT>`（§2.1。ES256・`iss`・`aud`・`exp`・`sub` を検査。`GET /api/me` と同じ検証）。**利用者は、検証に通った JWT の `sub` だけから決める**（本文・クエリ・ヘッダーの別の値は使わない）。エラーは既存の形 `{error:{code,message}}`。422 は `details`（`loc`・`msg`）も付く。`details[].loc` は**文字列の配列**（例 `["path","conversation_id"]`・`["body","conversation_id"]`）で、`message` の側が先頭の `loc` を `.` でつないだ形（例「引数が不正です（path.conversation_id）」。`backend/app/errors.py`・`api/internal/apierr`）。入力値は応答に出さない。履歴の保存先が使えないときの文に、例外の内容・接続先・SQL を含めない。
+- **共通**: ログインは `Authorization: Bearer <JWT>`（§2.1。ES256・`iss`・`aud`・`exp`・`sub` を検査。`GET /api/me` と同じ検証）。**利用者は、検証に通った JWT の `sub` だけから決める**（本文・クエリ・ヘッダーの別の値は使わない）。エラーは既存の形 `{error:{code,message}}`。422 は `details`（`loc`・`msg`）も付く。`details[].loc` は**文字列の配列**（例 `["path","conversation_id"]`・`["body","conversation_id"]`）で、`message` の側が先頭の `loc` を `.` でつないだ形（例「引数が不正です（path.conversation_id）」。`api/internal/apierr`）。入力値は応答に出さない。履歴の保存先が使えないときの文に、例外の内容・接続先・SQL を含めない。
 - **`Cache-Control: no-store`**: 3 本の API は、成功・失敗のどの応答にも（204・401・404・422・500・503 を含めて）付ける（人ごとに違う内容。`/api/me` と同じ）。ルーターが 3 経路に合わせたあとの応答だけが対象（経路もメソッドも合わない 404・405 は含めない）。`POST /api/chat` には付けない（既存のまま）。
 - **`GET /api/conversations`**: 200 `{"conversations": [{"id": "5b0c…", "title": "新規出現の候補は何件ありますか？", "created_at": "2026-11-25T01:02:03+00:00", "updated_at": "2026-11-25T01:05:09+00:00"}]}`。本人の会話だけ。**更新が新しい順、同時刻は `id` の昇順。最大 50 件。ページ分けは無い。** 保存を 1 人 50 件に収める（§2.3.8）ので、一覧に出ない会話は無い（上限は念のため）。`created_at`・`updated_at` は常に入る。表記（`+00:00` か `Z`）は固定しない（同じ時刻であればよい）。クエリは受けない。会話が 1 件も無ければ `{"conversations": []}`。
 - **`GET /api/conversations/{conversation_id}/messages`**: 200 `{"messages": [{"role": "user", "content": "新規出現の候補は何件ありますか？"}, {"role": "assistant", "content": "…", "results": [ … ], "tool_calls": [ … ], "run_created_at": "2026-11-24T03:00:00+00:00"}]}`。`seq` の昇順（古い順）。ユーザーの発言は `{role, content}` だけ。回答は、**その回答を返した `POST /api/chat` の `message` と、JSON として等しい値**（`content`・`results`・`tool_calls`。§4.5 の判別可能ユニオン。jsonb はキーの順・空白・数値の書き方を正規化するので、キーの順は保証しない）。保存のときに、値を作り替えない。**回答には、`run_created_at`（その回答を作ったときの run の `created_at`。run が無かった回答は null）が付く**（chat の `message` には無い、履歴だけの項目。§7.1.5）。DocuNavi の `sent_at`（質問の時刻）は足さない（TownScan の画面は、発言の時刻を出さない）。発言の数は、§2.3.5 の上限（500 件）まで。ページ分けは無い。開いて見る（`GET`）だけでは、`updated_at` を更新しない。
@@ -387,16 +388,16 @@ ToolResult =
  | { type:"refusal", reason:"out_of_scope"|"no_photo_period"|"not_implemented"|"no_data", message, suggestions:string[] }
 ```
 
-- **`filter`（回答の条件）**: 地区が 1 つなら `area_id`、2 つ以上（区の指定など）なら `area_ids`、全地区なら両方とも無い。`cls` は、指定があるときだけ（`compare` では並べ替えの分類）。`scope` は表示用の名前（例「中央区」「全地区」）で、常に付く（実装は `backend/app/chat/tools.py` の `_filter_info`）。
+- **`filter`（回答の条件）**: 地区が 1 つなら `area_id`、2 つ以上（区の指定など）なら `area_ids`、全地区なら両方とも無い。`cls` は、指定があるときだけ（`compare` では並べ替えの分類）。`scope` は表示用の名前（例「中央区」「全地区」）で、常に付く（実装は `api/internal/chat` の `FilterInfo`）。
 - **数字は結果からだけ**: 返答文 `content` に出る数字は、`results` に含まれる値だけ。API 側に検査（`guard_numbers`）を置き、満たさない返答は返さない（テストで確かめる）。文はテンプレートで作る。
 - 模擬モデルは、日本語の規則で意図を決める（件数・一覧・比較・詳細／写真・精度・使い方・範囲外）。地区名は DB の `areas.name`・`ward` との部分一致。意図は `tool_calls` に出す。
 - 範囲外の例: 天気・雑談、2024 年以降の棟の確認（写真が無い → `no_photo_period`）、衛星の「変化の当たり」（`not_implemented`: 未実装と言う）、対象地区の外。
 - LLM の切り替え: 環境変数 `LLM_PROVIDER`（`mock`＝既定、`gemini`。§2.2）。道具の登録口は、後から GEE の道具を足せる形にする（登録表）。
-- **Gemini を選んだとき**（`LLM_PROVIDER=gemini`。実装は `backend/app/chat/gemini_model.py`）:
+- **Gemini を選んだとき**（`LLM_PROVIDER=gemini`。実装は `api/internal/chat/gemini*.go`）:
   - **役割**: 「どのツールを呼ぶか」と「結果の説明文」だけ。数字・件数・座標・面積・ID は書かせない（システムの指示で言い、文は `guard_numbers` が検査する）。結果（`results`）・`tool_calls` の形は、模擬のときと同じ。変わるのは、`message.content` と、どのツールを呼ぶか。
   - **呼び方**: `generateContent` に、登録表のツールを `functionDeclarations` として渡す（引数のスキーマは登録表の定義から作る）。最初の往復は `toolConfig` の `ANY`（必ずツールを呼ぶ。範囲外も `refuse` を呼ばせる）、結果（`functionResponse`）を渡したあとは `AUTO`。**モデルへの往復は最大 4 回、ツール呼び出しは最大 6 件、1 回の呼び出しの待ちは 20 秒（接続・受信の段階ごと）。チャット 1 回の要求の全体（往復・ツール・再試行）には 27 秒の期限があり、各呼び出しの待ちは残りの期限を超えない**（各呼び出しが渡した待ちの内に終わる場合、frontend の Next.js の転送の既定の待ち 30 秒より前に、API が 502 を返す。少しずつ届く応答は、呼び出しの途中では切らない）。ツールを 1 つも呼ばずに返った文は、根拠が無いので使わない。モデルが返した `functionCall` の発言は、`thoughtSignature` を含め、返ってきたとおりに戻す。
   - **送るもの（Google へ出ていくもの）**: 会話の末尾 20 件（`CONTEXT_MESSAGES`。質問の文面を含む）、システムの指示（規則と、地区の**名前と区だけ**。座標・件数・ID は入れない）、ツールの結果（出どころ・座標・画像の URL・候補 ID の一覧は除き、配列は 50 件まで）。地区は名前で指定でき、API が ID に直す。
-  - **安全**: ① 返答文は必ず `guard_numbers` を通す。LLM が結果に無い数字を書いた文は、安全なテンプレートに替わる（替えた回数だけをログに出す。文は出さない）。② `refuse` の `message` は、結果にそのまま入る（＝結果の数字として guard が認める）ので、写真の年（2018・2023）以外の数字を含む・空・300 文字を超える文は、理由ごとの固定の文に替える。`suggestions` は捨てる（既定の候補が付く）。③ 返答文は 1000 文字までに切る（frontend が会話の全履歴を送り返し、1 件 2000 文字の上限があるため）。④ 宣言していない引数は、`tool_calls` に残さない。知らないツール名は、断りの結果にする。⑤ ユーザーの発言の中の指示には従わない、とシステムの指示で言うが、守られる保証は無い。実際の防ぎは、数字の検査・ツールの境界（結果は DB からだけ）・`refuse` の文の検査。
+  - **安全**: ① 返答文は必ず `guard_numbers` を通す。LLM が結果に無い数字を書いた文は、安全なテンプレートに替わる（替えた回数だけをログに出す。文は出さない）。検査は、数字の連なり・漢数字＋助数詞に加え、空白や不可視の書式文字（ゼロ幅スペース・ソフトハイフンなど）で区切った数も見る（不可視の文字は先に除いてから数える。空白で区切った整数の並びは、つなげた数も、結果に無ければ落とす）。② `refuse` の `message` は、結果にそのまま入る（＝結果の数字として guard が認める）ので、写真の年（2018・2023）以外の数字を含む・空・300 文字を超える文は、理由ごとの固定の文に替える。`suggestions` は捨てる（既定の候補が付く）。③ 返答文は 1000 文字までに切る（frontend が会話の全履歴を送り返し、1 件 2000 文字の上限があるため）。④ 宣言していない引数は、`tool_calls` に残さない。知らないツール名は、断りの結果にする。⑤ ユーザーの発言の中の指示には従わない、とシステムの指示で言うが、守られる保証は無い。実際の防ぎは、数字の検査・ツールの境界（結果は DB からだけ）・`refuse` の文の検査。
   - **失敗**: キーが無効（401・403。Google は無効なキーに 400 を返すこともある）・429・5xx・タイムアウト・壊れた応答・候補が無い／拒否・往復やツール呼び出しの上限超過は、**模擬に切り替えず**、HTTP **502**（`code:"llm_unavailable"`、メッセージは固定）。**再試行**は、一時的な失敗（HTTP 5xx・タイムアウト・接続エラー）だけを、チャット 1 回の要求につき最大 1 回（往復ごとではない）、1 秒待ってやり直す。4xx（429 を含む）・壊れた応答はやり直さない。待ったあとの残りの期限が 5 秒未満なら、やり直さない。期限を使い切ったときの失敗の種類は `deadline`。やり直したことも、種別つきでログに残す。ログと応答に出すのは、失敗の種類・HTTP のステータス・Google の理由の定数（`INVALID_ARGUMENT` など）だけで、キー・URL・応答の本文は出さない。frontend は、既存の失敗の表示（「送信できませんでした」＋「もう一度送る」）でそのまま扱える。
   - **未確認**: 実 API での動作（`functionDeclarations` の受理・`ANY` と `AUTO` の挙動・`gemini-3.5-flash-lite` での関数呼び出し・日本語の質・待ち時間・無料枠の制限と利用条件）。キーが入ったあとに、手で確かめる。
 
@@ -569,7 +570,7 @@ ToolResult =
 3. **解析結果（run）が変わっていたら、その回答は「別の解析結果に基づく回答」として扱う**（拡大ビューを開かせない。規則 4）。回答ごとに、作ったときの run といまの run を比べる:
    - 作ったとき: 回答の `results` の `provenance.run_id`（`refusal` には無い）と、その回答の `run_created_at`（§2.3.2・§4.4）〔J4〕。
    - いま: `GET /api/health` の `run.run_id` と `run.created_at`（`HealthProvider` が持つ）。
-   - **`run_id` が同じでも、`run_created_at` が違えば、別の解析結果。** 実データの `run_id` は run のフォルダ名（`pipeline/run_postprocess.py` の `default_run_id`）で、`created` の既定は現在時刻。ローダーは同じ `run_id` の行を消して入れ直す（`backend/app/load.py` の `write_run`）。同じ `run1` を後処理し直して読み込み直すと、候補 ID・件数が変わっても `run_id` は同じで、`created_at` だけが変わる。
+   - **`run_id` が同じでも、`run_created_at` が違えば、別の解析結果。** 実データの `run_id` は run のフォルダ名（`pipeline/run_postprocess.py` の `default_run_id`）で、`created` の既定は現在時刻。ローダーは同じ `run_id` の行を消して入れ直す（`pipeline/load.py` の `write_run`）。同じ `run1` を後処理し直して読み込み直すと、候補 ID・件数が変わっても `run_id` は同じで、`created_at` だけが変わる。
    - 時刻は、文字列ではなく時刻として（`Date.parse` のミリ秒）比べる（表記が違いうるため）。
    - 回答に `provenance` があるのに `run_created_at` が null のときは、別の解析結果と見る（安全側）。`refusal` だけの回答は、run に依らないので、別の解析結果とは見ない。
    - 現在の run が分からない（health の取得に失敗）ときも、別の解析結果と見る（食い違いを見せない側に倒す）。

@@ -1,4 +1,4 @@
-"""ローダー（app.load）: 検査・冪等性・置き換え・ロールバック・日本語のエラー。"""
+"""ローダー（pipeline.load）: 検査・冪等性・置き換え・ロールバック・日本語のエラー。"""
 
 from __future__ import annotations
 

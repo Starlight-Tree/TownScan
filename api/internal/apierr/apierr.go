@@ -89,7 +89,7 @@ func MetricsNotFound() *Error {
 
 // NoData は、DB に run が 1 つも無いときの 503。
 func NoData() *Error {
-	return New(http.StatusServiceUnavailable, "no_data", "データが読み込まれていません。python -m app.load で pipeline の出力を読み込んでください")
+	return New(http.StatusServiceUnavailable, "no_data", "データが読み込まれていません。python -m pipeline.load で pipeline の出力を読み込んでください")
 }
 
 // DBUnavailable は、DB に接続できないときの 503。

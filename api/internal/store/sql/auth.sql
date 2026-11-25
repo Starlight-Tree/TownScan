@@ -4,7 +4,7 @@
 -- 形は JobNavi の backend/app/migrations/0004_better_auth.sql と同じ（名前は auth_ 付き。web の `modelName` と同じ）。
 -- Better Auth の表の列名は、ライブラリが決めたまま（camelCase。引用符つき）にしてある。形は、同じ設定から `getMigrations(auth.options).compileMigrations()` で生成した SQL。
 -- 版を上げて列が変わるときは、このファイルを書き換えず、新しいファイル（auth_v2.sql など）で足す。
--- auth_ の表は、web のサーバー（Better Auth）が読み書きする。API（FastAPI）は読まない（JWT を JWKS で検証するだけ）。DB のユーザーは API と同じ（表ごとの権限分けはしない）。
+-- auth_ の表は、web のサーバー（Better Auth）が読み書きする。API は読まない（JWT を JWKS で検証するだけ）。DB のユーザーは API と同じ（表ごとの権限分けはしない）。
 -- TownScan には、利用者のプロフィールの表は無い（ログインは任意。JWT の sub を結ぶ先は無い）。
 
 -- 「だれか」。Google のアカウントごとに 1 行。id は Better Auth が作る文字列（JWT の sub になる）。

@@ -88,8 +88,8 @@ func TestAnswerWithoutDataSaysNoData(t *testing.T) {
 	f.run = nil
 	s, _ := newTestService(t, f)
 	r := answer(t, s, user("候補は何件？"))
-	want := `{"role":"assistant","content":"データがまだ読み込まれていません。python -m app.load で、pipeline の出力を読み込んでください。",` +
-		`"results":[{"type":"refusal","reason":"no_data","message":"データがまだ読み込まれていません。python -m app.load で、pipeline の出力を読み込んでください。","suggestions":[]}],` +
+	want := `{"role":"assistant","content":"データがまだ読み込まれていません。python -m pipeline.load で、pipeline の出力を読み込んでください。",` +
+		`"results":[{"type":"refusal","reason":"no_data","message":"データがまだ読み込まれていません。python -m pipeline.load で、pipeline の出力を読み込んでください。","suggestions":[]}],` +
 		`"tool_calls":[{"name":"refuse","args":{"reason":"no_data"}}]}`
 	if got := jsonOf(t, r); got != want {
 		t.Errorf("\n got  %s\n want %s", got, want)

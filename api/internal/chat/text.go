@@ -20,7 +20,7 @@ const (
 )
 
 // noDataMessage は、run が 1 つも無いときの断り（データの読み込み方の案内を含む）。
-const noDataMessage = "データがまだ読み込まれていません。python -m app.load で、pipeline の出力を読み込んでください。"
+const noDataMessage = "データがまだ読み込まれていません。python -m pipeline.load で、pipeline の出力を読み込んでください。"
 
 // commas は、整数を 3 桁ごとにコンマで区切る（Python の f"{v:,}"）。
 func commas(v int64) string {

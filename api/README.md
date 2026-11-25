@@ -1,15 +1,14 @@
 # api/（Go の API）
 
-TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは、土台・読み取り API・認証・検出画像・チャット（模擬モデルと Gemini）**で、`compose.yaml` の api は、この Go の API（2026-11-25 に切り替えた。FastAPI 版は `compose.python-api.yaml`。Gemini が Go に入ったので、あとは Python の API を消す段が残る）。
+TownScan の API（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。土台・読み取り API・認証・検出画像・チャット（模擬モデルと Gemini）・会話の履歴があり、`compose.yaml` の api は、この Go の API。最初は Python（FastAPI）で作ったが、Go へ置き換え、Python の API は 2026-11-25 に消した（最後の版は、コミット `e9a6614` の `backend/`。コードのコメントの `backend/app/…` は、そこを指す）。
 
 - 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`・`POST /api/chat`（模擬モデルと Gemini。下の「チャット」）
 - 認証: `GET /api/me`（JWT を JWKS の公開鍵で検証。下の「認証」）
-- 検出画像: `GET /api/candidates/{id}/image`（写真タイルの切り出しと輪郭の描画。`internal/imaging`。Python の Pillow と構造が同じで、画素は平均絶対差 1.07 ほど。`difftest/image.sh` が確かめる）
+- 検出画像: `GET /api/candidates/{id}/image`（写真タイルの切り出しと輪郭の描画。`internal/imaging`。消した Python の API の Pillow と構造が同じで、画素は平均絶対差 1.07 ほどだった）
 - 会話の履歴（ログイン中だけ）: `GET /api/conversations`・`GET /api/conversations/{id}/messages`・`DELETE /api/conversations/{id}`（どれも `Authorization: Bearer`・`Cache-Control: no-store`）と、`POST /api/chat` の任意の `conversation_id`（付けたときだけ、回答と一緒に保存する）。表は `internal/store/sql/history.sql`（API の起動のたびに流れる）。仕様は `docs/spec-prototype.md` §2.3・ADR 0006。保存期間の掃除は `history-cleanup`（下）
-- あとの段: Python の API を消す（ADR 0005 の 6）
 - 作らない: `/api/docs`・OpenAPI（契約は `docs/spec-prototype.md` §4.4 と `contract/` が持つ）
 
-振る舞いの正本は `backend/app/`・`backend/tests/`・`docs/spec-prototype.md`。JSON のキー・型・並び順・数の書式（Python の `100.0`・`1e-05`）・検証エラーの文言・307 の Location・405 の本文まで、Python の API と**バイト列が同じ**になるように作ってある（`difftest/` が確かめる）。
+振る舞いの正本は `docs/spec-prototype.md` と `contract/`（HTTP から見える振る舞い）。JSON のキー・型・並び順・数の書式（Python の `100.0`・`1e-05`）・検証エラーの文言・307 の Location・405 の本文は、置き換え前の Python の API と**バイト列が同じ**になるように作った（差分検査は、Python の API を消したので無い。形は `contract/` と Go のテストが守る）。
 
 ## 構成
 
@@ -17,23 +16,22 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 |---|---|
 | `cmd/history-cleanup` | 保存期間を過ぎた会話の履歴を消す運用者のコマンド。**既定は件数の表示だけ**で、`--apply` を付けたときだけ消す（件数以外は出さない。終了コード 0 / 1 = DB の失敗 / 2 = 使い方の誤り）。`docker compose run --rm --entrypoint /history-cleanup api --older-than-days 7 [--apply]` |
 | `cmd/api/main.go` | 設定 → DB とスキーマ → 待ち受け → 停止の合図（SIGINT・SIGTERM）で処理中の応答を終えてから止まる。`-healthcheck`（distroless 用） |
-| `internal/config` | 環境変数（`backend/app/config.py` と同じ名前・既定・検証）。秘密は `Secret` 型で、どの書き方でも伏せ字 |
+| `internal/config` | 環境変数（名前・既定・検証は仕様 §2 と `compose.yaml`）。秘密は `Secret` 型で、どの書き方でも伏せ字 |
 | `internal/apierr` | エラーの形（`{"error":{"code","message"}}`・422 の `details`） |
 | `internal/httpx` | ルーター（Starlette と同じ 405・307・404）・クエリの読み方（`parse_qsl` と同じ）・Pydantic と同じ検証・本文（JSON）の読み方（壊れた JSON の誤りの位置も Python と同じ。`jsonpos.go`）・ミドルウェア（アクセスログ・panic の回復・nosniff・本文の上限・要求全体の期限 `Timeout`） |
 | `internal/pyjson` | Python の `json.dumps` と同じ書式（`float` の repr・jsonb の書き直し） |
 | `internal/auth` | `GET /api/me` の JWT の検証: ES256 だけ・JWKS の取得と保持（600 秒）・iss / aud / exp / nbf / iat / sub の規則・`email` / `name` / `picture` の整形・`Authorization: Bearer` の読み方 |
 | `internal/imaging` | 検出画像: 候補の外周の緯度経度 → 写真タイル（`TILES_DIR`）の切り出し・拡縮（CatmullRom）・輪郭（縁取りと実線・破線）の描画 → PNG。入力の上限（正方形・一辺 1024 以下・8 MB 以下・外周 1 万頂点以下）と、`os.Root` による置き場の閉じ込め、同時に作る画像は 8 枚まで |
-| `internal/chat` | チャット（模擬モデルの規則・ツール・返答文・数字の検査 `GuardNumbers`・1 往復の `Service`）と、実 LLM の Gemini（`gemini.go` = 窓口: HTTP・再試行・期限・失敗の分類、`gemini_model.go` = function calling の往復）。`backend/app/chat/` と同じ応答。Python が作った期待値（golden）で照合する |
-| `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/schema.sql`・`auth.sql` は `backend/db/` の写しで、一致をテストで確かめる。`history.sql` は Go だけの表）・会話の履歴の保存・一覧・削除（`history.go`）・DB の `statement_timeout`（`WithStatementTimeout`） |
+| `internal/chat` | チャット（模擬モデルの規則・ツール・返答文・数字の検査 `GuardNumbers`・1 往復の `Service`）と、実 LLM の Gemini（`gemini.go` = 窓口: HTTP・再試行・期限・失敗の分類、`gemini_model.go` = function calling の往復）。消した Python の API と同じ応答。Python が作った期待値（golden。`testdata/golden.json.gz`。凍結したデータで、作り直す元の Python は無い）で照合する |
+| `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/schema.sql`・`auth.sql` は `pipeline/sql/`（ローダーが使う）の写しで、一致をテストで確かめる。`history.sql` は Go だけの表）・会話の履歴の保存・一覧・削除（`history.go`）・DB の `statement_timeout`（`WithStatementTimeout`） |
 | `internal/handlers` | 読み取りのハンドラー・`POST /api/chat`・会話の履歴の 3 本（`history.go`。DB は `Reader`・`HistoryStore`、チャットは `Chatter` インターフェース。テストは偽の実装） |
 | `internal/testdb` | DB のテストが、テストごとに新しいデータベースを作る |
-| `difftest/` | Python の API との差分検査（標準ライブラリだけの Python。`run.sh` が JSON の差分、`image.sh` が検出画像の差分を、全部用意して流す） |
 
 依存は標準ライブラリと `github.com/jackc/pgx/v5`（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync）と、JWT の検証の `github.com/golang-jwt/jwt/v5`（v5.3.1。ES256 の署名とクレームの検査だけに使う。鍵の取得・保持・JWK の読み取りは自前）と、検出画像の拡縮の `golang.org/x/image`（v0.46.0。`draw` の CatmullRom だけ）と、チャットの `golang.org/x/text`（v0.42.0。`unicode/norm` の NFKC だけ。文字の整えと数字の検査を、Python の `unicodedata.normalize` と同じ結果にするため。ユーザー承認 2026-11-25）。Gemini の窓口は、標準ライブラリ（`net/http`・`encoding/json`・`context`）だけで、依存を足していない。
 
 ## 認証（`GET /api/me`）
 
-仕様は `docs/spec-prototype.md` §2.1・§4.4、振る舞いの正本は `backend/app/jwt_auth.py`・`auth.py`、契約は `contract/test_me.py`・`test_me_unconfigured.py`・`test_auth_independence.py`。Python の `backend/tests/test_jwt_auth.py`・`test_me.py` の観点は、`internal/auth`・`internal/handlers/me_test.go` の Go のテストに移してある。
+仕様は `docs/spec-prototype.md` §2.1・§4.4、契約は `contract/test_me.py`・`test_me_unconfigured.py`・`test_auth_independence.py`。検証の観点は、`internal/auth`・`internal/handlers/me_test.go` の Go のテストが持つ。
 
 - `AUTH_ISSUER`・`AUTH_JWKS_URL` が無い／形が不正なときは、トークンを見る前に 503（起動は止めない）。ほかの入口は、認証の設定にも JWKS の状態にも影響されず、JWKS を取りに行かない。DB も使わない。
 - 鍵は最初の `/api/me` の要求で取る（起動のときは取らない）。10 分覚え、未知の kid による取り直しは 60 秒に 1 回まで、鍵が 1 つも無いまま失敗したら 5 秒は取りに行かない（その間は待たせずに 503）。取り直しに失敗しても、前の鍵で続ける。同時に来た要求の取得は 1 回に束ねる。
@@ -50,7 +48,7 @@ Python との意図した違い（応答の外から見える規則は同じ。�
 
 ## チャット（`POST /api/chat`）
 
-仕様は `docs/spec-prototype.md` §4.5、振る舞いの正本は `backend/app/chat/`、契約は `contract/test_chat_*.py`。模擬モデルの規則・ツール・返答文・数字の検査（結果に無い数字を返答に書かせない）は、Python と同じ応答になるよう移してある。`internal/chat/testdata/gen_golden.py`（Python が期待値を作る）と `internal/httpx/testdata/gen_jsonpos.py` が、照合の元。
+仕様は `docs/spec-prototype.md` §4.5、契約は `contract/test_chat_*.py`。模擬モデルの規則・ツール・返答文・数字の検査（結果に無い数字を返答に書かせない）は、Python と同じ応答になるよう移してある。照合の元は、`internal/chat/testdata/golden.json.gz` と `internal/httpx/testdata/jsonpos.json.gz`（どちらも Python が作った期待値。後者の作り方は `gen_jsonpos.py`）。
 
 - **Gemini（`LLM_PROVIDER=gemini`）**: `GEMINI_API_KEY`（必須。`LLM_PROVIDER=gemini` のときだけ読む）・`GEMINI_MODEL`（既定 `gemini-3.5-flash-lite`）。キーが無い・形が不正なときは、黙って模擬に落とさず、`config.Validate` と `chat.New` が起動を止める（DB を待つ前。キーは文に入れない）。模擬が既定で、`mock` のときは Gemini の設定を読みもしない。
   - 役割は「どのツールを呼ぶか」と「結果の説明文」だけ（`gemini_model.go`）。数字・件数・座標は書かせない。結果（`results`）は、模擬と同じく `Registry` が DB から作り、返答文は `GuardNumbers` を通る。モデルへの往復は最大 4 回・ツール呼び出しは最大 6 件・返答文は 1000 文字まで。
@@ -59,7 +57,7 @@ Python との意図した違い（応答の外から見える規則は同じ。�
   - エンドポイント（`chat.GeminiConfig.BaseURL`）・待ち・期限は、テストが偽のサーバーへ向け、短い値に差し替えるための設定で、**環境変数では変えられない**（キーを別の宛先へ送る設定を、環境に持たせないため）。テストは `net/http/httptest` の偽サーバーだけを使い、実 Gemini には、つながない。
 - `Deps.Chat` が nil なら、`/api/chat` のルートは作らない（404）。
 - 本文の大きさの上限は 4 MiB（`cmd/api/main.go` の `maxBodyBytes`。超えると 413）。いちばん大きい正しい本文（500 件 × 2000 文字 × 3 バイト）が約 3.02 MB なので、それが収まる大きさ。本文は、そのまま UTF-8 で送る前提（frontend の `JSON.stringify` がそう。`\uXXXX` に逃がして送ると 1 文字 6 バイトで、最大の会話は収まらない）。
-- **コンテナのメモリー上限は 1 GiB 以上にする（compose で api を Go に切り替えるときに付ける。`compose.yaml` の api は、いま Python の API の値 `mem_limit: 512m`）。** JSON を復号すると、本文の約 50 倍のメモリーを使う（4 MiB の `[{},{},…]` で、確保が累計約 200 MB。`internal/httpx` で実測）ため。
+- **コンテナのメモリー上限は 1 GiB 以上にする（`compose.yaml` の api は `mem_limit: 1g`）。** JSON を復号すると、本文の約 50 倍のメモリーを使う（4 MiB の `[{},{},…]` で、確保が累計約 200 MB。`internal/httpx` で実測）ため。
 
 Python との意図した違い:
 
@@ -76,7 +74,7 @@ Python との意図した違い:
 
 ### Gemini の窓口の前に直したこと（Python と同じ抜け道。Go は塞いだ）
 
-模擬モデルは、返答の数字を結果からだけ作るので、抜け道は出ない。実モデル（Gemini）の返答は、数字の検査（`internal/chat/guard.go`）に頼るので、窓口を作る前に塞いだ。Python の API には、この 3 点が残っている（Python の API は、消す）。
+模擬モデルは、返答の数字を結果からだけ作るので、抜け道は出ない。実モデル（Gemini）の返答は、数字の検査（`internal/chat/guard.go`）に頼るので、窓口を作る前に塞いだ。Python の API には、この 3 点が無かった（消した）。
 
 1. **数字の検査（`guard.go`）**: 結果に無い数を、次の書き方で通していた。Go は、全部落とす。かけるのは、実 LLM の返答文（`GuardNumbers`）と、LLM が書いた `refuse` の文だけ。模擬モデルの返答文は、Python と同じ範囲の検査（`guardTemplateNumbers`）のまま（模擬モデルは、数字を結果からだけ作る。強い検査にすると、利用者の語を写した断り〔「六本木」など〕が落ちて、Python と応答が変わる）。
    - 助数詞の表に無い漢数字（「七軒」「三千円」「七つ」）。漢数字は、助数詞の有無に依らず、結果と照合せずに落とす（助数詞つきを落とす Python の規則を、広げた）。数を表さない語（一覧・一番・一部・十分・万が一・もう一度・唯一・九州など。`nonNumericWords`）と、地区名・区名の中の漢数字（`GuardNumbers` の `known`。service が、その要求の地区から渡す）は、数として見ない。**表に無い語は、落とす側（安全なテンプレート）に倒れる**（返答の見た目が変わるだけで、数は通らない）。
@@ -91,7 +89,7 @@ Python との意図した違い:
 
 ```bash
 scripts/test-go.sh               # gofmt・go vet・go test -race（使い捨ての Postgres つき）。初回だけ scripts/test-go.sh --download。同時に流すときは TSGO_TEST_PREFIX=<固有の名前>
-api/difftest/run.sh              # Python の API との差分検査（Go のバイナリを作り、両方を同じ DB に向けて、7 段階で比べる）
+scripts/test-contract.sh         # 契約の検査 contract/（使い捨ての Postgres と Go の API をコンテナで起動して、HTTP だけで叩く）
 ```
 
 ホストに Go は要らない（ローカルの `docunavi-dev` イメージの Go 1.26.10 を、ホストのユーザーで流す）。

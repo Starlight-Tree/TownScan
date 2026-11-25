@@ -455,7 +455,7 @@ func TestMetrics404AndNonObjectBody(t *testing.T) {
 // ---- データ無し・DB の不調 ----
 
 func TestNoDataIs503WithErrorShape(t *testing.T) {
-	want := `{"error":{"code":"no_data","message":"データが読み込まれていません。python -m app.load で pipeline の出力を読み込んでください"}}`
+	want := `{"error":{"code":"no_data","message":"データが読み込まれていません。python -m pipeline.load で pipeline の出力を読み込んでください"}}`
 	for _, target := range []string{"/api/areas", "/api/candidates", "/api/candidates.geojson", "/api/metrics", "/api/candidates/c-1-2-3"} {
 		tt := newTester(t, &fakeStore{})
 		tt.wantJSON(tt.get(target), 503, jsonCT, want)

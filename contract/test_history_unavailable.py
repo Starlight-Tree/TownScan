@@ -6,7 +6,7 @@
 - dbdown（H-A7）: DB が止まっている。有効な JWT で、3 経路と `conversation_id` つきの chat が 503 `db_unavailable`。
 
 3 経路の 503 は `Cache-Control: no-store`（`POST /api/chat` には付けない約束で、ここでは確かめない）。
-どの検査も機能の印 `history` を持つ。Python の API（履歴の経路が無い）には流さない（CONTRACT_FEATURES）。
+どの検査も機能の印 `history` を持つ。履歴の経路が無い API には流さない（CONTRACT_FEATURES）。
 """
 
 from __future__ import annotations

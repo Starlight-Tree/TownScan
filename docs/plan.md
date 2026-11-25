@@ -50,7 +50,7 @@
 | P5 | **GEE 層（拡張 1。go/no-go あり）**: 衛星の年次埋め込みの差で、変化の当たり（ヒートマップ）を事前計算。チャットの道具に追加。**始める前に小検証**: 熊本の 2018→2023 で、ヒートマップが手ラベルの新築棟を何割拾うか | 小検証の数字が出て、go/no-go をユーザーが決める。go なら、事前計算の結果が静的に配信され、チャットから呼べる。写真が無い期間は UI で明示 | 15〜30 h |
 | P6 | **パネル（拡張 2）**: 先に、0.5 m/px でパネルが見えるかを確かめる。事前学習モデルでの推論と評価 | 指標が、参考コンペの尺度で出る。誤りの例も示す | 30〜60 h |
 | P7 | 公開: README・スクリーンショット・限界・デモ。公開前の規約の確認（下記） | 他人が README だけで起動できる | 8〜12 h |
-| PG | **API を Go にする**（[ADR 0005](decisions/0005-api-in-go.md)。2026-11-25 承認）: 契約の検査 `contract/` を先に作り、Go の API（`api/`）が満たしたら Python の API を消す。順序は ADR の「結果」。画像認識・差分・評価・データの読み込み（`pipeline/`・`app.load`）と GEE の事前計算は Python のまま | ①`contract/` が、いまの Python の API で全件合格する。②Go の API が `contract/` に全件合格する（読み取り → 認証 → 検出画像 → チャットの順）。③`compose.yaml` の api が Go になり（**済み 2026-11-25**。Gemini の窓口も Go に入った。FastAPI 版は、消す段まで `compose.python-api.yaml`）、Python の API が消え、`scripts/verify.sh` の全段（`go vet`・`go test -race` を含む）と実機の `scripts/dev-up.sh` で、画面の操作が従来どおり | — |
+| PG | **API を Go にする**（[ADR 0005](decisions/0005-api-in-go.md)。2026-11-25 承認）: 契約の検査 `contract/` を先に作り、Go の API（`api/`）が満たしたら Python の API を消す。順序は ADR の「結果」。画像認識・差分・評価・データの読み込み（`pipeline/`・`pipeline.load`）と GEE の事前計算は Python のまま | ①`contract/` が、いまの Python の API で全件合格する。②Go の API が `contract/` に全件合格する（読み取り → 認証 → 検出画像 → チャットの順）。③`compose.yaml` の api が Go になり、Python の API が消え（**済み 2026-11-25**。Gemini の窓口も Go に入った）、`scripts/verify.sh` の全段（`go vet`・`go test -race` を含む）と実機の `scripts/dev-up.sh` で、画面の操作が従来どおり | — |
 | PH | **会話の履歴**（[ADR 0006](decisions/0006-conversation-history.md)。ユーザー決定 10 件は 2026-11-25。**API（Go）は実装済み〔2026-11-25: 契約 660 件・Go 445 件合格〕。画面も実装済み〔frontend 1261 件〕。DDL は main に入れた〔承認済み〕**）: ログイン中だけ、サーバーが回答と一緒に保存し、サイドパネルに一覧・開き直し・2 段階の削除を出す。表 2 つ（`conversations`・`conversation_messages`）は **Go の API にだけ**入れる（Python の API には入れない）。仕様は [spec-prototype.md](spec-prototype.md) の §2.3・§4.3・§4.4・§7.1・§8（E9）。順序は ADR 0006 の「結果」（契約の検査を先に書く → `AccessLog` の修正 → Go の API → 保守コマンド → 画面） | ①`contract/` に構成 `history`（H-系 26 行）と、既存の構成へ足す H-A5〜A7 を、Go の API より先に書く。この時点で、`scripts/test-contract.sh python` は H-系を流さず（deselect）、既存の全件合格のまま ②`scripts/test-contract.sh go` が、H-系と、H-A5〜A7、既存の検査（H-A3 = `test_auth_independence.py`）を含めて全件合格 ③`api/` の `go vet`・`go test -race -count=1` が合格（並行・巻き戻し・LLM を呼ぶ前の拒否〔偽の LLM の呼び出しが 0 回〕・ログに本文と ID が出ない・保守コマンドの既定が削除しないこと） ④`frontend` の型検査・lint・Vitest が合格（spec-prototype §8 の E9 の「画面（Vitest）」の項目） ⑤実機（`scripts/dev-up.sh`）で、本物の Google ログインのあと、web の `/api/auth/token` が返す JWT を API が受理し、履歴の 3 本が通る（手で確かめる。ADR 0006 の未確認）。**DDL の実行（`history.sql` を `go:embed` へ足すコミットを main へ入れること）・プッシュ・保守コマンドの `--apply`・本番配備は、それぞれ別に承認を得る** | — |
 
 **たたき台（2026-11-24 追加）:** P2〜P4 を薄く一通り通し、ローカルで動いて UI で操作できる縦切りを先に作る。仕様・データの契約・出口条件（E1〜E8）は [spec-prototype.md](spec-prototype.md)。範囲は熊本の 12 地区で、GEE・パネル・公開は含まない。
@@ -59,7 +59,7 @@
 
 ## 5. 設計の骨子（P3・P4 で ADR にする）
 
-- スタックは、ユーザーの既存の型に合わせる: Next.js（Node 24）、Postgres 17、解析は Python 3.13。**API は Go**（ADR 0005。それまでの FastAPI は、置き換えて消す）。**PostGIS など新しい DB 拡張・サービスは、ADR で承認を得る。**
+- スタックは、ユーザーの既存の型に合わせる: Next.js（Node 24）、Postgres 17、解析は Python 3.13。**API は Go**（ADR 0005。それまでの FastAPI は、置き換えて 2026-11-25 に消した）。**PostGIS など新しい DB 拡張・サービスは、ADR で承認を得る。**
 - チャットは、ツール呼び出しの結果を**判別可能ユニオン型＋固定部品**で描く（ShopOrder と同じ方針）。数字・件数・座標は LLM に書かせない。LLM は「どのツールを呼ぶか」と、結果の説明だけ。
 - 「根拠付き」は、ツール結果に出どころ（データ名・撮影年・指標）を必ず持たせて表す。
 - LLM は模擬モデルが既定。実モデルへの切り替えは、承認を得てから環境変数で選ぶ。

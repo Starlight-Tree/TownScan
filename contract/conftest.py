@@ -5,7 +5,7 @@
   CONTRACT_VARIANT   API の構成（main・empty・noauth・badauth・jwksdown・dbdown・history。既定 main）。README の「API の構成」。
                      検査は、自分の構成のものだけが流れる（ほかは deselected として数えられる）
   CONTRACT_FEATURES  この API が持つ機能（空白かカンマで区切る。いまは history だけ）。機能の印（@pytest.mark.history）の付いた検査は、
-                     ここに無い機能のとき、構成が合っていても deselect される（会話の履歴は Go の API にだけある。Python の API に流さない）。
+                     ここに無い機能のとき、構成が合っていても deselect される（会話の履歴を持たない API には流さない）。
                      scripts/test-contract.sh は、対象が go のときだけ history を渡す
   CONTRACT_USER_POOL 履歴の検査用の利用者の人数（既定 200。scripts/test-contract.sh が auth_user へ入れる人数と同じ）
   CONTRACT_JWKS_*    偽の JWKS サーバー（support/fakes.py）の待ち受け先。API の AUTH_JWKS_URL がここを指す
@@ -48,7 +48,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """検査の構成（@pytest.mark.variant("main", ...)。付けなければ main）と、CONTRACT_VARIANT が合わないものを外す。
-    機能の印（@pytest.mark.history）が付いた検査は、CONTRACT_FEATURES にその機能が無ければ、構成が合っていても外す（Python の API に流さない）。"""
+    機能の印（@pytest.mark.history）が付いた検査は、CONTRACT_FEATURES にその機能が無ければ、構成が合っていても外す（持たない API には流さない）。"""
     keep, drop = [], []
     for item in items:
         marker = item.get_closest_marker("variant")

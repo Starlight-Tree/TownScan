@@ -3,7 +3,7 @@
 #
 #   scripts/login-secrets.sh <Infisical のプロジェクト ID> [環境名。既定 dev] [--from-json <OAuth クライアントの JSON のパス>]
 #
-# 登録するもの（名前は compose.yaml と frontend/lib/auth.ts・backend/app/config.py が読むものと同じ）:
+# 登録するもの（名前は compose.yaml と frontend/lib/auth.ts・api/internal/config が読むものと同じ）:
 #   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET  Google Cloud Console で作った OAuth クライアント（種類: ウェブ）の値。
 #                                            画面に出ない入力で受ける。または --from-json で、ダウンロードした JSON から取り出す（下）
 #   BETTER_AUTH_SECRET                       その場で作る（openssl rand -base64 32。表示しない）。すでにあれば作り直さない

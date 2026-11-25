@@ -9,7 +9,7 @@ import (
 	"townscan/api/internal/store"
 )
 
-// Python の実装が出した期待値（testdata/golden.json.gz の pick・safe_template。作り方は gen_golden.py）と、Go の実装が同じになるか。
+// Python の実装が出した期待値（testdata/golden.json.gz の pick・safe_template。作り方は git 履歴 e9a6614 の gen_golden.py）と、Go の実装が同じになるか。
 // 変異テストで、規則の 1 か所を書き換えても落ちなかった所（L18・G14）を、Python の実装に合わせる検査。
 
 // 数字の検査に落ちたときの、安全なテンプレートの文面が、Python と同じ（文面が変わると、画面に出る文が変わる）。

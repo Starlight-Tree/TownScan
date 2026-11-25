@@ -220,7 +220,7 @@ func TestImageNoDataIs503BeforeLookingUpTheCandidate(t *testing.T) {
 	fake := &fakeStore{cand: imgCandidate("confirmed_new")}
 	tt := imgTester(t, fake, imgTilesDir(t))
 	tt.wantJSON(tt.get(imgURL("?year=2018")), 503, jsonCT,
-		`{"error":{"code":"no_data","message":"データが読み込まれていません。python -m app.load で pipeline の出力を読み込んでください"}}`)
+		`{"error":{"code":"no_data","message":"データが読み込まれていません。python -m pipeline.load で pipeline の出力を読み込んでください"}}`)
 	if strings.Join(fake.calls, ",") != "CurrentRun" {
 		t.Errorf("DB の呼び出し = %v", fake.calls)
 	}

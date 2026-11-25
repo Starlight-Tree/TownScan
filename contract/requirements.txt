@@ -1,4 +1,4 @@
-# 契約の検査の依存（固定版。backend/requirements.txt・requirements-dev.txt と同じ版）。
+# 契約の検査の依存（固定版）。
 # HTTP は標準ライブラリ（http.client）で叩くので、HTTP クライアントのライブラリは入れない。
 # PyJWT・cryptography: 偽の JWKS の鍵とテスト用の JWT を作る。Pillow: 検出画像の PNG を読む。
 cffi==2.1.1

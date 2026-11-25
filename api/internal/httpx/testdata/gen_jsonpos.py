@@ -6,11 +6,10 @@ Go の単体テスト（jsonpos_test.go）が、この出力（jsonpos.json.gz�
 入力は、手で選んだ壊れ方と、正しい JSON を壊した文（固定の種の乱数。1 文字の削除・挿入・置き換え・入れ替え・途中で切る）と、
 入れ子の深さの境目（DEEP。jsonpos.go の maxPyJSONDepth = 9990 の前後。Python 3.13 の C 版は、素の json.loads なら 9997 段まで位置を返す）。
 
-作り直し（この testdata を書き込み可で重ねる。ネットワークは要らない。Python は 3.13 の townscan-backend-test イメージ。
-townscan-api のタグは Go の API のイメージに替わったので、使わない）:
+作り直し（この testdata を書き込み可で重ねる。ネットワークは要らない。Python は 3.13 の python:3.13-slim イメージ）:
 
     docker run --rm --name <名前> --network none --user "$(id -u):$(id -g)" -e PYTHONDONTWRITEBYTECODE=1 \\
-      -v "$PWD/api/internal/httpx/testdata:/out" townscan-backend-test python -I /out/gen_jsonpos.py
+      -v "$PWD/api/internal/httpx/testdata:/out" python:3.13-slim python -I /out/gen_jsonpos.py
 
 標準ライブラリだけ。出力の各行: {"raw": 本文, "pos": 誤りの位置 | null（Python が受け入れる）, "msg": Python の誤りの種類}。
 """

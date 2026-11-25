@@ -18,7 +18,7 @@ import (
 
 // Python の実装（backend/app/chat/）が出した期待値（testdata/golden.json.gz）と、Go の実装が、同じ入力で同じ出力になるかを確かめる。
 // 契約の検査（contract/）が見ない、規則の境目・正規表現の書き換え・Unicode の扱いを、広い入力（数千の質問）で Python に合わせるための検査。
-// 期待値の作り方・作り直し方は testdata/gen_golden.py。
+// 期待値は凍結したデータ（作った Python の API と gen_golden.py は、2026-11-25 に消した。git 履歴 e9a6614）。
 
 type goldenArea struct {
 	ID   string `json:"id"`

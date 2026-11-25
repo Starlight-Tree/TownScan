@@ -1,7 +1,7 @@
 // ログイン（Better Auth。Google だけ）。画面のサーバー（Next.js）の中で動く。JobNavi・DocuNavi と同じ Better Auth 1.7.18 を、Next.js の公式の組み込み方で使う。
 //   - ブラウザーからの /api/auth/* は、app/api/auth/[...all]/route.ts が受ける（Google への行き来・Cookie・JWKS）。proxy.ts は /api/auth/* を API へ転送しない。
-//   - ログイン中の人の確認は、サーバー側で auth.api を直接呼ぶ（session.ts）。API（FastAPI）の /api/me は、JWT（15 分・ES256）を Bearer で受け、JWKS（/api/auth/jwks）で検証するだけ。
-//   - 利用者の表は auth_ 付きの名前（backend/db/auth.sql。JobNavi の 0004_better_auth.sql と同じ形）。
+//   - ログイン中の人の確認は、サーバー側で auth.api を直接呼ぶ（session.ts）。API（Go）の /api/me は、JWT（15 分・ES256）を Bearer で受け、JWKS（/api/auth/jwks）で検証するだけ。
+//   - 利用者の表は auth_ 付きの名前（pipeline/sql/auth.sql。JobNavi の 0004_better_auth.sql と同じ形）。
 // 設定が足りないとき（Google の OAuth クライアントをまだ作っていない、など）は getAuth() が null を返し、画面は「まだ設定されていません」と出す。値は環境変数だけで受ける。
 import { betterAuth } from 'better-auth';
 import { nextCookies } from 'better-auth/next-js';

@@ -1,5 +1,5 @@
 -- 会話の履歴（ログイン中だけ）。auth.sql（auth_user）のあとに流す。仕様: docs/spec-prototype.md §2.3・§4.3、ADR 0006。
--- Go の API だけが使う表（backend/db/ には置かない。TestSchemaMatchesBackend の対象にしない）。
+-- Go の API だけが使う表（pipeline/sql/ には置かない。TestSchemaMatchesLoaderCopy の対象にしない）。
 -- 何度流しても同じになる形（IF NOT EXISTS）。DROP・TRUNCATE は書かない。
 CREATE TABLE IF NOT EXISTS conversations (
     user_id     text        NOT NULL,

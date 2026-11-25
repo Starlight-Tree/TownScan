@@ -1,6 +1,6 @@
 // TownScan の API（Go）。設定 → DB の接続とスキーマの適用 → 待ち受け → 停止の合図（SIGINT・SIGTERM）で、処理中の応答を終えてから止まる。
 //
-// 決定: docs/decisions/0005-api-in-go.md（API は Go、解析は Python）。振る舞いの正本は backend/app/ と docs/spec-prototype.md §4.4。
+// 決定: docs/decisions/0005-api-in-go.md（API は Go、解析は Python）。振る舞いの正本は docs/spec-prototype.md §4.4。
 // いまあるのは読み取りのエンドポイント（/api/health・/api/areas・/api/candidates・/api/candidates.geojson・/api/candidates/{id}・/api/metrics）と、
 // 検出画像（/api/candidates/{id}/image。internal/imaging）、認証（/api/me。internal/auth）、チャット（POST /api/chat。模擬モデルと、
 // LLM_PROVIDER=gemini のときの実 LLM。internal/chat）。
@@ -47,7 +47,7 @@ const (
 	requestDeadline = chat.RequestDeadline
 	// 停止の合図から、処理中の応答を待つ時間
 	shutdownGrace = 10 * time.Second
-	// スキーマの適用のやり直し（backend/app/db.py の wait_and_apply_schema と同じ）
+	// スキーマの適用のやり直し（DB がまだ起きていないときに備える）
 	schemaAttempts = 20
 	schemaDelay    = 1500 * time.Millisecond
 	healthTimeout  = 3 * time.Second

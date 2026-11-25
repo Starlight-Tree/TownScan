@@ -1,6 +1,6 @@
-"""契約の検査が期待する、合成データ（backend/tests/synthetic.py）の中身。
+"""契約の検査が期待する、合成データ（contract/synthetic.py）の中身。
 
-検査が API に入れて読み戻すデータは、scripts/test-contract.sh が `python -m app.load` で入れた合成データの run（kind=synthetic）。
+検査が API に入れて読み戻すデータは、scripts/test-contract.sh が `python -m pipeline.load` で入れた合成データの run（kind=synthetic）。
 数字・件数は、結果から読まずにここへ決め打ちで書く。導き方（どれも synthetic.py の定義から）:
 
 - 地区 3 つ: タイル (X0, Y0)=(226249, 105759) を基準に、(dx, dy) = (0,0) 合成町・(1,0) 試験町・(0,1) 仮想町。
@@ -36,13 +36,13 @@ CLASS_LABELS = {
 
 A1, A2, A3 = "z18-226249-105759", "z18-226250-105759", "z18-226249-105760"
 
-# provenance の固定の文（backend/app/provenance.py）
+# provenance の固定の文（旧 Python の API の provenance.py。git 履歴 e9a6614）
 SOURCE_CANDIDATES = "国土地理院 空中写真（年度別 2018・2023 年）から建物を抽出し、2 時点を比較した結果"
 SOURCE_ACCURACY = "基盤地図情報（2018-10 版）を参照にした、2018 年の写真での建物抽出の評価"
 NOTE_SYNTHETIC = "合成データ（テスト用）です。実データではありません。"
 NOTE_UNVERIFIED_ACCURACY = "数字は 2018 年の写真で測った値。新築の再現率は手ラベルが無く未測定。分類の閾値は未検証の初期値。"
 
-# 候補の説明文（backend/app/explanations.py。reason ごとの固定文）
+# 候補の説明文（旧 Python の API の explanations.py。git 履歴 e9a6614。reason ごとの固定文）
 EXPLANATIONS = {
     "new_absent_2018": "2023 年の写真には建物があり、2018 年の写真にはその場所に何も見当たりません。新しく建った可能性があります。",
     "present_2018": "2018 年の写真にも既に建物があります。建物データ（基盤地図情報）の描き漏れの可能性が高く、新築とは限りません。",
