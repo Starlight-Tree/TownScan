@@ -8,7 +8,7 @@ A chat app that finds candidates for new buildings in central Kumamoto City from
 
 | Candidates on the map | Photos of one candidate, 2018 and 2023 |
 |---|---|
-| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="Home screen: the chat column, and the map of candidates with counts per class and the Geospatial Information Authority of Japan attribution" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="Photo comparison: an answer in the chat and the 2018 and 2023 photos of one candidate with its outline and the reasons" src="docs/images/compare.png"></picture></a> |
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="Home screen: an answer in the chat with its map of candidates, counts per class and the Geospatial Information Authority of Japan attribution" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="Photo comparison: an answer in the chat with the 2018 and 2023 photos of one candidate and its outline" src="docs/images/compare.png"></picture></a> |
 
 ## Features
 

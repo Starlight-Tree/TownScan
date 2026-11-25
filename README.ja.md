@@ -8,7 +8,7 @@
 
 | 地図の上の候補 | 1 件の 2018 年と 2023 年の写真 |
 |---|---|
-| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="ホーム画面。チャットの列と、分類ごとの件数つきの地図。国土地理院の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="写真の比較。チャットの回答と、1 件の候補の 2018 年・2023 年の写真（輪郭と判定の理由つき）" src="docs/images/compare.png"></picture></a> |
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="ホーム画面。チャットの回答の中に、分類ごとの件数つきの地図が出る。国土地理院の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="写真の比較。チャットの回答の中に、1 件の候補の 2018 年・2023 年の写真（輪郭つき）が出る" src="docs/images/compare.png"></picture></a> |
 
 ## 機能
 
