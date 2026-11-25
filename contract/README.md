@@ -8,15 +8,16 @@ TownScan の API（`/api/*`）が、**HTTP から見える振る舞い**を満�
 
 ```sh
 scripts/test-contract.sh python          # 全部。使い捨ての Postgres と API を起動し、構成ごとに検査を流して、全部消す（Docker が要る）
-scripts/test-contract.sh go              # Go の API。api/Dockerfile がまだ無いので「未対応」と出して終わる（終了コード 2）
+scripts/test-contract.sh go              # Go の API（既定はローカルの docunavi-dev でビルド）。構成 history（会話の履歴）は、この対象だけで流れる
 scripts/verify.sh contract               # 同じもの（verify.sh の「contract」の段）
 CONTRACT_PHASES=main scripts/test-contract.sh python -k chat -x   # 開発用: 構成を絞る・pytest の引数を渡す
+CONTRACT_PHASES=history scripts/test-contract.sh go -k h_l5       # 開発用: 履歴の構成だけ（Go だけ）。同時に別の作業が流すときは CONTRACT_PREFIX も変える
 ```
 
 `scripts/test-contract.sh` がやること（どの実装でも同じ）: ① 検査を流すイメージ（`contract/Dockerfile`。pytest・PyJWT・Pillow だけ）と、データの読み込みのイメージ（`backend/` の runtime。`python -m app.load` は API が Go になっても Python の仕事）と、対象の API のイメージを作る
-→ ② 使い捨ての Postgres（`townscan-contract-db`・mem_limit 256m・データは tmpfs）を、外へ出られない専用ネットワーク（`--internal`）で起動 → ③ 合成データを書いて（`contract/prepare_data.py`）、`python -m app.load --run` で DB へ入れる
+→ ② 使い捨ての Postgres（`townscan-contract-db`・mem_limit 256m・データは tmpfs）を、外へ出られない専用ネットワーク（`--internal`）で起動 → ③ 合成データを書いて（`contract/prepare_data.py`）、`python -m app.load --run` で DB へ入れ、**検査用の利用者 200 人を `auth_user` へ入れる**（構成 `history` が使う。下の「データの準備」）
 → ④ 構成ごとに、API を起動して検査を流して止める → ⑤ 結果の表を出し、`townscan-contract-*` を全部消す。ポートは公開しない（ホストの 8500・3500・5432 に触れない）。外への通信・実 API は無い（`LLM_PROVIDER=mock`）。
-API のログは、失敗した構成のときだけ末尾を出す。所要は、イメージが作ってあれば約 1 分（うち、DB が止まったときの検査 `dbdown` が約 30 秒。接続の待ちが各 10 秒前後かかる）。
+API のログは、失敗した構成のときだけ末尾を出す。所要は、イメージが作ってあれば約 1 分（うち、DB が止まったときの検査 `dbdown` が約 30 秒。接続の待ちが各 10 秒前後かかる）。`history` は、Go の API が履歴を実装したあとの所要を、まだ測っていない（Go の API が履歴を持たない間は、検査そのものは約 1 秒で落ちる）。
 
 自分で起動した API に流すこともできる（データが合成データであること。下の「データの準備」）:
 
@@ -28,6 +29,8 @@ API_BASE_URL=http://127.0.0.1:8600 CONTRACT_VARIANT=main python -m pytest contra
 |---|---|
 | `API_BASE_URL` | 叩く API（既定 `http://127.0.0.1:8500`）。合成データの run（`synthetic-test`）が入っていなければ、検査を始めずに止まる（開発用の API に流して、大量の失敗を出さないため） |
 | `CONTRACT_VARIANT` | API の構成（下の表。既定 `main`）。自分の構成の検査だけが流れる（ほかは `deselected`） |
+| `CONTRACT_FEATURES` | この API が持つ機能（空白かカンマ区切り。いまは `history` だけ）。機能の印 `@pytest.mark.history` の付いた検査は、ここに `history` が無いと、構成が合っていても `deselected`（Python の API に履歴の検査を流さない仕組み）。`scripts/test-contract.sh` は、対象が `go` のときだけ `history` を渡す。自分で起動した Go の API に流すときは、自分で付ける。構成 `history` を `CONTRACT_FEATURES` 無しで流すと、空振りさせずに止める |
+| `CONTRACT_USER_POOL` | 履歴の検査用の利用者の人数（既定 200）。`auth_user` に入れた人数と同じにする（`scripts/test-contract.sh` は `CONTRACT_HISTORY_USERS`〔既定 200〕を、入れる側と検査の側の両方に渡す）。使い切ると、`fresh_user()` がはっきり失敗する |
 | `CONTRACT_JWKS_BIND`・`CONTRACT_JWKS_PORT` | 偽の JWKS サーバー（検査のプロセスの中）の待ち受け先（既定 `0.0.0.0:8901`）。API の `AUTH_JWKS_URL` がここを指す |
 | `CONTRACT_AUTH_ISSUER` | 偽の画面のサーバーの発行元（既定 `https://auth.contract.test`）。API の `AUTH_ISSUER` と同じにする |
 | `CONTRACT_TIMEOUT`・`CONTRACT_READY_TIMEOUT` | 1 回の要求の待ち（既定 20 秒）・API が応答するまでの待ち（既定 60 秒） |
@@ -35,15 +38,17 @@ API_BASE_URL=http://127.0.0.1:8600 CONTRACT_VARIANT=main python -m pytest contra
 ## API の構成（variant）
 
 API は、環境変数（`compose.yaml` の api と同じ名前）だけで構成される。構成ごとに API を起動し直して、その構成の検査だけを流す（`@pytest.mark.variant(...)`。付けなければ `main`）。
+**機能の印 `@pytest.mark.history`**（構成の印とは別）は、会話の履歴の検査（H-系）に付ける。`CONTRACT_FEATURES` に `history` が無いときは、構成が合っていても外す。履歴は Go の API にだけ入れる（ADR 0006 の D8）ので、Python の API には流さない。既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す H-A5〜A7 も、この印で Python の API から外す（印が無いと、履歴の経路を持たない Python の API〔404〕に流れて落ちる）。
 
 | 構成 | API の起動時の設定 | 確かめること | 検査 |
 |---|---|---|---|
 | `empty` | 表だけがある空の DB。ログインの設定なし | データを読む入口は 503 `no_data`（引数の検証 422 が先）。ヘルスは 200（run は null）。チャットは `no_data` の断り | `test_no_data.py` |
 | `main` | 合成データ入りの DB。`AUTH_ISSUER`・`AUTH_JWKS_URL`（偽の JWKS サーバー）あり。`AUTH_AUDIENCE` は**設定しない**（既定 `townscan` の検査を兼ねる） | 本体。全エンドポイントの正常系・異常系、チャット、画像、`/api/me` の検証 | 上記以外のすべて |
-| `noauth` | `main` と同じデータ。`AUTH_*` なし | `/api/me` は、JWT の有無・形を見る前に 503。ほかの入口は影響を受けない | `test_me_unconfigured.py`・`test_auth_independence.py` |
+| `noauth` | `main` と同じデータ。`AUTH_*` なし | `/api/me` は、JWT の有無・形を見る前に 503。ほかの入口は影響を受けない。**履歴の 3 本と `conversation_id` つきの chat も 503**（H-A5） | `test_me_unconfigured.py`・`test_auth_independence.py`・`test_history_unavailable.py`（履歴の印つき） |
 | `badauth` | `AUTH_ISSUER=localhost:3500`（http(s) の URL でない。`BETTER_AUTH_URL` の書き間違いを `compose.yaml` がそのまま渡した想定）、`AUTH_JWKS_URL` は正しい | 起動は止まらず、`noauth` と同じ動き（JWKS を取りに行かない） | 同上 |
-| `jwksdown` | `AUTH_ISSUER` は正しい、`AUTH_JWKS_URL` は届かない URL（接続拒否） | 鍵を要する検証は 503（詳細を漏らさない）。鍵を使わずに断れるものは 401 のまま | 同上 |
-| `dbdown` | `main` と同じ。起動して healthy を確かめたあとで、DB を止める | ヘルスは 503（`status`・`db` が error）、データを読む入口は 503 `db_unavailable`、DB を使わない `/api/me` は 200 | `test_no_data.py` |
+| `jwksdown` | `AUTH_ISSUER` は正しい、`AUTH_JWKS_URL` は届かない URL（接続拒否） | 鍵を要する検証は 503（詳細を漏らさない）。鍵を使わずに断れるものは 401 のまま（履歴の経路も同じ。H-A6） | 同上 |
+| `dbdown` | `main` と同じ。起動して healthy を確かめたあとで、DB を止める | ヘルスは 503（`status`・`db` が error）、データを読む入口は 503 `db_unavailable`、DB を使わない `/api/me` は 200。履歴の 3 本と `conversation_id` つきの chat も 503 `db_unavailable`（H-A7） | `test_no_data.py`・`test_history_unavailable.py`（履歴の印つき） |
+| `history` | `main` と同じ設定（合成データ・偽の JWKS）。**Go の API だけ**（`scripts/test-contract.sh` の既定の並びでは、対象が `go` のときだけ `main` の次に入る）。使い捨ての DB 専用 | 会話の履歴（仕様 §2.3・§4.4・§8 の E9。H-系 26 行）: 履歴の 3 本のログイン・一覧・発言の取得・削除・`conversation_id` つきの chat の保存と上限 | `test_history_*.py` |
 
 API の起動時の設定（対象に関わらず同じ）: `DATABASE_URL`・`TILES_DIR`・`LLM_PROVIDER=mock`・（構成により）`AUTH_ISSUER`・`AUTH_JWKS_URL`。API は、引数なしの起動（イメージの CMD）で、コンテナの 8000 番を待ち受ける。
 
@@ -60,9 +65,14 @@ API の起動時の設定（対象に関わらず同じ）: `DATABASE_URL`・`TI
 | `GET /api/metrics` | `test_detail.py` | 評価ファイルの内容そのもの + provenance（2018 年の写真・固定の注記） |
 | `POST /api/chat` | `test_chat_answers.py`・`test_chat_behavior.py` | 代表的な質問 29 件の答え（`tool_calls`・`results`・`content` を全体で）。ツールの選び方・範囲外の断り（`out_of_scope`・`no_photo_period`・`not_implemented`）・文脈（末尾 20 件だけ）・履歴の上限（500 件まで・1 件 2000 文字）・不正な入力は 422・**返答文の数字は結果の値だけから出る**（`support/chat.py` の検査。`guard_numbers` の契約）・SQL インジェクションの文字列が検索を変えない |
 | `GET /api/me` | `test_me.py`・`test_me_unconfigured.py` | JWT の検証（ES256 のみ・`iss`/`aud`/`exp`/`sub` 必須・完全一致・10 秒のずれまで・署名・kid・使えない鍵が混ざる JWKS）・`{sub,email,name,picture}` の整形（https の画像・254 文字のメール・100 文字の名前・印字できない文字を除く）・401（固定の文・`WWW-Authenticate: Bearer`・`no-store`）・503（未設定・JWKS 不達） |
+| `GET /api/conversations`・`GET /api/conversations/{id}/messages`・`DELETE /api/conversations/{id}`（**履歴。Go だけ。構成 `history`**） | `test_history_auth.py`・`test_history_list.py`・`test_history_messages.py`・`test_history_delete.py` | 未ログインは 3 経路とも同じ 401（ID の形の 422 より先）・本人の会話だけ（無い ID と他人の ID は、本文も同じ 404）・一覧は更新が新しい順で最大 50 件・題名の規則（40 文字・コードポイントで数える・空白を畳む）・発言は古い順で、回答は chat の `message` と JSON として等しい（＋`run_created_at`）・見るだけでは更新しない・形が違う ID は 422（`path.conversation_id`）・3 経路の全応答（200・204・401・404・422）が `Cache-Control: no-store`・削除は 204 で本当に消える（同じ ID で話しかけ直しても戻らない） |
+| `POST /api/chat` ＋ `conversation_id`（**履歴。Go だけ**） | `test_history_auth.py`・`test_history_list.py`・`test_history_chat.py` | 本文の不正（空の発言・最後が assistant・形が違う ID・NUL）は、未ログインでも 422（本文が先）。そのあと未ログイン → 401（回答も保存もしない）・`auth_user` に行が無い → 401・保存は回答を変えない・追記・同じ ID を別の人が使っても別の会話・失敗した往復は保存しない・質問 2000 文字・1 会話 500 件（超えたら 422 `conversation_full`）・1 人 50 件（超えたら最も古い 1 件が消える）・全種類の結果の往復・`conversation_id: null` は「無し」 |
+| 履歴が使えないとき（**Go だけ**。既存の構成に足す） | `test_history_unavailable.py` | `noauth`・`badauth`: 3 経路と chat＋`conversation_id` は、JWT を見る前に 503 `unavailable`（3 経路は `no-store`）。`jwksdown`: 無し・壊れた → 401、形の正しいトークン → 503。`dbdown`: 有効な JWT で 503 `db_unavailable`（chat は回答が無い・接続先を漏らさない）。どれも `conversation_id` なしの chat は 200 |
 | 全体 | `test_errors.py`・`test_auth_independence.py` | エラーはすべて JSON の `{error:{code,message}}`（422 は `details` も）・存在しない経路は 404 `not_found`・許されないメソッドは 405 `method_not_allowed`・ログインの有無・設定は、ほかの入口に影響しない（応答が同じ） |
 
-ヘッダー: API が付けるのは、`/api/me` の `Cache-Control: no-store`（成功・401・503）・401 の `WWW-Authenticate: Bearer`・画像の `Cache-Control: private`・`Content-Type` だけ。**セキュリティヘッダー（CSP・HSTS など）は、API には無い**（画面の Next.js が付ける。`frontend/lib/security-headers.ts`）ので、契約に入れていない。
+**履歴で契約にしないもの**（Go のテスト `go test -race`・保守コマンドのテストが持つ。仕様 §8 の E9）: 同じ会話への同時の書き込みで `seq` が重複・欠落しない・`updated_at` が逆戻りしない・同時の `DELETE` が保存を 401 に取り違えさせない・同じ人の同時の保存で 1 人 50 件の整理がデッドロックしない・一覧の「同時刻は `id` の昇順」・題名の作り方の単体（U+001F の畳み込み・「（題名なし）」）・保存のトランザクションの巻き戻し・**LLM を呼ぶ前に** `auth_user`・NUL・発言数を断ること（偽の LLM の呼び出しが 0 回。契約からは、模擬モデルが決定的で呼び出しが数えられないので見えない）・保存の失敗の分類（接続系 503・それ以外 500・`conversations_user_fk` だけ 401）・ログに本文・題名・`results`・生の ID が出ない・保守コマンド（既定は削除しない・`--apply`・境界）。
+
+ヘッダー: API が付けるのは、`/api/me` と履歴の 3 本の `Cache-Control: no-store`（成功・401・503。履歴の 3 本は 204・404・422 も）・401 の `WWW-Authenticate: Bearer`・画像の `Cache-Control: private`・`Content-Type` だけ。**セキュリティヘッダー（CSP・HSTS など）は、API には無い**（画面の Next.js が付ける。`frontend/lib/security-headers.ts`）ので、契約に入れていない。
 
 ## 契約の決め方
 
@@ -81,6 +91,15 @@ python -m app.load --run DIR/run                                                
 # API は TILES_DIR=DIR/tiles で起動する
 ```
 
+**利用者の行（構成 `history`）**: 偽の JWT の `sub` に対応する `auth_user` の行が要る（`conversation_id` つきの chat は、LLM を呼ぶ前に行の存在を確かめ、会話は `auth_user.id` への外部キーを持つ）。`scripts/test-contract.sh` は、データを読み込んだあと（`auth_user` の表ができたあと）に、使い捨ての DB へ**検査用の利用者 200 人**（`ct_user_000001`〜`ct_user_000200`。`sub` の規則 `[A-Za-z0-9_-]{8,64}` に合う）を入れる。検査は互いの状態に依存してはならない（「一覧が空」や件数は、同じ利用者を別の検査が使うと順序で壊れる）ので、**検査ごとに別の利用者**を使う（`support/fakes.py` の `fresh_user()`。同じ実行の中で重ならず、使い切ったらはっきり失敗する）。行の無い利用者（H-A4）は、プールの外の固定の `sub`（`ct_nouser_000001`）。契約の検査自身は DB に触れない。後始末はしない（DB は実行ごとの使い捨て）。
+**`history` 構成は、使い捨ての DB 専用。** 同じ DB に 2 回流すと、前の実行の会話が残り、利用者が新しくならず、H-L1 などが落ちる。自分で用意した DB に流すときは、データを読み込んだあと、1 回だけ次の SQL を流す（人数は `CONTRACT_USER_POOL` と同じに）:
+
+```sql
+INSERT INTO auth_user (id, name, email, "emailVerified")
+SELECT 'ct_user_' || lpad(n::text, 6, '0'), 'contract user ' || n, 'ct_user_' || lpad(n::text, 6, '0') || '@contract.test', false
+FROM generate_series(1, 200) AS n;
+```
+
 写真タイルには、画像の 404 を確かめるための**故障を 3 つ仕込む**（`support/expected.py` の `TILE_FAULTS`）: 試験町の 2018 年 = ファイルが無い／仮想町の 2018 年 = PNG ではないファイル／仮想町の 2023 年 = `TILES_DIR` の外を指すシンボリックリンク（行き先は正しい PNG なので、外を読んだら 200 になって分かる）。合成町（A1）の候補は両年とも読めるので、画像の検査は主にこれを使う。
 タイルは、R=列・G=行（タイル内の画素の位置）・B=年（2018→50、2023→200）の傾斜画像。切り出した画像の画素から、元のタイルのどこを切ったか（位置・範囲・向き）と、どの年かが分かる。
 
@@ -93,6 +112,8 @@ python -m app.load --run DIR/run                                                
 5. `compose.yaml` の api を Go のイメージに替えたあと、`scripts/verify.sh`（`contract` の段を含む全段）と `scripts/dev-up.sh` の実機で、画面の操作が従来どおりであることを確かめる（ADR 0005 の「結果」6）。Python の API を消したら、`scripts/test-contract.sh` の `python` の対象と、下の「残す検査」を整理する。
 
 偽の JWKS サーバー（`support/fakes.py`）は検査のプロセスの中で動き、API はコンテナの名前（`townscan-contract-runner`）で取りに来る。鍵は実行ごとに作る（EC P-256 を 2 つ。使えない鍵: EdDSA・RSA・P-384・kid 無し・暗号化用）。**同じ API に続けて流すと、API が前の実行の鍵を覚えているので（10 分。未知の鍵 ID の取り直しは 60 秒に 1 回まで）、`/api/me` の検査が落ちることがある**（API を起動し直す。`scripts/test-contract.sh` は毎回起動し直す）。
+
+履歴（構成 `history`）は、Go の API が実装するまで、この検査の側が先に書いてある（仕様 §8 の E9）。Go の API には、履歴の表（`api/internal/store/sql/history.sql`）を起動時に適用する経路が要る（契約は HTTP だけなので、どの経路でもよい）。Python の API を消したら、機能の印の仕組み（`CONTRACT_FEATURES`・`@pytest.mark.history`）は外せる（履歴を常に流す）。
 
 ## 実装の内部の検査として残すもの（`backend/tests/`。契約にしない）
 
@@ -114,10 +135,12 @@ Go の `api/` に Gemini の窓口ができた（2026-11-25）。その検査（
 
 | パス | 役割 |
 |---|---|
-| `conftest.py` | `API_BASE_URL`・構成の選別・API の準備待ちとデータの確認・偽の JWKS サーバーの fixture |
+| `conftest.py` | `API_BASE_URL`・構成の選別（と、機能の印 `history` の選別）・API の準備待ちとデータの確認・偽の JWKS サーバーの fixture・履歴の利用者の fixture（`fresh_user`・`member`・`nouser`） |
 | `support/client.py` | 標準ライブラリ（`http.client`）の HTTP クライアント（URL を正規化しない） |
 | `support/expected.py` | 期待する合成データ（導き方つき） |
-| `support/fakes.py` | 偽の JWKS サーバー・鍵・JWT の作り方 |
+| `support/fakes.py` | 偽の JWKS サーバー・鍵・JWT の作り方・履歴の検査用の利用者（`fresh_user()`・`NOUSER_SUB`） |
+| `support/history.py` | 履歴（H-系）の検査の道具: 経路・固定の文・利用者ごとの呼び出し（`Member`）・JSON として等しいかの確かめ方 |
+| `test_history_auth.py`・`test_history_unavailable.py`・`test_history_list.py`・`test_history_messages.py`・`test_history_delete.py`・`test_history_chat.py` | 履歴の検査（H-A1・A2・A4／H-A5〜A7／H-L1〜L8／H-M1〜M5／H-D1〜D3／H-C1〜C7）。すべて機能の印 `history` つき |
 | `support/chat.py` | チャットの結果の形・数字の検査 |
 | `support/checks.py` | エラーの形などの共通の確かめ方 |
 | `prepare_data.py` | 合成データと写真タイル（故障つき）を書く |

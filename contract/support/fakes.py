@@ -31,6 +31,15 @@ KID = f"contract-es256-a-{_SUFFIX}"  # JWKS に alg・use が付く鍵
 KID_PLAIN = f"contract-es256-b-{_SUFFIX}"  # JWKS に alg・use が付かない鍵（Better Auth の実際の出力はこの形）
 DEFAULT_SUB = "ba_user_0000000001"
 
+# ---- 会話の履歴（構成 history）の検査用の利用者 ----
+# 偽の JWT の sub に対応する auth_user の行が要る（外部キー・LLM の前の存在の確認）。scripts/test-contract.sh が、データを読み込んだあとに、
+# `ct_user_000001`〜`ct_user_<USER_POOL_SIZE>` を使い捨ての DB へ入れる。検査は互いの状態に依存しないよう、検査ごとに別の利用者を使う（fresh_user）。
+USER_POOL_SIZE = int(os.environ.get("CONTRACT_USER_POOL", "200"))
+USER_PREFIX = "ct_user_"
+NOUSER_SUB = "ct_nouser_000001"  # プールの外の固定の sub。auth_user に行が無い（H-A4）
+_user_lock = threading.Lock()
+_users_given = 0  # fresh_user() が配った回数（同じ実行〔プロセス〕の中で重ならない番号の元）
+
 PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())
 PRIVATE_KEY_PLAIN = ec.generate_private_key(ec.SECP256R1())
 OTHER_PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())  # JWKS に載せない鍵（偽造の想定）
@@ -122,6 +131,32 @@ def make_token(*, key: Any = None, kid: str | None = KID, alg: str = "ES256", **
     """署名した JWT。key の既定は JWKS の鍵 A（kid=KID）。kid=None で kid ヘッダーを外す。"""
     headers = {"kid": kid} if kid else {}
     return jwt.encode(claims(**overrides), PRIVATE_KEY if key is None else key, algorithm=alg, headers=headers)
+
+
+def user_sub(number: int) -> str:
+    """プールの number 番目（1 から）の利用者の sub。`ct_user_000001` の形（sub の規則 `[A-Za-z0-9_-]{8,64}` に合う）。"""
+    return f"{USER_PREFIX}{number:06d}"
+
+
+def fresh_user() -> str:
+    """同じ実行の中でまだ使っていない利用者の sub を返す（auth_user に行がある）。プールを使い切ったら、はっきり失敗する（同じ利用者を使い回さない）。
+    同じ DB に履歴の構成を 2 回流すと、前の実行の会話が残っていて、新しい利用者のはずが新しくならない（README の「データの準備」）。"""
+    global _users_given
+    with _user_lock:
+        number = _users_given + 1
+        if number > USER_POOL_SIZE:
+            raise RuntimeError(
+                f"検査用の利用者を使い切りました（{USER_POOL_SIZE} 人）。scripts/test-contract.sh が入れる人数（HISTORY_USERS）を増やし、"
+                "検査の側の CONTRACT_USER_POOL もそろえてください。同じ利用者を使い回すと、検査が互いの状態に依存します"
+            )
+        _users_given = number
+    return user_sub(number)
+
+
+def users_used() -> int:
+    """これまでに fresh_user() が配った人数。"""
+    with _user_lock:
+        return _users_given
 
 
 def b64(data: bytes) -> str:

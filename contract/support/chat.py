@@ -147,15 +147,8 @@ def check_result(r: dict) -> None:
         assert all(set(m) == {"key", "label", "value", "note"} and (m["value"] is None or is_num(m["value"])) for m in r["metrics"])
 
 
-def ask(api, text: str, history: list[dict] | tuple = ()) -> dict:
-    """1 回問い合わせて、応答の形・結果の形・数字の検査（「数字は結果からだけ」）を確かめ、message を返す。"""
-    messages = [*history, {"role": "user", "content": text}]
-    resp = api.post("/api/chat", json={"messages": messages})
-    assert resp.status == 200, resp
-    assert resp.content_type.startswith("application/json"), resp
-    body = resp.json()
-    assert set(body) == {"message"}, body
-    msg = body["message"]
+def check_message(msg: dict) -> None:
+    """アシスタントの回答（`POST /api/chat` の `message`）の形・結果の形・数字の検査（「数字は結果からだけ」）。履歴から読み戻した回答にも使う（`run_created_at` を外してから渡す）。"""
     assert set(msg) == {"role", "content", "results", "tool_calls"}, msg
     assert msg["role"] == "assistant" and isinstance(msg["content"], str)
     assert len(msg["tool_calls"]) >= 1 and len(msg["results"]) == len(msg["tool_calls"]), msg
@@ -166,6 +159,22 @@ def ask(api, text: str, history: list[dict] | tuple = ()) -> dict:
     # 返答文の数字は、結果の値だけから出ている（満たさない文は、API が数字を含まない固定の文に替える）。模擬モデルは、替える必要のある文を作らない
     assert unsupported_numbers(msg["content"], msg["results"]) == [], msg["content"]
     assert msg["content"] != SAFE_TEMPLATE, "数字の検査で、返答文が固定の文に替わっている"
+
+
+def ask(api, text: str, history: list[dict] | tuple = (), *, conversation_id: str | None = None, headers: dict | None = None) -> dict:
+    """1 回問い合わせて、応答の形・結果の形・数字の検査（「数字は結果からだけ」）を確かめ、message を返す。
+    conversation_id・headers は、会話の履歴（H-系）の検査だけが使う（付けなければ、今までと同じ要求）。"""
+    messages = [*history, {"role": "user", "content": text}]
+    body: dict = {"messages": messages}
+    if conversation_id is not None:
+        body["conversation_id"] = conversation_id
+    resp = api.post("/api/chat", json=body, headers=headers)
+    assert resp.status == 200, resp
+    assert resp.content_type.startswith("application/json"), resp
+    body = resp.json()
+    assert set(body) == {"message"}, body
+    msg = body["message"]
+    check_message(msg)
     return msg
 
 

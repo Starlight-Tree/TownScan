@@ -12,7 +12,9 @@
 #   3. 合成データ（backend/tests/synthetic.py の run と写真タイル。画像の 404 を確かめる故障つき）を、専用ボリュームに書き、
 #      `python -m app.load --run` で DB へ入れる。
 #   4. API の「構成」ごとに、API を起動 → 検査の pytest を流す → API を止める（contract/README.md の「API の構成」。既定は次の順）:
-#        empty（データ無し）→ main（認証あり・全検査の本体）→ noauth・badauth（認証の設定が無い・不正）→ jwksdown（JWKS に届かない）→ dbdown（DB が止まる）
+#        empty（データ無し）→ main（認証あり・全検査の本体）→ history（会話の履歴。対象が go のときだけ）→
+#        noauth・badauth（認証の設定が無い・不正）→ jwksdown（JWKS に届かない）→ dbdown（DB が止まる）
+#      データを読み込んだあと、検査用の利用者を auth_user へ入れる（HISTORY_USERS 人。構成 history の検査が、検査ごとに別の利用者を使う）。
 #   5. 結果を表にして、起動したものを全部消す（名前が townscan-contract-* のものだけ）。
 #
 # 守ること: ポートを公開しない（ホストの 8500・3500・5432 などに触れない）。townscan-db・townscan-api・townscan-web・townscan-devcontainer・
@@ -20,8 +22,11 @@
 #   重い Docker の処理は 1 つずつ（イメージのビルド → DB → API → 検査の順。並べて流さない）。
 #
 # 環境変数（どれも省略できる。開発用）:
-#   CONTRACT_PHASES    流す構成（空白区切り）。既定は上の順の全部。例: CONTRACT_PHASES=main scripts/test-contract.sh python -k chat
+#   CONTRACT_PHASES    流す構成（空白区切り）。既定は上の順の全部（history は対象が go のときだけ）。例: CONTRACT_PHASES=main scripts/test-contract.sh python -k chat
 #                      empty を入れるときは先頭に置く（空の DB に API を向ける。データの読み込みはそのあと）。
+#                      history は go だけ（Python の API には履歴が無い）。使い捨ての DB 専用（同じ DB に 2 回流すと、利用者が新しくならず落ちる）。
+#   CONTRACT_PREFIX    コンテナ・ネットワーク・ボリューム・イメージの名前の頭（既定 townscan-contract）。同時に複数本流すときに変える。
+#   CONTRACT_HISTORY_USERS  検査用の利用者の人数（既定 200。検査の側の CONTRACT_USER_POOL に同じ値を渡す）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,7 +52,19 @@ RUNNER_IMAGE="$PREFIX-runner"
 LOADER_IMAGE="$PREFIX-api-python"  # データの読み込み（app.load）に使う。対象が python のときは、API のイメージでもある
 DBNAME=townscan_contract
 SYNTHETIC=backend/tests/synthetic.py
-PHASES="${CONTRACT_PHASES:-empty main noauth badauth jwksdown dbdown}"
+HISTORY_USERS="${CONTRACT_HISTORY_USERS:-200}"   # 検査用の利用者の人数。auth_user に ct_user_000001〜 の形で入れる（contract/support/fakes.py の fresh_user）
+case "$HISTORY_USERS" in ""|*[!0-9]*|0) echo "CONTRACT_HISTORY_USERS は 1 以上の整数です（実際: ${HISTORY_USERS}）" >&2; exit 2 ;; esac
+# 既定の構成の並び。history（会話の履歴）は、履歴の経路を持つ Go の API だけ（Python の API には入れない）
+if [ "$TARGET" = go ]; then DEFAULT_PHASES="empty main history noauth badauth jwksdown dbdown"; else DEFAULT_PHASES="empty main noauth badauth jwksdown dbdown"; fi
+PHASES="${CONTRACT_PHASES:-$DEFAULT_PHASES}"
+# 機能の印（@pytest.mark.history）の検査は、この API が持つ機能のときだけ流す（contract/conftest.py の CONTRACT_FEATURES）。Python の API には渡さない
+FEATURE_ARGS=()
+if [ "$TARGET" = go ]; then FEATURE_ARGS=(-e CONTRACT_FEATURES=history); fi
+if [ "$TARGET" != go ]; then
+  for v in $PHASES; do
+    if [ "$v" = history ]; then echo "構成 history は、対象 go だけです（Python の API には会話の履歴が無い）" >&2; exit 2; fi
+  done
+fi
 AUTH_ISSUER="https://auth.contract.test"   # contract/support/fakes.py の ISSUER の既定と同じ
 JWKS_PORT=8901                              # 同じく JWKS_PORT の既定（runner の中。ネットワークの外へは公開しない）
 JWKS_URL="http://$RUNNER:$JWKS_PORT/api/auth/jwks"
@@ -159,10 +176,10 @@ start_api() { # start_api <API に足す -e の並び...>
 phase_env() { # phase_env <構成> → ENVARGS
   case "$1" in
     empty|noauth) ENVARGS=() ;;                        # ログインの設定なし（AUTH_* が無い）
-    main|dbdown)  ENVARGS=(-e "AUTH_ISSUER=$AUTH_ISSUER" -e "AUTH_JWKS_URL=$JWKS_URL") ;;
+    main|history|dbdown) ENVARGS=(-e "AUTH_ISSUER=$AUTH_ISSUER" -e "AUTH_JWKS_URL=$JWKS_URL") ;;  # history は main と同じ設定（合成データ・偽の JWKS）
     badauth)      ENVARGS=(-e "AUTH_ISSUER=localhost:3500" -e "AUTH_JWKS_URL=$JWKS_URL") ;;  # 形が不正な URL（http(s) でない）
     jwksdown)     ENVARGS=(-e "AUTH_ISSUER=$AUTH_ISSUER" -e "AUTH_JWKS_URL=http://127.0.0.1:9/api/auth/jwks") ;;  # 届かない（接続拒否）
-    *) echo "未知の構成: $1（使えるのは empty main noauth badauth jwksdown dbdown）" >&2; exit 2 ;;
+    *) echo "未知の構成: $1（使えるのは empty main history noauth badauth jwksdown dbdown）" >&2; exit 2 ;;
   esac
 }
 
@@ -172,9 +189,25 @@ total_failed=0
 failed=0
 declare -a report=()
 
+# 検査用の利用者を auth_user へ入れる（構成 history の検査が使う。偽の JWT の sub に対応する行が要る: 外部キーと、LLM を呼ぶ前の存在の確認）。
+# id は ct_user_000001 の形（sub の規則 [A-Za-z0-9_-]{8,64} に合う）。契約の検査自身は DB に触れない。後始末はしない（DB は実行ごとの使い捨て）。
+# 使い捨ての DB 専用: 同じ DB に history を 2 回流すと、前の実行の会話が残り、「新しい利用者」にならない。
+seed_users() {
+  echo "== 検査用の利用者を入れる（auth_user に ${HISTORY_USERS} 人。ct_user_000001〜）"
+  docker exec -i "$DB" psql -q -v ON_ERROR_STOP=1 -U townscan -d "$DBNAME" <<SQL
+INSERT INTO auth_user (id, name, email, "emailVerified")
+SELECT 'ct_user_' || lpad(n::text, 6, '0'), 'contract user ' || n, 'ct_user_' || lpad(n::text, 6, '0') || '@contract.test', false
+FROM generate_series(1, ${HISTORY_USERS}) AS n;
+SQL
+  local count
+  count="$(docker exec "$DB" psql -tA -v ON_ERROR_STOP=1 -U townscan -d "$DBNAME" -c "SELECT count(*) FROM auth_user WHERE id LIKE 'ct\\_user\\_%'")"
+  if [ "$count" != "$HISTORY_USERS" ]; then echo "検査用の利用者が ${HISTORY_USERS} 人入っていません（実際: ${count}）" >&2; exit 1; fi
+}
+
 load_data() {
   echo "== データを読み込む（python -m app.load --run /work/run）"
   loader_run python -m app.load --run /work/run
+  seed_users
   LOADED=1
 }
 
@@ -205,8 +238,8 @@ run_phase() { # run_phase <構成>
   set +e
   runner_run --name "$RUNNER" \
     -e "API_BASE_URL=http://$API:$TARGET_PORT" -e "CONTRACT_VARIANT=$variant" \
-    -e "CONTRACT_AUTH_ISSUER=$AUTH_ISSUER" -e "CONTRACT_JWKS_PORT=$JWKS_PORT" \
-    "$RUNNER_IMAGE" python -m pytest -q --no-header -rfE ${PYTEST_ARGS[@]+"${PYTEST_ARGS[@]}"} 2>&1 | tee "$LOG"
+    -e "CONTRACT_AUTH_ISSUER=$AUTH_ISSUER" -e "CONTRACT_JWKS_PORT=$JWKS_PORT" -e "CONTRACT_USER_POOL=$HISTORY_USERS" \
+    ${FEATURE_ARGS[@]+"${FEATURE_ARGS[@]}"} "$RUNNER_IMAGE" python -m pytest -q --no-header -rfE ${PYTEST_ARGS[@]+"${PYTEST_ARGS[@]}"} 2>&1 | tee "$LOG"
   status=${PIPESTATUS[0]}
   set -e
   line="$(tail -n 1 "$LOG")"  # 例: "238 passed, 120 deselected in 3.42s"

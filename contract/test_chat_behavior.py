@@ -351,6 +351,14 @@ LAST_MESSAGE_RULE = "最後のメッセージは、空でない user のメッ�
     [{"role": "user", "content": "   "}],  # 最後が空白だけ
     [{"role": "user", "content": ""}],
     [{"role": "user", "content": "\u3000\n\t"}],
+    # U+001C\u301cU+001F\uff08FS\u30fbGS\u30fbRS\u30fbUS\uff09\u3060\u3051\u3002Python \u306e str.strip() \u306f\u3053\u308c\u3089\u3092\u7a7a\u767d\u3068\u898b\u3066 422 \u306b\u3059\u308b\uff08Go \u306e unicode.IsSpace \u3060\u3051\u3067\u306f\u3001\u7a7a\u3068\u5224\u5b9a\u3055\u308c\u305a\u306b\u901a\u3063\u3066\u3057\u307e\u3046\u3002
+    # \u4ed5\u69d8 \u00a74.4 \u306e\u300c\u7a7a\u767d\u306e\u96c6\u5408\u300d\uff09\u3002\u5c65\u6b74\u306e\u4fdd\u5b58\u306e\u984c\u540d\u304c\u7a7a\u306b\u306a\u308b\u306e\u3092\u9632\u3050\u898f\u5247\u306e\u5143\uff08E9 \u306e\u300c\u65e2\u5b58\u306e\u691c\u67fb\u3078\u8db3\u3059\u3082\u306e\u300d\uff09
+    pytest.param([{"role": "user", "content": "\u001c"}], id="u001c-only"),
+    pytest.param([{"role": "user", "content": "\u001d"}], id="u001d-only"),
+    pytest.param([{"role": "user", "content": "\u001e"}], id="u001e-only"),
+    pytest.param([{"role": "user", "content": "\u001f"}], id="u001f-only"),
+    pytest.param([{"role": "user", "content": "\u001c\u001d\u001e\u001f"}], id="u001c-to-u001f-only"),
+    pytest.param([{"role": "user", "content": " \u001f\u3000\u001c\n"}], id="u001f-mixed-with-other-spaces"),
 ])
 def test_the_last_message_must_be_a_non_empty_user_message(api, messages):
     # 形は合っているが、最後のメッセージの規則に合わない。detail は付かず、message は固定の文
