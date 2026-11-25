@@ -2,7 +2,7 @@
 # TownScan をローカルで起動する（ホストの Docker。開発コンテナの中では実行しない）。仕様: docs/spec-prototype.md §2・§8 E5
 # 使い方: scripts/dev-up.sh [--no-web] [--api go|python]
 #   --no-web       db と api だけ起動する（frontend がまだ無いとき・API だけ確かめたいとき）
-#   --api python   API を FastAPI 版にする（既定は Go。LLM_PROVIDER=gemini のときに要る。Gemini の窓口は、まだ Go に無い。ADR 0005）
+#   --api python   API を FastAPI 版にする（既定は Go。切り替え中の比較用で、消す予定。ADR 0005）
 #   WEB_BUILD=host    （既定）frontend をホストの Node 24 でビルドしてから、できた .next/standalone を載せて web を作る
 #   WEB_BUILD=docker  web のイメージの中でビルドする（Docker VM に空きメモリーがあるとき・CI 用）
 # やること: .env を作る（無ければ。乱数のパスワード。値は表示しない）→ frontend をビルド → docker compose up -d --build
@@ -58,12 +58,6 @@ if [ -n "$INFISICAL_PROJECT" ]; then
   case "$INFISICAL_PROJECT$INFISICAL_ENV" in
     *[!A-Za-z0-9_-]*) die "TOWNSCAN_INFISICAL_PROJECT_ID・TOWNSCAN_INFISICAL_ENV には、英数字・ハイフン・アンダースコアだけを使えます" ;;
   esac
-fi
-
-# Go の API は、まだ LLM_PROVIDER=gemini を使えない（起動時に止まる）。.env に書いてあるなら、起動する前に止めて、直し方を出す
-# （.env の LLM_PROVIDER の行だけを、値を表示せずに調べる。Infisical の値は、ここでは読めない。その場合は、api が unhealthy になったとき、下で同じ案内を出す）。
-if [ "$API_IMPL" = go ] && [ -f .env ] && grep -Eq '^LLM_PROVIDER=gemini[[:space:]]*$' .env; then
-  die ".env が LLM_PROVIDER=gemini です。Gemini の窓口は、まだ Go の API に無く、起動時に止まります。scripts/dev-up.sh --api python（FastAPI 版）で起動するか、LLM_PROVIDER を mock にしてください"
 fi
 
 # 1. .env（秘密は乱数で作り、値は表示しない。既にあれば触らない）
@@ -161,7 +155,7 @@ for svc in "${SERVICES[@]}"; do
       unhealthy)
         docker compose logs --tail 30 "$svc" >&2 || true
         if [ "$svc" = api ] && [ "$API_IMPL" = go ]; then
-          echo "ヒント: Go の API は LLM_PROVIDER=gemini を、まだ使えません（ログに「設定の誤り」が出ているとき）。scripts/dev-up.sh --api python で起動できます。" >&2
+          echo "ヒント: ログに「設定の誤り」が出ているときは、LLM_PROVIDER=gemini なのに GEMINI_API_KEY が空、などです（値は表示されません）。" >&2
         fi
         # パスワードの食い違い（パスワードを作り直した・変えた）は api のログには出ない。db のログで見分けて、直し方を出す
         db_log="$(docker compose logs --tail 50 db 2>&1 || true)"

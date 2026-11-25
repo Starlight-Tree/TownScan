@@ -34,7 +34,7 @@ flowchart LR
 
 A question goes through the API's chat: a rule-based mock model (Gemini is optional) picks a tool (counts, comparison, list, detection image), and the answer is built from the tool's result. A number check replaces any answer that contains a figure that is not in that result.
 
-`compose.yaml` runs the Go API. The FastAPI version (`backend/`) is still there for one reason: Gemini is not in Go yet, so `LLM_PROVIDER=gemini` needs `scripts/dev-up.sh --api python`. The Go API passes the same contract tests (`contract/`) and is compared with FastAPI response by response (`api/difftest/`; detection images by pixel difference). Loading data stays in Python (`docker compose run --rm loader python -m app.load …`).
+`compose.yaml` runs the Go API. The FastAPI version (`backend/`) is kept only for comparison during the switch (`scripts/dev-up.sh --api python`; it will be removed). Gemini (`LLM_PROVIDER=gemini`) works in the Go API too. The Go API passes the same contract tests (`contract/`) and is compared with FastAPI response by response (`api/difftest/`; detection images by pixel difference). Loading data stays in Python (`docker compose run --rm loader python -m app.load …`).
 
 The data comes from an offline pipeline, run on demand:
 
