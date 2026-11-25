@@ -9,13 +9,35 @@ package httpx
 // pyJSONError は、Python の JSONDecodeError（位置 = 文字数）。
 type pyJSONError struct{ pos int }
 
-type pyJSONScanner struct{ s []rune }
+// maxPyJSONDepth は、位置を探すときにたどる入れ子（配列・オブジェクト）の深さの上限。
+// 読み取りは入れ子 1 段ごとに再帰するので、上限が無いと、「[」を 20 万個並べただけの本文（本文の上限の内側）で goroutine のスタックが尽き、
+// Recover でも止められない致命的エラーでプロセスごと落ちる。超えたら、位置を探すのをやめる（pyJSONErrorPos が ok=false を返し、
+// 呼び出し側が Go 自身の誤りの位置に切り替える）。
+//
+// 値の根拠は、Python が位置を返せる深さの実測（Python 3.13.18・FastAPI 0.165・uvicorn 0.54 への POST）。
+// json.loads の C 版は、入れ子 1 段ごとに C の再帰の枠（Py_C_RECURSION_LIMIT = 10000）を使う。閉じていない「[」の列は、
+// 9991 段までは JSONDecodeError（422 と位置）、それより深いと RecursionError（FastAPI は 400 "There was an error parsing the body"）。
+// 素の json.loads では 9997 段まで。呼び出し元の深さで数段ぶれるので、ぶれの下に丸めて 9990 にした。
+// sys.getrecursionlimit() の 1000 は、この C 版の読み取りには効かない（だから 1000 にすると、1001〜9990 段の壊れた本文で Python の位置と合わなくなる）。
+// この深さでも、スタックは数 MB で済む（jsonpos_test.go の TestPyJSONErrorPosDepthLimit）。
+const maxPyJSONDepth = 9990
+
+// errTooDeep は、入れ子が maxPyJSONDepth を超えたことを伝える内部の印（Python の誤りの位置ではない）。
+var errTooDeep = &pyJSONError{pos: -1}
+
+type pyJSONScanner struct {
+	s     []rune
+	depth int // いま読んでいる入れ子の深さ（配列・オブジェクトの数）
+}
 
 // pyJSONErrorPos は、text（UTF-8 から復号した文字列）を Python の json.loads で読んだときの誤りの位置。
-// Python が受け入れる本文（NaN・Infinity など。encoding/json は断る）なら ok=false。
+// Python が受け入れる本文（NaN・Infinity など。encoding/json は断る）か、入れ子が maxPyJSONDepth を超えるなら ok=false。
 func pyJSONErrorPos(text []rune) (pos int, ok bool) {
-	p := pyJSONScanner{text}
+	p := pyJSONScanner{s: text}
 	end, err := p.value(p.ws(0))
+	if err == errTooDeep {
+		return 0, false
+	}
 	if err != nil {
 		return err.pos, true
 	}
@@ -33,9 +55,17 @@ func (p *pyJSONScanner) ws(i int) int {
 	return i
 }
 
+// has は、i から lit（ASCII の語）が続くか。語ごとに作業用の配列を作らない（入れ子 1 段ごとの再帰の枠が、その分だけ大きくなるため）。
 func (p *pyJSONScanner) has(i int, lit string) bool {
-	r := []rune(lit)
-	return i+len(r) <= len(p.s) && string(p.s[i:i+len(r)]) == lit
+	if i+len(lit) > len(p.s) {
+		return false
+	}
+	for k := 0; k < len(lit); k++ {
+		if p.s[i+k] != rune(lit[k]) {
+			return false
+		}
+	}
+	return true
 }
 
 // value は、i から値を 1 つ読み、次の位置を返す（scan_once。値が無ければ Expecting value = 値の始まりの位置）。
@@ -46,10 +76,20 @@ func (p *pyJSONScanner) value(i int) (int, *pyJSONError) {
 	switch p.s[i] {
 	case '"':
 		return p.str(i + 1)
-	case '{':
-		return p.object(i + 1)
-	case '[':
-		return p.array(i + 1)
+	case '{', '[':
+		if p.depth >= maxPyJSONDepth { // これ以上は、たどらない（スタックを使い切らせない）
+			return 0, errTooDeep
+		}
+		p.depth++
+		var end int
+		var err *pyJSONError
+		if p.s[i] == '{' {
+			end, err = p.object(i + 1)
+		} else {
+			end, err = p.array(i + 1)
+		}
+		p.depth--
+		return end, err
 	case 'n':
 		if p.has(i, "null") {
 			return i + 4, nil

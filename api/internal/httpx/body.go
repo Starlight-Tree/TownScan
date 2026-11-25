@@ -21,9 +21,12 @@ import (
 //   - それ以外の Content-Type（無い・text/plain など）→ JSON として読まない（BodyOpaque。検証エラー）
 //
 // 合わせていない点: UTF-16・UTF-32 の JSON（Python の json.loads(bytes) は読む）・NaN/Infinity の書き方（Python は読む）・
-// 4300 桁を超える整数（Python は 400）・対の無いサロゲートの逃がし（Python は検証エラー）・入れ子が約 1 万段を超える本文（Python は RecursionError で 500。
-// Go は 1 万段まで読み、超えると 422）。どれも、frontend が送る本文には現れない。
-// 壊れた JSON の「位置」は、Python と同じ読み方で探すので、同じになる（jsonpos.go。Python が受け入れる NaN などで見つからないときだけ、Go の位置）。
+// 4300 桁を超える整数（Python は 400）・対の無いサロゲートの逃がし（Python は検証エラー）・入れ子が約 1 万段を超える本文（Python は、9992 段ほどを超えると
+// RecursionError で 400 "There was an error parsing the body"〔実測。FastAPI 0.165〕。Go は 1 万段まで読み、超えると 422）・範囲外の浮動小数（1e999。
+// Python は inf として受け、Go は 422）。どれも、frontend が送る本文には現れない。
+// 壊れた JSON の「位置」は、Python と同じ読み方で探すので、同じになる（jsonpos.go）。例外は、Python が受け入れる NaN などで見つからないときと、
+// 入れ子が 9990 段を超えるとき（スタックを使い切らせないために探すのをやめる。maxPyJSONDepth）で、その位置は Go のもの。
+// 本文の大きさの上限（4 MiB。cmd/api/main.go の maxBodyBytes）は Go だけにある。
 
 // BodyKind は、本文の読み方の結果。
 type BodyKind int

@@ -3,12 +3,14 @@
 
 FastAPI は、JSON として読めない本文を、422 の loc に ["body", JSONDecodeError.pos] として返す（pos は文字数）。
 Go の単体テスト（jsonpos_test.go）が、この出力（jsonpos.json.gz）と、同じ本文での Go の位置を比べる。
-入力は、手で選んだ壊れ方と、正しい JSON を壊した文（固定の種の乱数。1 文字の削除・挿入・置き換え・入れ替え・途中で切る）。
+入力は、手で選んだ壊れ方と、正しい JSON を壊した文（固定の種の乱数。1 文字の削除・挿入・置き換え・入れ替え・途中で切る）と、
+入れ子の深さの境目（DEEP。jsonpos.go の maxPyJSONDepth = 9990 の前後。Python 3.13 の C 版は、素の json.loads なら 9997 段まで位置を返す）。
 
-作り直し（この testdata を書き込み可で重ねる。ネットワークは要らない。Python は 3.13 の API のイメージ）:
+作り直し（この testdata を書き込み可で重ねる。ネットワークは要らない。Python は 3.13 の townscan-backend-test イメージ。
+townscan-api のタグは Go の API のイメージに替わったので、使わない）:
 
     docker run --rm --name <名前> --network none --user "$(id -u):$(id -g)" -e PYTHONDONTWRITEBYTECODE=1 \\
-      -v "$PWD/api/internal/httpx/testdata:/out" --entrypoint python townscan-api -I /out/gen_jsonpos.py
+      -v "$PWD/api/internal/httpx/testdata:/out" townscan-backend-test python -I /out/gen_jsonpos.py
 
 標準ライブラリだけ。出力の各行: {"raw": 本文, "pos": 誤りの位置 | null（Python が受け入れる）, "msg": Python の誤りの種類}。
 """
@@ -64,6 +66,31 @@ def mutate(rnd: random.Random, s: str) -> str:
     return s[:i] + rnd.choice(ALPHABET) + rnd.choice(ALPHABET) + s[i:]
 
 
+DEEP_MAX = 9990  # api/internal/httpx/jsonpos.go の maxPyJSONDepth。jsonpos_test.go が、この値の本文の位置を、ここの期待値と比べる
+
+
+def deep_cases() -> list[str]:
+    """入れ子の深さの境目の本文。どれも Python が JSONDecodeError にする（RecursionError にならない深さまで）。"""
+    out: list[str] = []
+    for n in (100, 970, 971, 1000, 1001, 5000, DEEP_MAX - 1, DEEP_MAX):
+        out += [
+            "[" * n,  # 閉じない配列: 末尾で Expecting value
+            '{"a":' * n,  # 閉じないオブジェクト
+            "[" * n + "x",
+            "[" * n + ",]",
+            "[" * n + "]" * n + "x",  # 閉じた入れ子のあとの余分な文字
+            '{"a":' * n + "1" + "}" * n + "x",
+            "[" * n + "1" + "]" * (n - 1),  # 閉じ方が 1 つ足りない
+            '{"a":[' * (n // 2),  # 配列とオブジェクトの入れ子
+            # 次の 4 つは、Go の encoding/json の位置が Python と違う誤り（数字・文字列・リテラルの途中で切れる）。位置を探す読み取りが深さで諦めたかが、位置に出る
+            "[" * n + "1.",
+            "[" * n + '"abc',
+            "[" * n + "nul",
+            '{"a":' * n + '"abc',
+        ]
+    return out
+
+
 def probe(raw: str) -> dict:
     try:
         json.loads(raw)
@@ -82,6 +109,7 @@ def main() -> None:
             for _ in range(rnd.choice((1, 1, 1, 2, 3))):
                 s = mutate(rnd, s)
             raws.append(s)
+    raws += deep_cases()  # 乱数を使わない。末尾に足すので、上の本文の並びは変わらない
     seen: set[str] = set()
     rows = []
     for raw in raws:

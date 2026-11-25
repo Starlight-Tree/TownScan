@@ -4,9 +4,11 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 壊れた JSON の誤りの位置（jsonpos.go）が、Python（json.loads。3.13）と同じであること。
@@ -115,5 +117,94 @@ func TestPyJSONErrorPos(t *testing.T) {
 		if !ok || pos != c.want {
 			t.Errorf("%q: %d (ok=%v)、期待 %d", c.raw, pos, ok, c.want)
 		}
+	}
+}
+
+// 入れ子の深さの上限（maxPyJSONDepth）。上限ちょうどまでは Python と同じ位置を探し、超えたら ok=false（呼び出し側が Go の位置に切り替える）。
+// 上限ちょうどの位置の期待値は、Python が作った行（gen_jsonpos.py の DEEP）から引く。
+func TestPyJSONErrorPosDepthLimit(t *testing.T) {
+	rows := loadJSONPosRows(t)
+	pythonPos := func(raw string) int {
+		for _, row := range rows {
+			if row.Raw == raw && row.Pos != nil {
+				return *row.Pos
+			}
+		}
+		t.Fatalf("Python の期待値が無い（%d 文字の本文）。testdata を作り直したときに、DEEP の行が消えていないか", len(raw))
+		return 0
+	}
+	if maxPyJSONDepth != 9990 {
+		t.Fatalf("maxPyJSONDepth = %d（Python の実測 9991 段までの下に丸めた 9990 のはず。変えるときは、gen_jsonpos.py の DEEP と README も）", maxPyJSONDepth)
+	}
+	for _, c := range []struct{ name, unit string }{{"配列", "["}, {"オブジェクト", `{"a":`}} {
+		at := strings.Repeat(c.unit, maxPyJSONDepth)       // ちょうど上限の深さ
+		over := strings.Repeat(c.unit, maxPyJSONDepth+1)   // 1 段だけ超える
+		inside := strings.Repeat(c.unit, maxPyJSONDepth-1) // 1 段手前
+		pos, ok := pyJSONErrorPos([]rune(at))
+		if !ok || pos != pythonPos(at) {
+			t.Errorf("%s・上限ちょうど: 位置 %d (ok=%v)、Python は %d", c.name, pos, ok, pythonPos(at))
+		}
+		if pos, ok := pyJSONErrorPos([]rune(inside)); !ok || pos != pythonPos(inside) {
+			t.Errorf("%s・上限の 1 段手前: 位置 %d (ok=%v)、Python は %d", c.name, pos, ok, pythonPos(inside))
+		}
+		if pos, ok := pyJSONErrorPos([]rune(over)); ok {
+			t.Errorf("%s・上限を 1 段超える: 位置 %d を返した（ok=false のはず）", c.name, pos)
+		}
+	}
+	// 上限を超えても、その前に誤りがあれば、その位置（Python も、深いところに着く前の誤りで止まる）
+	if pos, ok := pyJSONErrorPos([]rune("[," + strings.Repeat("[", maxPyJSONDepth+10))); !ok || pos != 1 {
+		t.Errorf("深い入れ子の前の誤り: %d (ok=%v)、期待 1", pos, ok)
+	}
+	// 閉じた入れ子（正しい JSON）の深さも数える。上限ちょうどは、そのあとの誤り（Extra data）を見つける。超えたら探さない
+	closed := func(n int) string { return strings.Repeat("[", n) + strings.Repeat("]", n) + "x" }
+	if pos, ok := pyJSONErrorPos([]rune(closed(maxPyJSONDepth))); !ok || pos != 2*maxPyJSONDepth {
+		t.Errorf("閉じた上限ちょうど + 余分な文字: %d (ok=%v)、期待 %d", pos, ok, 2*maxPyJSONDepth)
+	}
+	if pos, ok := pyJSONErrorPos([]rune(closed(maxPyJSONDepth + 1))); ok {
+		t.Errorf("閉じた上限超え + 余分な文字: 位置 %d を返した（ok=false のはず）", pos)
+	}
+	// 深さは、兄弟では足されない（1 段の配列を何個並べても、深さは 1）
+	flat := "[" + strings.Repeat("[1],", 3*maxPyJSONDepth) + "x"
+	if pos, ok := pyJSONErrorPos([]rune(flat)); !ok || pos != len([]rune(flat))-1 {
+		t.Errorf("浅い配列の列: %d (ok=%v)、期待 %d", pos, ok, len([]rune(flat))-1)
+	}
+}
+
+// 100 万段の入れ子でも、すぐ終わり、スタックもメモリーも増えない（上限が無いと、1 段ごとの再帰でスタックが尽き、致命的エラーでプロセスごと落ちる）。
+// 伸びたスタックは、その goroutine が生きているうちに測る（終わると返される）。
+func TestPyJSONErrorPosDoesNotGrowTheStackOnMillionLevels(t *testing.T) {
+	text := []rune(strings.Repeat("[", 1_000_000))
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	type result struct {
+		ok      bool
+		took    time.Duration
+		stack   uint64 // 測った時点の StackInuse
+		mallocs uint64
+	}
+	done := make(chan result)
+	go func() {
+		start := time.Now()
+		_, ok := pyJSONErrorPos(text)
+		took := time.Since(start)
+		var after runtime.MemStats
+		runtime.ReadMemStats(&after)
+		done <- result{ok, took, after.StackInuse, after.Mallocs - before.Mallocs}
+	}()
+	r := <-done
+	if r.ok {
+		t.Error("100 万段は、位置を探さずに ok=false のはず")
+	}
+	if r.took > time.Second {
+		t.Errorf("100 万段に %v かかった", r.took)
+	}
+	// 上限の深さ（9990 段）の再帰で、数 MB。上限が無いと、100 万段で数百 MB になる
+	if grown := int64(r.stack) - int64(before.StackInuse); grown > 24<<20 {
+		t.Errorf("スタックが %d MiB 増えた（上限 24 MiB）", grown>>20)
+	}
+	// 段ごとに、メモリーを確保しない（確保があるのは、goroutine の起動と測定だけ）
+	if r.mallocs > 1000 {
+		t.Errorf("確保が %d 回（段ごとに確保していないか）", r.mallocs)
 	}
 }

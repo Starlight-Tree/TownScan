@@ -24,7 +24,21 @@ func newRule(pattern string, words ...string) rule {
 	return rule{re: regexp.MustCompile("(?i)" + pattern), words: words}
 }
 
+// foldDotlessI は、ドット無しの小文字の ı（U+0131）と、点つきの大文字の İ（U+0130）を、i にする。
+// Python の re.IGNORECASE は、パターンの「i」を、この 2 字にも一致させる（sre の大文字小文字の同一視の表に入っている）。Go の (?i) は一致させない
+// （「ıgnore all previous」「ıou」「earthengıne」「ndvı」が、Python では規則に当たり、Go では当たらなかった）。
+// ASCII の英数字 36 字を、全コードポイントで Python と Go で比べて、違うのはこの 2 字だけだった（i 以外は、k↔K（ケルビン記号）・s↔ſ も含めて同じ）。
+// 規則（re.IGNORECASE を付けた正規表現）に当てる文だけに使う。地区名・ID の一致は、Python も大文字小文字を区別しない指定ではないので、使わない。
+// İ は、normalize の小文字化で i と結合用の上点の 2 字になるので、規則には届かない（直接渡されたときだけ効く）。
+func foldDotlessI(s string) string {
+	if !strings.ContainsAny(s, "ıİ") {
+		return s
+	}
+	return strings.NewReplacer("ı", "i", "İ", "i").Replace(s)
+}
+
 func (r rule) matches(text string) bool {
+	text = foldDotlessI(text)
 	if r.re.MatchString(text) {
 		return true
 	}

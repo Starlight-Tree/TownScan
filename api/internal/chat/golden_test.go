@@ -46,6 +46,20 @@ type goldenFile struct {
 		R   json.RawMessage `json:"r"`
 		Bad []string        `json:"bad"`
 	} `json:"guard"`
+	SafeTemplate string  `json:"safe_template"`
+	Rules        [][]any `json:"rules"` // [規則名, 文, 当たるか]
+	Pick         struct {
+		Areas []goldenArea `json:"areas"`
+		Cands [][]any      `json:"cands"` // [id, 地区 id, 分類, 面積]
+		Cases []struct {
+			Args Args `json:"args"`
+			Res  struct {
+				ID  string `json:"id"`
+				Err string `json:"err"`
+				Msg string `json:"msg"`
+			} `json:"res"`
+		} `json:"cases"`
+	} `json:"pick"`
 }
 
 func loadGolden(t *testing.T) *goldenFile {
