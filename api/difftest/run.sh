@@ -17,11 +17,13 @@ cd "$(dirname "$0")/../.."
 ROOT="$PWD"
 HERE="$ROOT/api/difftest"
 
-NET=tsgo-diff-net
-DB=tsgo-diff-db
-PY=tsgo-diff-py
-GO=tsgo-diff-go
-BIN=tsgo-diff-bin
+# 同時に複数本流すときは、DIFF_PREFIX を変える（コンテナ・ネットワーク・ボリュームの名前の頭。前回の残りの片付けも、この名前のものだけ）
+P="${DIFF_PREFIX:-tsgo-diff}"
+NET="$P-net"
+DB="$P-db"
+PY="$P-py"
+GO="$P-go"
+BIN="$P-bin"
 MODCACHE=townscan-gomodcache
 BUILDCACHE=tsgo-gobuildcache
 PY_IMG=townscan-api            # Python の API（実行用）。コードは、作業ツリーの backend/app を重ねる

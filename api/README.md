@@ -1,11 +1,11 @@
 # api/（Go の API）
 
-TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは第 1 段（土台と読み取り API）・第 3 段（認証）・第 4 段（検出画像）だけ**で、`compose.yaml` はまだ Python の API を指している。
+TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは、土台・読み取り API・認証・検出画像・チャット（模擬モデルだけ）**で、`compose.yaml` はまだ Python の API を指している。
 
-- 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`
+- 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`・`POST /api/chat`（模擬モデル。下の「チャット」）
 - 認証: `GET /api/me`（JWT を JWKS の公開鍵で検証。下の「認証」）
 - 検出画像: `GET /api/candidates/{id}/image`（写真タイルの切り出しと輪郭の描画。`internal/imaging`。Python の Pillow と構造が同じで、画素は平均絶対差 1.07 ほど。`difftest/image.sh` が確かめる）
-- あとの段（ルートを足すだけでよい形にしてある）: チャット（`/api/chat`）→ 切り替え
+- あとの段（ルートを足すだけでよい形にしてある）: チャットの Gemini → 切り替え
 - 作らない: `/api/docs`・OpenAPI（契約は `docs/spec-prototype.md` §4.4 と `contract/` が持つ）
 
 振る舞いの正本は `backend/app/`・`backend/tests/`・`docs/spec-prototype.md`。JSON のキー・型・並び順・数の書式（Python の `100.0`・`1e-05`）・検証エラーの文言・307 の Location・405 の本文まで、Python の API と**バイト列が同じ**になるように作ってある（`difftest/` が確かめる）。
@@ -17,16 +17,17 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 | `cmd/api/main.go` | 設定 → DB とスキーマ → 待ち受け → 停止の合図（SIGINT・SIGTERM）で処理中の応答を終えてから止まる。`-healthcheck`（distroless 用） |
 | `internal/config` | 環境変数（`backend/app/config.py` と同じ名前・既定・検証）。秘密は `Secret` 型で、どの書き方でも伏せ字 |
 | `internal/apierr` | エラーの形（`{"error":{"code","message"}}`・422 の `details`） |
-| `internal/httpx` | ルーター（Starlette と同じ 405・307・404）・クエリの読み方（`parse_qsl` と同じ）・Pydantic と同じ検証・ミドルウェア（アクセスログ・panic の回復・nosniff・本文の上限） |
+| `internal/httpx` | ルーター（Starlette と同じ 405・307・404）・クエリの読み方（`parse_qsl` と同じ）・Pydantic と同じ検証・本文（JSON）の読み方（壊れた JSON の誤りの位置も Python と同じ。`jsonpos.go`）・ミドルウェア（アクセスログ・panic の回復・nosniff・本文の上限） |
 | `internal/pyjson` | Python の `json.dumps` と同じ書式（`float` の repr・jsonb の書き直し） |
 | `internal/auth` | `GET /api/me` の JWT の検証: ES256 だけ・JWKS の取得と保持（600 秒）・iss / aud / exp / nbf / iat / sub の規則・`email` / `name` / `picture` の整形・`Authorization: Bearer` の読み方 |
 | `internal/imaging` | 検出画像: 候補の外周の緯度経度 → 写真タイル（`TILES_DIR`）の切り出し・拡縮（CatmullRom）・輪郭（縁取りと実線・破線）の描画 → PNG。入力の上限（正方形・一辺 1024 以下・8 MB 以下・外周 1 万頂点以下）と、`os.Root` による置き場の閉じ込め、同時に作る画像は 8 枚まで |
+| `internal/chat` | チャット（模擬モデルの規則・ツール・返答文・数字の検査 `GuardNumbers`・1 往復の `Service`）。`backend/app/chat/` と同じ応答。Python が作った期待値（golden）で照合する |
 | `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/` は `backend/db/` の写し。一致をテストで確かめる） |
-| `internal/handlers` | 読み取りのハンドラー（DB は `Reader` インターフェース。テストは偽の実装） |
+| `internal/handlers` | 読み取りのハンドラーと `POST /api/chat`（DB は `Reader`、チャットは `Chatter` インターフェース。テストは偽の実装） |
 | `internal/testdb` | DB のテストが、テストごとに新しいデータベースを作る |
 | `difftest/` | Python の API との差分検査（標準ライブラリだけの Python。`run.sh` が JSON の差分、`image.sh` が検出画像の差分を、全部用意して流す） |
 
-依存は標準ライブラリと `github.com/jackc/pgx/v5`（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync・x/text）と、JWT の検証の `github.com/golang-jwt/jwt/v5`（v5.3.1。ES256 の署名とクレームの検査だけに使う。鍵の取得・保持・JWK の読み取りは自前）と、検出画像の拡縮の `golang.org/x/image`（v0.46.0。`draw` の CatmullRom だけ）。
+依存は標準ライブラリと `github.com/jackc/pgx/v5`（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync）と、JWT の検証の `github.com/golang-jwt/jwt/v5`（v5.3.1。ES256 の署名とクレームの検査だけに使う。鍵の取得・保持・JWK の読み取りは自前）と、検出画像の拡縮の `golang.org/x/image`（v0.46.0。`draw` の CatmullRom だけ）と、チャットの `golang.org/x/text`（v0.42.0。`unicode/norm` の NFKC だけ。文字の整えと数字の検査を、Python の `unicodedata.normalize` と同じ結果にするため。ユーザー承認 2026-11-25）。
 
 ## 認証（`GET /api/me`）
 
@@ -44,6 +45,19 @@ Python との意図した違い（応答の外から見える規則は同じ。�
 - 本文が壊れていて、ヘッダーは正しいトークンは、JWKS が取れないときも 401（Python は、鍵を取りに行って 503）。鍵なしで断れるものは 401、という分け方に沿う。
 - JWK は、`crv` が `P-256`、`alg` があれば `ES256`、`use` があれば `sig` のものだけ（Python は、`alg` と `crv` の食い違う鍵を通しうる）。
 - `exp`・`nbf`・`iat` は JSON の数だけ（Python は、数を表す文字列も通す）。
+
+## チャット（`POST /api/chat`）
+
+仕様は `docs/spec-prototype.md` §4.5、振る舞いの正本は `backend/app/chat/`、契約は `contract/test_chat_*.py`。模擬モデルの規則・ツール・返答文・数字の検査（結果に無い数字を返答に書かせない）は、Python と同じ応答になるよう移してある。`internal/chat/testdata/gen_golden.py`（Python が期待値を作る）と `internal/httpx/testdata/gen_jsonpos.py` が、照合の元。
+
+- `LLM_PROVIDER=gemini` は、まだ使えない（黙って模擬に落とさず、`chat.New` が起動を止める）。切り替え（ADR 0005 の 6）の前に、Gemini の窓口（再試行・27 秒の期限・502・ログ）を作る。
+- `Deps.Chat` が nil なら、`/api/chat` のルートは作らない（404）。
+
+Python との意図した違い:
+
+- 返答文を安全なテンプレートに差し替えたとき、Go のログは差し替えた回数だけ（Python は、検査に落ちた数字の先頭 5 件も出す。数字・本文をログに出さないため）。
+- 本文（JSON）: UTF-16・UTF-32・NaN/Infinity・4300 桁を超える整数・対の無いサロゲートの逃がしは、Python と違う（`httpx/body.go` の冒頭。frontend は送らない）。本文の大きさの上限（`maxBodyBytes`）は Go だけにある。
+- Go の `unicode` は Unicode 15.0、Python 3.13 は 15.1。語の文字の判定が、CJK 拡張 I の 622 字だけ違う（規則の語に隣り合うときだけ影響）。
 
 ## 検査
 

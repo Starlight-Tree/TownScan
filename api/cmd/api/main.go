@@ -2,7 +2,8 @@
 //
 // 決定: docs/decisions/0005-api-in-go.md（API は Go、解析は Python）。振る舞いの正本は backend/app/ と docs/spec-prototype.md §4.4。
 // いまあるのは読み取りのエンドポイント（/api/health・/api/areas・/api/candidates・/api/candidates.geojson・/api/candidates/{id}・/api/metrics）と、
-// 検出画像（/api/candidates/{id}/image。internal/imaging）、認証（/api/me。internal/auth）。チャットは、あとの段で internal/handlers に足す。
+// 検出画像（/api/candidates/{id}/image。internal/imaging）、認証（/api/me。internal/auth）、チャット（POST /api/chat。模擬モデルだけ。internal/chat）。
+// 実 LLM（Gemini）は、あとの段で足す。
 //
 // 使い方:
 //
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"townscan/api/internal/auth"
+	"townscan/api/internal/chat"
 	"townscan/api/internal/config"
 	"townscan/api/internal/handlers"
 	"townscan/api/internal/httpx"
@@ -90,6 +92,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return 2
 	}
 	defer st.Close()
+	// チャット（模擬モデル）。LLM_PROVIDER=gemini は、まだ使えない（黙って模擬に落とさず、DB を待つ前に止まる）
+	chatSvc, err := chat.New(st, cfg.LLMProvider, logger.Printf)
+	if err != nil {
+		logger.Printf("設定の誤り: %v", err)
+		return 2
+	}
 	// DB がまだ起きていなくても、数回やり直す。適用が済むまでは待ち受けない（compose の healthcheck が healthy にしない）
 	if err := st.WaitAndApplySchema(ctx, schemaAttempts, schemaDelay, logger.Printf); err != nil {
 		if ctx.Err() == nil { // 停止の合図で中断したときは、失敗ではない
@@ -99,7 +107,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return 0
 	}
 
-	srv := newServer(*listen, buildHandler(cfg, st, logger.Printf), logger)
+	srv := newServer(*listen, buildHandler(cfg, st, chatSvc, logger.Printf), logger)
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		logger.Printf("待ち受けられません: %v", err)
@@ -119,13 +127,14 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 
 // buildHandler は、ルーターをミドルウェアで包む。外側から: アクセスログ → panic の回復 → セキュリティヘッダー → 本文の上限 → ルーター。
 // アクセスログが外側なのは、panic を 500 にしたあとの状態を記録するため。
-func buildHandler(cfg config.Config, st handlers.Reader, logf func(string, ...any)) http.Handler {
+func buildHandler(cfg config.Config, st handlers.Reader, chatSvc handlers.Chatter, logf func(string, ...any)) http.Handler {
 	router := handlers.New(handlers.Deps{
 		Store:       st,
 		Auth:        newAuthenticator(cfg, logf),
 		LLMProvider: cfg.LLMProvider,
 		GeminiModel: cfg.GeminiModel,
 		TilesDir:    cfg.TilesDir,
+		Chat:        chatSvc,
 		Logf:        logf,
 	})
 	return httpx.Chain(router,

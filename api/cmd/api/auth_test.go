@@ -93,7 +93,7 @@ func TestBuildHandlerServesMeWithARealVerifier(t *testing.T) {
 		t.Fatal(err)
 	}
 	var logs syncBuffer
-	h := buildHandler(cfg, nil, func(f string, a ...any) { _, _ = fmt.Fprintf(&logs, "%s\n", fmt.Sprintf(f, a...)) })
+	h := buildHandler(cfg, nil, nil, func(f string, a ...any) { _, _ = fmt.Fprintf(&logs, "%s\n", fmt.Sprintf(f, a...)) })
 
 	if n := web.hits.Load(); n != 0 {
 		t.Fatalf("組み立てただけで、JWKS を %d 回取りに行った（最初の /api/me まで取らない）", n)
@@ -142,7 +142,7 @@ func TestBuildHandlerWithoutAuthConfigurationAnswers503OnlyOnMe(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h := buildHandler(cfg, nil, func(string, ...any) {})
+			h := buildHandler(cfg, nil, nil, func(string, ...any) {})
 			for _, authorization := range []string{"", "Basic abc", "Bearer not-a-jwt", "Bearer " + web.token(t, "http://localhost:3500")} {
 				rec := getWith(t, h, "/api/me", authorization)
 				if rec.Code != 503 || !strings.Contains(rec.Body.String(), "まだ設定されていません") || rec.Header().Get("WWW-Authenticate") != "" {
