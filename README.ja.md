@@ -4,7 +4,7 @@
 
 [English](README.md) | 日本語
 
-熊本市の中心部で、2018 年と 2023 年の空中写真から新築の候補を見つけ、件数・地図・写真を根拠に、会話で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、FastAPI（Go へ移行中。[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。
+熊本市の中心部で、2018 年と 2023 年の空中写真から新築の候補を見つけ、件数・地図・写真を根拠に、会話で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、Go の API（[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。
 
 | 地図の上の候補 | 1 件の 2018 年と 2023 年の写真 |
 |---|---|
@@ -20,14 +20,21 @@
 
 ## 構成
 
+API は Go（[`api/`](api/README.md)）で作り、解析（画像認識・差分・評価・データの読み込み）は Python のままです。理由は [ADR 0005](docs/decisions/0005-api-in-go.md)。
+
 ```mermaid
 flowchart LR
     B[ブラウザー] --> W["Next.js<br/>web (:3500)"]
-    W -->|"/api/* を転送"| A["FastAPI<br/>api (:8500)"]
+    W -->|"/api/* を転送"| A["Go の API<br/>api (:8500)"]
+    A -.->|"JWKS（任意のログイン）"| W
     A --> DB[("Postgres 17")]
     A -.->|"読み取り専用: 写真タイル"| D[("data/townscan")]
     B -->|"地図タイル"| G["地理院タイル"]
 ```
+
+質問は API のチャットを通ります。規則ベースの模擬モデル（Gemini は任意）がツール（件数・比較・一覧・検出画像）を選び、返答はツールの結果から作ります。数字の検査が、その結果に無い数字を含む返答を、安全な文に差し替えます。
+
+切り替え（ADR 0005 の最後の段）までは、`compose.yaml` は同じ API の FastAPI 版を動かしています。Go の API は同じ契約の検査（`contract/`）に合格し、FastAPI と応答ごとに比べています（`api/difftest/`。検出画像は画素の差）。Gemini はまだ呼べないので、`LLM_PROVIDER=gemini` には FastAPI 版が要ります。
 
 データは、必要なときに流すオフラインの処理で作ります。
 
@@ -40,6 +47,14 @@ flowchart LR
     O -->|"python -m app.load"| DB[("Postgres 17")]
 ```
 
+### 環境
+
+| 環境 | 構成 | 備考 |
+|---|---|---|
+| ローカル | `scripts/dev-up.sh`: Docker Compose（db・api・web） | アプリを動かす唯一の環境。写真タイルと建物データは、Git に入れていない `data/` から読みます。 |
+| 解析 | Google Colab（T4）と `pipeline/` | 建物の抽出を必要なときに流し、結果は `python -m app.load` で Postgres へ入れます。 |
+| 公開 | なし | 公開していません。公開先（計画の P7）は未決です。 |
+
 ## クイックスタート
 
 Docker と Node 24 が要ります。
@@ -48,7 +63,7 @@ Docker と Node 24 が要ります。
 scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動する
 ```
 
-- 画面: <http://127.0.0.1:3500> ・ API の仕様: <http://127.0.0.1:8500/api/docs>
+- 画面: <http://127.0.0.1:3500> ・ API の仕様（FastAPI 版だけ）: <http://127.0.0.1:8500/api/docs>
 - `data/` は Git に入れていない（写真と建物データは再配布しない）ので、クローンしただけでは候補は空です。実行に必要なファイルは [docs/spec-prototype.md](docs/spec-prototype.md) §4.1 にあります。
 - 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|backend|frontend|all]`。
 - Google ログインと Gemini のキーは任意で、Infisical に置きます（[ADR 0004](docs/decisions/0004-secrets-infisical.md)）。ログインは <http://localhost:3500> で試します（`127.0.0.1` では戻れません）。`BETTER_AUTH_SECRET` は、一度決めたら変えないでください。

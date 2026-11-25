@@ -4,7 +4,7 @@
 
 English | [日本語](README.ja.md)
 
-A chat app that finds candidates for new buildings in central Kumamoto City from 2018 and 2023 aerial photos, and answers with counts, a map and the photos as evidence. A local prototype (not deployed): Next.js, FastAPI (moving to Go, [ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab.
+A chat app that finds candidates for new buildings in central Kumamoto City from 2018 and 2023 aerial photos, and answers with counts, a map and the photos as evidence. A local prototype (not deployed): Next.js, an API in Go ([ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab.
 
 | Candidates on the map | Photos of one candidate, 2018 and 2023 |
 |---|---|
@@ -20,14 +20,21 @@ A chat app that finds candidates for new buildings in central Kumamoto City from
 
 ## Architecture
 
+The API is written in Go ([`api/`](api/README.md)); analysis (the image model, diffing, evaluation, data loading) stays in Python. Why: [ADR 0005](docs/decisions/0005-api-in-go.md).
+
 ```mermaid
 flowchart LR
     B[Browser] --> W["Next.js<br/>web (:3500)"]
-    W -->|"/api/* forwarded"| A["FastAPI<br/>api (:8500)"]
+    W -->|"/api/* forwarded"| A["Go API<br/>api (:8500)"]
+    A -.->|"JWKS (optional sign-in)"| W
     A --> DB[("Postgres 17")]
     A -.->|"read-only: photo tiles"| D[("data/townscan")]
     B -->|"map tiles"| G["GSI tile server"]
 ```
+
+A question goes through the API's chat: a rule-based mock model (Gemini is optional) picks a tool (counts, comparison, list, detection image), and the answer is built from the tool's result. A number check replaces any answer that contains a figure that is not in that result.
+
+Until the switch (the last step of ADR 0005), `compose.yaml` still runs the FastAPI version of the same API. The Go API passes the same contract tests (`contract/`) and is compared with FastAPI response by response (`api/difftest/`; detection images by pixel difference). It does not call Gemini yet, so `LLM_PROVIDER=gemini` still needs the FastAPI version.
 
 The data comes from an offline pipeline, run on demand:
 
@@ -40,6 +47,14 @@ flowchart LR
     O -->|"python -m app.load"| DB[("Postgres 17")]
 ```
 
+### Environments
+
+| Environment | Setup | Notes |
+|---|---|---|
+| Local | `scripts/dev-up.sh`: Docker Compose (db, api, web) | The only app environment. Photo tiles and building data are read from `data/`, which is not in Git. |
+| Analysis | Google Colab (T4) and `pipeline/` | Building extraction runs on demand; the results are loaded into Postgres with `python -m app.load`. |
+| Deployed | none | Not deployed. Where to publish (plan stage P7) is not decided. |
+
 ## Quick start
 
 Needs Docker and Node 24.
@@ -48,7 +63,7 @@ Needs Docker and Node 24.
 scripts/dev-up.sh    # builds the frontend and starts db, api and web
 ```
 
-- App: <http://127.0.0.1:3500> · API docs: <http://127.0.0.1:8500/api/docs>
+- App: <http://127.0.0.1:3500> · API docs (FastAPI version only): <http://127.0.0.1:8500/api/docs>
 - `data/` is not in Git (the photos and building data are not redistributed), so a fresh clone starts with no candidates. The files a run needs are in [docs/spec-prototype.md](docs/spec-prototype.md) §4.1.
 - Stop: `docker compose down` (add `-v` to delete the DB). Checks: `scripts/verify.sh [repo|pipeline|backend|frontend|all]`.
 - Google sign-in and a Gemini key are optional and live in Infisical: see [ADR 0004](docs/decisions/0004-secrets-infisical.md). Sign in at <http://localhost:3500>, not `127.0.0.1`, and never change `BETTER_AUTH_SECRET` once it is set.
