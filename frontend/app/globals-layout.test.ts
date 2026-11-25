@@ -46,96 +46,97 @@ const decl = (body: string, property: string): string | null => {
   return m ? m[1]!.trim() : null;
 };
 
-const OPEN = ".app:has(.app-sidebar[data-open='true'])";
-
-describe('縦に積む幅（窓 999px 以下）: スクロールはページ 1 つ（結果領域の枠の中で別にスクロールしない）', () => {
-  const block = mediaBlock('@media (max-width: 999px)');
-
-  it('結果領域は、高さを固定せず、内容の高さで伸びる（86dvh・最小 560px の枠にしない）', () => {
-    const body = ruleIn(block, '.home > .result-area');
-    expect(decl(body, 'height')).toBe('auto');
-    expect(decl(body, 'min-height')).toBe('0');
+describe('チャット（`/`）は 1 列だけ（常設の結果領域も、左右に並べる・縦に積む切り替えも無い）', () => {
+  it('基本は 1 列。幅 1000px 以上は、中央に最大 760px の 1 列（チャットは、本文の残りの高さをすべて使う）', () => {
+    const home = ruleIn(css, '.home');
+    expect(decl(home, 'grid-template-columns')).toBe('minmax(0, 1fr)');
+    // 同じ条件の @media が複数ある（本文の高さの規則など）。チャットの 1 列の規則を持つ方を取る
+    const wide = mediaBlocks('@media (min-width: 1000px)').find((b) => b.includes('.home > .chat'))!;
+    expect(wide).toBeDefined();
+    const body = ruleIn(wide, '.home');
+    expect(decl(body, 'grid-template-columns')).toBe('minmax(0, 760px)');
+    expect(decl(body, 'justify-content')).toBe('center');
+    expect(decl(body, 'flex')).toBe('1');
+    expect(decl(ruleIn(wide, '.home > .chat'), 'height')).toBe('auto');
   });
 
-  it('見えている画面だけが流れの中に入る（relative）。選んでいない画面は、流れの外のまま（高さを増やさない）', () => {
-    const visible = ruleIn(block, '.result-area__panel:not([hidden])');
-    expect(decl(visible, 'position')).toBe('relative');
-    expect(decl(visible, 'inset')).toBe('auto');
-    expect(decl(visible, 'overflow')).toBe('visible');
-    // 隠す規則は、これまでどおり（display: none にしない。Leaflet が大きさを覚えているので、visibility: hidden のまま）
-    const hidden = ruleIn(css, '.result-area__panel[hidden]');
-    expect(decl(hidden, 'visibility')).toBe('hidden');
-    expect(decl(hidden, 'display')).toBe('flex');
-    // 隠れた画面は、基本の規則（絶対配置・置き場いっぱい）のまま。縦積みの規則は、隠れた画面に触れない
-    expect(decl(ruleIn(css, '.result-area__panel'), 'position')).toBe('absolute');
-    expect(block).not.toMatch(/\.result-area__panel\[hidden\]/);
-  });
-
-  it('パネルの中身（地図・詳細・空の状態）は、残りの高さを取らず、内容の高さ。地図のパネルは自分でスクロールしない', () => {
-    expect(decl(ruleIn(block, '.result-area__panels'), 'flex')).toBe('none');
-    const map = ruleIn(block, '.result-area__panel > .map-panel');
-    expect(decl(map, 'flex')).toBe('none');
-    expect(decl(map, 'overflow-y')).toBe('visible');
-    expect(decl(ruleIn(block, '.result-area__panel > .drawer'), 'flex')).toBe('none');
-    expect(decl(ruleIn(block, '.result-area__panel > .result-area__empty'), 'flex')).toBe('none');
-  });
-
-  it('地図は、置き場の高さに依らず、画面の高さに対する割合の高さを持つ（320〜560px）', () => {
-    const stage = ruleIn(block, '.map-stage');
-    expect(decl(stage, 'flex')).toBe('none');
-    expect(decl(stage, 'height')).toMatch(/^clamp\(320px,\s*\d+dvh,\s*560px\)$/);
-  });
-
-  it('チャットの高さの既定（78dvh の固定）は、ここで置き換わる: 内容が少なければ縮み、増えたら 64dvh（640px）で止まって中でスクロールする', () => {
-    const chat = ruleIn(block, '.home > .chat');
+  it('1000px 未満（ページ全体がスクロールする幅）: チャットは、内容が少なければ縮み、増えたら 64dvh（640px）で止まって中でスクロールする', () => {
+    const chat = ruleIn(mediaBlock('@media (max-width: 999px)'), '.home > .chat');
     expect(decl(chat, 'height')).toBe('auto');
     expect(decl(chat, 'max-height')).toBe('min(64dvh, 640px)');
     expect(decl(chat, 'min-height')).toBe('min(420px, 64dvh)');
   });
+
+  it('無くした規則が、残っていない: 結果領域を本文に並べる・積む規則、「拡大」の列の規則、サイドパネルの開閉での縦積み', () => {
+    for (const gone of [
+      '.home--expanded',
+      '.home--chat-only',
+      '.result-area__expand',
+      '.home > .result-area',
+      '.result-area__panel:not([hidden])',
+      '@media (min-width: 1024px) and (max-width: 1256px)',
+      '86dvh',
+      'min-height: 560px',
+    ]) {
+      expect(css, gone).not.toContain(gone);
+    }
+    expect(css).not.toMatch(/\.app:has\(\.app-sidebar\[data-open='true'\]\)[^{]*\.home/);
+  });
 });
 
-describe('サイドパネルを開いた 1024〜1256px の縦積みも、同じ決め方（開いているとき（data-open）だけ効く）', () => {
-  const block = mediaBlock('@media (min-width: 1024px) and (max-width: 1256px)');
-  const stacked = mediaBlock('@media (max-width: 999px)');
-
-  it('結果領域は内容の高さ。固定の高さ（86dvh・最小 560px）は、どちらの幅にも残っていない', () => {
-    const body = ruleIn(block, `${OPEN} .home > .result-area`);
-    expect(decl(body, 'height')).toBe('auto');
-    expect(decl(body, 'min-height')).toBe('0');
-    // 固定の高さ（height: 86dvh・min-height: 560px）は、どちらの幅にも残っていない（地図の clamp(…, 560px) の上限とは別）
-    expect(block).not.toMatch(/height:\s*86dvh|min-height:\s*560px/);
-    expect(stacked).not.toMatch(/height:\s*86dvh|min-height:\s*560px/);
+describe('拡大ビュー（.expanded-view。結果領域を入れるダイアログ）', () => {
+  it('窓全体を覆う固定の層で、後ろを暗くする（色は変数 --scrim）。サイドパネルのメニュー（25）より上、スキップリンク（3000）より下。中の重なりは閉じ込める', () => {
+    const root = ruleIn(css, '.expanded-view');
+    expect(decl(root, 'position')).toBe('fixed');
+    expect(decl(root, 'inset')).toBe('0');
+    expect(decl(root, 'background')).toBe('var(--scrim)');
+    expect(decl(root, 'isolation')).toBe('isolate');
+    const z = Number(decl(root, 'z-index'));
+    expect(z).toBeGreaterThan(25);
+    expect(z).toBeLessThan(3000);
+    // ライト・ダークの両方で定義されている（定義漏れで、暗くならない）
+    expect(css.match(/--scrim\s*:/g)).toHaveLength(3);
   });
 
-  it('チャットは、上の幅と同じ（auto・64dvh まで）。78dvh の固定は無い', () => {
-    const chat = ruleIn(block, `${OPEN} .home > .chat`);
-    expect(decl(chat, 'height')).toBe('auto');
-    expect(decl(chat, 'max-height')).toBe('min(64dvh, 640px)');
-    expect(block).not.toMatch(/78dvh/);
+  it('幅 1024px 以上: 窓の四方から 24px あけた大きなダイアログ（幅は最大 1440px、高さは窓の高さ − 48px）', () => {
+    expect(decl(ruleIn(css, '.expanded-view'), 'padding')).toBe('24px');
+    const dialog = ruleIn(css, '.expanded-view__dialog');
+    expect(decl(dialog, 'max-width')).toBe('1440px');
+    expect(decl(dialog, 'height')).toBe('calc(100dvh - 48px)');
+    expect(decl(dialog, 'width')).toBe('100%');
   });
 
-  it('見えている画面だけが流れの中。パネルの中身は内容の高さ。地図は割合の高さ', () => {
-    const visible = ruleIn(block, `${OPEN} .result-area__panel:not([hidden])`);
-    expect(decl(visible, 'position')).toBe('relative');
-    expect(decl(ruleIn(block, `${OPEN} .result-area__panels`), 'flex')).toBe('none');
-    expect(decl(ruleIn(block, `${OPEN} .result-area__panel > .map-panel`), 'flex')).toBe('none');
-    expect(decl(ruleIn(block, `${OPEN} .result-area__panel > .drawer`), 'flex')).toBe('none');
-    const stage = ruleIn(block, `${OPEN} .map-stage`);
-    expect(decl(stage, 'flex')).toBe('none');
-    expect(decl(stage, 'height')).toBe(decl(ruleIn(stacked, '.map-stage'), 'height'));
+  it('幅 1023px 以下: 窓いっぱいの全面のシート（余白・角丸なし）', () => {
+    const block = mediaBlock('@media (max-width: 1023px)');
+    expect(decl(ruleIn(block, '.expanded-view'), 'padding')).toBe('0');
+    const dialog = ruleIn(block, '.expanded-view__dialog');
+    expect(decl(dialog, 'max-width')).toBe('none');
+    expect(decl(dialog, 'height')).toBe('100dvh');
+    expect(decl(dialog, 'border-radius')).toBe('0');
+    expect(decl(dialog, 'border')).toBe('0');
   });
 
-  it('縦積みの同じ規則（上の幅）を、同じ宣言で持つ（片方だけ変えない）', () => {
-    for (const [plain, withOpen] of [
-      ['.result-area__panel:not([hidden])', `${OPEN} .result-area__panel:not([hidden])`],
-      ['.result-area__panel > .map-panel', `${OPEN} .result-area__panel > .map-panel`],
-      ['.result-area__panel > .drawer', `${OPEN} .result-area__panel > .drawer`],
-      ['.result-area__panel > .result-area__empty', `${OPEN} .result-area__panel > .result-area__empty`],
-      ['.map-stage', `${OPEN} .map-stage`],
-      ['.home > .chat', `${OPEN} .home > .chat`],
-    ] as const) {
-      expect(ruleIn(block, withOpen).replace(/\s+/g, ' ').trim(), plain).toBe(ruleIn(stacked, plain).replace(/\s+/g, ' ').trim());
-    }
+  it('中の結果領域は、ダイアログの高さをすべて使い、3 つの画面は置き場いっぱいに重なる（選んでいない画面は、visibility: hidden のまま。display: none にしない）', () => {
+    expect(decl(ruleIn(css, '.expanded-view__dialog > .result-area'), 'flex')).toBe('1');
+    expect(decl(ruleIn(css, '.result-area__panels'), 'flex')).toBe('1');
+    expect(decl(ruleIn(css, '.result-area__panel'), 'position')).toBe('absolute');
+    expect(decl(ruleIn(css, '.result-area__panel'), 'inset')).toBe('0');
+    // Leaflet が、隠れても大きさを覚えているので、display: none にしない
+    const hidden = ruleIn(css, '.result-area__panel[hidden]');
+    expect(decl(hidden, 'visibility')).toBe('hidden');
+    expect(decl(hidden, 'display')).toBe('flex');
+  });
+
+  it('地図は、パネルの残りの高さをすべて取る（最小 320px）。画面の高さの割合で決める縦積みの規則は無い', () => {
+    const stage = ruleIn(css, '.map-stage');
+    expect(decl(stage, 'flex')).toBe('1 1 0');
+    expect(decl(stage, 'min-height')).toBe('320px');
+    expect(css).not.toMatch(/\.map-stage\s*\{[^}]*clamp\(/);
+  });
+
+  it('「閉じる」は、タブの帯の右端（タブと同じ高さ 44px）', () => {
+    expect(decl(ruleIn(css, '.expanded-view__close'), 'min-height')).toBe('44px');
+    expect(decl(ruleIn(css, '.expanded-view__close'), 'flex')).toBe('none');
   });
 });
 

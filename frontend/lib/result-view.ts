@@ -1,7 +1,7 @@
-import type { CandidateClass, ResultFilter, ToolResult, ToolResultType } from './api-types';
+import type { CandidateClass, ResultFilter, ToolResult } from './api-types';
 import { CLASS_ORDER, isCandidateClass } from './classes';
 
-/** `/` の右の結果領域（地図・グラフ・写真の比較）の画面 */
+/** `/` の拡大ビュー（結果領域。地図・グラフ・写真の比較）の画面 */
 export type ResultView = 'map' | 'chart' | 'photos';
 
 export const RESULT_VIEW_ORDER: readonly ResultView[] = ['map', 'chart', 'photos'];
@@ -11,21 +11,6 @@ export const RESULT_VIEW_LABELS: Record<ResultView, string> = {
   chart: 'グラフ',
   photos: '写真の比較',
 };
-
-/** 道具の結果の型ごとに、右で最初に見せる画面。ここに無い型（表・精度・お断り）は、いまの画面のまま */
-const VIEW_BY_RESULT: Partial<Record<ToolResultType, ResultView>> = {
-  detection_image: 'photos',
-  map_focus: 'map',
-  count: 'chart',
-  compare: 'chart',
-};
-
-/** 1 回の回答の道具の結果の型から、右で出す画面を決める。当たる型が複数あれば、あとのものを採る。1 つも当たらなければ null（いまのまま） */
-export function viewForResults(types: readonly ToolResultType[]): ResultView | null {
-  let view: ResultView | null = null;
-  for (const t of types) view = VIEW_BY_RESULT[t] ?? view;
-  return view;
-}
 
 /** 地図・グラフ・一覧に共通の絞り込み。areaId が空なら全地区、classes は表示する分類 */
 export interface MapFilter {
@@ -63,7 +48,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 /**
  * 道具の結果として読める形か。画面は、API の形が少し違っても壊れない作りにしている。
  * count は filterFromResults が filter を直接読む（契約では必須）ので、filter がオブジェクトでないものは、壊れた結果として外す。
- * 回答の「対象・条件」の行（AnswerScope）も、右の地図・グラフの絞り込み（HomeClient）も、filterFromResults に渡す前にこれで外す。
+ * 回答の「対象・条件」の行（AnswerScope）も、拡大ビューの地図・グラフの絞り込み（lib/answer-view.ts）も、filterFromResults に渡す前にこれで外す。
  * 外さずに渡すと、壊れた count が「条件なし（全地区・全分類）」と読まれ、条件の行（その前の結果の条件）と食い違う
  */
 export function isWellFormedResult(r: unknown): r is ToolResult {
@@ -87,7 +72,7 @@ function areaPart(filter: ResultFilter | null | undefined): Pick<MapFilter, 'are
  * - 地区は、area_ids（複数。区など）・area_id（1 つ）・どちらも無ければ全地区。
  * - 分類は、count は filter.cls（未知の文字列は「すべて」）。compare は常にすべて: 比較のカードは 3 分類と合計を出し、filter.cls は並べ替えの分類にすぎない。
  * - 複数あれば、あとのものを採る。count も compare も無ければ null（いまの絞り込みのまま）。
- * - 表（table）は条件を写さない: 表は右の画面も切り替えない（viewForResults が null）ので、地図・グラフと食い違わせない。
+ * - 表（table）は条件を写さない: 表は絞り込みの条件（filter）を持たないので、地図・グラフの絞り込みの元にならない（表の「詳細」は、候補を選んで開く）。
  * 数字は結果の値をそのまま使い、ここでは数えない。
  */
 export function filterFromResults(results: readonly ToolResult[]): MapFilter | null {

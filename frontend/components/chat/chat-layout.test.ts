@@ -58,7 +58,7 @@ describe('チャット欄の規則: 読み上げ用の span が、文書の高�
 });
 
 describe('チャット欄のスクロールする枠: 中身のフォーカスの輪が、枠の辺で切れない', () => {
-  /** 行頭から始まる規則（`\n.sel {`）の本文。同じ selector を後ろに持つ、入れ子の規則（`.home--expanded .chat__chips`）は含めない */
+  /** 行頭から始まる規則（`\n.sel {`）の本文。同じ selector を後ろに持つ、入れ子の規則（たとえば `.foo .chat__chips`）は含めない */
   function ruleBody(selector: string): string {
     const start = css.indexOf(`\n${selector} {`);
     expect(start, selector).toBeGreaterThanOrEqual(0);

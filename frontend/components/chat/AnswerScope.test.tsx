@@ -61,7 +61,7 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
     expect(items.some((i) => i.key === 'class')).toBe(false);
   });
 
-  describe('1 回答に count と compare が両方あるとき: 右の絞り込み（filterFromResults）と同じ「最後の条件」', () => {
+  describe('1 回答に count と compare が両方あるとき: 拡大ビューの絞り込み（filterFromResults）と同じ「最後の条件」', () => {
     const narrow = countWith({ area_id: 'z18-1-2', cls: 'uncertain' });
     const byWard: CompareResult = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: 'confirmed_new' } };
     const rows = (items: ScopeItem[]) => items.filter((i) => i.key === 'area' || i.key === 'class');
@@ -69,7 +69,7 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
     it('count のあとに compare: compare の条件（地区だけ。分類の行は出さない）。先の count の地区・分類を出さない', () => {
       const items = answerScope([narrow, byWard], nameOf);
       expect(rows(items)).toEqual([{ key: 'area', label: '地区', text: '中央区' }]);
-      // 右の絞り込みも、同じ（地区は比較の条件、分類はすべて）
+      // 拡大ビューの絞り込みも、同じ（地区は比較の条件、分類はすべて）
       expect(filterFromResults([narrow, byWard])).toMatchObject({ areaIds: ['z18-1-2', 'z18-2-2'], scope: '中央区' });
     });
 
@@ -95,7 +95,7 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
     });
   });
 
-  it('壊れた count（filter が無い）は飛ばし、その前の compare の条件を採る。右の絞り込み（HomeClient）も同じ前処理（isWellFormedResult）で、同じ結果になる', () => {
+  it('壊れた count（filter が無い）は飛ばし、その前の compare の条件を採る。拡大ビューの絞り込み（lib/answer-view.ts）も同じ前処理（isWellFormedResult）で、同じ結果になる', () => {
     const byWard: CompareResult = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: null } };
     const noFilter = { type: 'count', title: '壊れた件数', total: 1, provenance } as unknown as ToolResult;
     const items = answerScope([byWard, noFilter], nameOf);

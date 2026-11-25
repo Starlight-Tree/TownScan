@@ -1,26 +1,36 @@
-import type { BBox, MapFocusResult, ToolCall, ToolResult } from '../../lib/api-types';
-import type { MapFilter, ResultView } from '../../lib/result-view';
+import type { BBox, ToolCall, ToolResult } from '../../lib/api-types';
+import type { AnswerRef, ExpandRequest } from '../../lib/answer-view';
+import type { ResultView } from '../../lib/result-view';
 
-/** 結果カードから親（HomeClient。右の結果領域の「地図」「グラフ」「写真の比較」）へ伝える操作 */
+/** チャットの入力欄の id。拡大ビューを閉じるとき、開いたボタンが無ければ、フォーカスをここへ戻す */
+export const CHAT_INPUT_ID = 'chat-input';
+
+/**
+ * 結果カードから親へ伝える操作。どれも、拡大ビュー（地図・グラフ・写真の比較）を開く。
+ * 開くのは押したときだけ（回答が届いただけでは開かない）。どの回答のカードかは、ChatPanel が回答ごとに束ねて渡す
+ */
 export interface ResultActions {
-  /** 候補の詳細を開く（地図もその候補へ寄せる） */
+  /** 候補の詳細を開く（写真の比較。地図もその候補へ寄せる） */
   openCandidate: (id: string) => void;
-  /** 地図を範囲へ寄せ、候補を目立たせる */
+  /** 地図で、候補を目立たせ、範囲へ寄せて開く */
   focusMap: (target: { bbox: BBox; candidateIds: string[] }) => void;
   /** サジェスト（お断りの提案）を質問として送る */
   ask: (text: string) => void;
   /**
-   * 右の結果領域の画面（地図・グラフ・写真の比較）を切り替える。
-   * filter を渡すと、地図・グラフの絞り込みをその条件に替えてから切り替える（回答のカードの「グラフで見る」は、そのカードの条件で開く）。渡さなければ、いまの絞り込みのまま
+   * 拡大ビューを、その画面（地図・グラフ・写真の比較）で開く。
+   * 絞り込みは、そのカードを含む回答の結果から決まる（はじめて開くとき）。開き直すときは、利用者が変えた絞り込みのまま
    */
-  showView: (view: ResultView, filter?: MapFilter) => void;
+  showView: (view: ResultView) => void;
 }
 
-/** ChatPanel が親（HomeClient）に頼む操作。結果カードの操作のうち親が持つ分に、回答が届いた通知を足したもの */
-export type ChatActions = Pick<ResultActions, 'openCandidate' | 'focusMap' | 'showView'> & {
-  /** 回答が届いたとき、その回答の道具の結果を伝える（右の結果領域が、合う画面と絞り込みへ自動で切り替わる。lib/result-view.ts の viewForResults・filterFromResults） */
-  answered: (results: ToolResult[]) => void;
-};
+/** ChatPanel が親（HomeClient）に頼む操作 */
+export interface ChatActions {
+  /**
+   * 拡大ビューを開く。answer は、押したボタンのある回答（最初の画面のボタンは null）。拡大の単位は回答 1 件で、状態は回答ごとに保つ。
+   * opener は、押したボタン。閉じたとき、フォーカスをここへ戻す（無い・外れているときは、チャットの入力欄）
+   */
+  expand: (answer: AnswerRef | null, request: ExpandRequest, opener: HTMLElement | null) => void;
+}
 
 export interface ChatEntry {
   id: string;
@@ -30,8 +40,4 @@ export interface ChatEntry {
   failed?: boolean;
   results?: ToolResult[];
   tool_calls?: ToolCall[];
-}
-
-export function isMapFocus(result: ToolResult): result is MapFocusResult {
-  return result.type === 'map_focus';
 }

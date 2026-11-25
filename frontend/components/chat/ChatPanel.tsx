@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { ApiError, postChat } from '../../lib/api';
+import type { AnswerRef, ExpandRequest } from '../../lib/answer-view';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -11,7 +12,7 @@ import { TILE_SIDE_TEXT } from './area-scale';
 import { ClassDefinitions } from './ClassGuide';
 import { buildRequestMessages, MAX_CONTENT_LENGTH } from './history';
 import { ResultCard } from './ResultCard';
-import { isMapFocus, type ChatActions, type ChatEntry, type ResultActions } from './types';
+import { CHAT_INPUT_ID, type ChatActions, type ChatEntry, type ResultActions } from './types';
 
 /** 答えられる質問の例 */
 const IN_SCOPE_SUGGESTIONS = [
@@ -29,7 +30,7 @@ export const SUGGESTIONS = [...IN_SCOPE_SUGGESTIONS, ...OUT_OF_SCOPE_SUGGESTIONS
 
 interface Props {
   actions: ChatActions;
-  /** 「新しい会話」（チャットの中のボタンも、サイドパネルのボタンも）で会話を空にしたあとに呼ぶ。親が、結果領域を最初の状態へ戻す */
+  /** 「新しい会話」（チャットの中のボタンも、サイドパネルのボタンも）で会話を空にしたあとに呼ぶ。親が、拡大ビューを閉じ、回答ごとの状態を捨てる */
   onNewConversation?: () => void;
 }
 
@@ -81,6 +82,9 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   // 再送する中身と、画面上のどの発言か（失敗の印をつけ外しするため）
   const retryRef = useRef<{ messages: ChatRequestMessage[]; entryId: string } | null>(null);
+  // 最後に押されたボタン（結果カードの「グラフで見る」など）。拡大ビューを閉じたとき、フォーカスをここへ戻す。
+  // ボタンを押してもフォーカスが移らないブラウザー（macOS の Safari・Firefox）でも、押したボタンを正しく指すため、押した時点の対象を控える
+  const pressedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -122,18 +126,6 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
           { id: newId(), role: 'assistant', content: typeof msg?.content === 'string' ? msg.content : '', results, tool_calls: toolCalls },
         ]);
         retryRef.current = null;
-        // 地図の表示が返ってきたら、すぐ地図を寄せる
-        const focus = [...results].reverse().find(isMapFocus);
-        if (focus) actions.focusMap({ bbox: focus.bbox, candidateIds: focus.candidate_ids });
-        // 回答が届いたことを、結果の領域へ 1 回だけ伝える（合う画面・絞り込みへ切り替える）。
-        // 親の処理の失敗は、送信の失敗ではない（回答は届いて画面に出ている）ので、「送信できませんでした」にしない
-        if (results.length > 0) {
-          try {
-            actions.answered(results);
-          } catch (err) {
-            console.error('回答の通知に失敗しました', err);
-          }
-        }
       } catch (e) {
         if (ctrl.signal.aborted) return;
         const err = e instanceof ApiError ? e : new ApiError('送信に失敗しました。', 0, 'unknown');
@@ -143,7 +135,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
         if (abortRef.current === ctrl) setSending(false);
       }
     },
-    [actions],
+    [],
   );
 
   const send = useCallback(
@@ -179,7 +171,20 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   // サイドパネルの「新しい会話」も、同じ処理を呼ぶ
   useRegisterNewConversation(reset);
 
-  const resultActions = useMemo<ResultActions>(() => ({ ...actions, ask: send }), [actions, send]);
+  // 結果カードの操作を、その回答に束ねる。拡大の単位は回答 1 件で、どの回答のカードを押したかを、親へ渡す
+  const actionsFor = useCallback(
+    (entry: ChatEntry): ResultActions => {
+      const answer: AnswerRef = { id: entry.id, results: entry.results ?? [] };
+      const expand = (req: ExpandRequest) => actions.expand(answer, req, pressedRef.current);
+      return {
+        ask: send,
+        showView: (view) => expand({ type: 'view', view }),
+        openCandidate: (id) => expand({ type: 'candidate', id }),
+        focusMap: (target) => expand({ type: 'focus', bbox: target.bbox, candidateIds: target.candidateIds }),
+      };
+    },
+    [actions, send],
+  );
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -192,7 +197,14 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   };
 
   return (
-    <section className="chat" aria-label="チャット">
+    <section
+      className="chat"
+      aria-label="チャット"
+      // ボタンの click は、そのボタン自身の onClick より先に、ここ（捕捉の段階）を通る。押したボタンを、拡大ビューを開く操作が読む前に控える
+      onClickCapture={(e) => {
+        pressedRef.current = e.target instanceof Element ? e.target.closest('button') : null;
+      }}
+    >
       <div className="chat__scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions" aria-busy={sending}>
         {entries.length === 0 && (
           <Welcome
@@ -200,7 +212,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
               send(text);
               focusComposer();
             }}
-            onShowMap={() => actions.showView('map')}
+            onShowMap={(opener) => actions.expand(null, { type: 'view', view: 'map' }, opener)}
           />
         )}
         {entries.map((entry) =>
@@ -220,7 +232,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
                   <AnswerScope results={entry.results} />
                 </ErrorBoundary>
               )}
-              {entry.results?.map((r, i) => <ResultCard key={i} result={r} actions={resultActions} answerText={entry.content} />)}
+              {entry.results?.map((r, i) => <ResultCard key={i} result={r} actions={actionsFor(entry)} answerText={entry.content} />)}
               {entry.tool_calls && entry.tool_calls.length > 0 && (
                 <details className="provenance provenance--tools">
                   <summary>使ったツール</summary>
@@ -283,11 +295,11 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
       )}
 
       <form className="chat__composer" onSubmit={onSubmit}>
-        <label htmlFor="chat-input" className="visually-hidden">
+        <label htmlFor={CHAT_INPUT_ID} className="visually-hidden">
           質問を入力
         </label>
         <input
-          id="chat-input"
+          id={CHAT_INPUT_ID}
           ref={inputRef}
           type="text"
           className="input"
@@ -306,7 +318,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   );
 }
 
-function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShowMap: () => void }) {
+function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShowMap: (opener: HTMLElement) => void }) {
   // 地区の数は、読み込んだ地区の一覧から出す（読み込めていない間は、数を伏せる）
   const { areas } = useAreas();
   return (
@@ -316,7 +328,7 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
         熊本市中心部の航空写真（2018 年と 2023 年）から、<b>新しく現れた建物の候補</b>を棟ごとに見つけています（新築と断定するものではありません）。質問すると、件数・表・地図・写真を、根拠つきで返します。
       </p>
       <div className="welcome__actions">
-        <button type="button" className="btn" onClick={onShowMap}>
+        <button type="button" className="btn" onClick={(e) => onShowMap(e.currentTarget)}>
           解析した地区を地図で見る
         </button>
       </div>

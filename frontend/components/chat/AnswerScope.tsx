@@ -22,7 +22,7 @@ const SHOWN_WHEN_TRUNCATED = 3;
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
 // 画面は、API の形が少し違っても壊れない作りにしている（ResultCard と同じ）。この行は添え物なので、壊れた結果（isWellFormedResult）は黙って飛ばす。
-// 右の絞り込み（HomeClient）も同じ前処理で飛ばす。そうしないと、壊れた count を、こちらは飛ばし、右は「全地区・全分類」と読んで、食い違う
+// 拡大ビューの絞り込み（lib/answer-view.ts）も同じ前処理で飛ばす。そうしないと、壊れた count を、こちらは飛ばし、拡大ビューは「全地区・全分類」と読んで、食い違う
 
 function finiteYears(v: unknown): number[] {
   return Array.isArray(v) ? v.filter((y): y is number => typeof y === 'number' && Number.isFinite(y)) : [];
@@ -34,8 +34,8 @@ function classText(cls: string): string {
 
 /**
  * 回答の道具の結果に入っている値だけから、対象・条件の項目を作る。LLM の文章や推測は使わない。
- * - 地区・分類の行は、右の地図・グラフに反映する条件（filterFromResults）と同じ「最後の件数（count）か比較（compare）」から作る。
- *   1 回答に両方あっても、右の絞り込みと食い違わない（先に件数、あとに比較なら、比較の条件）。
+ * - 地区・分類の行は、拡大ビューの地図・グラフに反映する条件（filterFromResults）と同じ「最後の件数（count）か比較（compare）」から作る。
+ *   1 回答に両方あっても、拡大ビューの絞り込みと食い違わない（先に件数、あとに比較なら、比較の条件）。
  *   - 地区: その結果の filter から、filterFromResults をそのまま使う（複数の地区は、API の scope をそのまま。scope が無ければ「N 地区」。地区の条件が無ければ「すべて」）
  *   - 分類: 最後が count のときだけ。結果の値のまま（未知の分類もそのまま出す）。compare には出さない: 比較のカードは 3 分類と合計を並べ、filter.cls は並べ替えの分類にすぎない
  * - compare: 比べる地区の名前（結果の items の name）も、別の行に出す
@@ -46,7 +46,7 @@ export function answerScope(results: readonly unknown[], nameOf: (areaId: string
   const valid = results.filter(isWellFormedResult);
   const items: ScopeItem[] = [];
 
-  // 地区・分類の行は、右の絞り込みと同じ「最後の件数・比較」から作る（先の件数の条件を、あとの比較が置き換えたなら、比較の条件）
+  // 地区・分類の行は、拡大ビューの絞り込みと同じ「最後の件数・比較」から作る（先の件数の条件を、あとの比較が置き換えたなら、比較の条件）
   const last = [...valid].reverse().find((r) => r.type === 'count' || r.type === 'compare');
   const filter = filterFromResults(valid);
   if (filter && last) {

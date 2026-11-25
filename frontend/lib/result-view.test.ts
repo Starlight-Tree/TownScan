@@ -9,28 +9,11 @@ import {
   filterFromResults,
   isAllFilter,
   isWellFormedResult,
-  viewForResults,
   widenFilterFor,
   type MapFilter,
 } from './result-view';
 
-describe('viewForResults', () => {
-  it('件数・比較はグラフ、地図の表示は地図、検出画像は写真の比較', () => {
-    expect(viewForResults(['count'])).toBe('chart');
-    expect(viewForResults(['compare'])).toBe('chart');
-    expect(viewForResults(['map_focus'])).toBe('map');
-    expect(viewForResults(['detection_image'])).toBe('photos');
-  });
-  it('表・精度・お断りだけなら、切り替えない（null）', () => {
-    expect(viewForResults(['table'])).toBeNull();
-    expect(viewForResults(['accuracy'])).toBeNull();
-    expect(viewForResults(['refusal'])).toBeNull();
-    expect(viewForResults([])).toBeNull();
-  });
-  it('当たる型が複数なら、あとのものを採る。当たらない型は飛ばす', () => {
-    expect(viewForResults(['count', 'map_focus'])).toBe('map');
-    expect(viewForResults(['map_focus', 'table'])).toBe('map');
-  });
+describe('拡大ビューの画面の名前', () => {
   it('すべての画面に名前がある', () => {
     for (const v of RESULT_VIEW_ORDER) expect(RESULT_VIEW_LABELS[v]).not.toBe('');
   });

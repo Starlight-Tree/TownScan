@@ -128,7 +128,7 @@ export function MapPanel(props: Props) {
     // 単一の地区（または全地区）へ変える。複数の地区の条件（areaIds・scope）は、ここで消す
     const next: MapFilter = { areaId: id, classes: filter.classes };
     changeFilter(next);
-    // 詳細は地図に重ならず、右の結果領域の別の画面に出る。右端をあける必要は無い。「すべて」へ戻したときは、全地区が収まる範囲へ
+    // 詳細は地図に重ならず、拡大ビューの別の画面に出る。右端をあける必要は無い。「すべて」へ戻したときは、全地区が収まる範囲へ
     const box = scopeBBox(areas, areaScopeIds(next));
     if (box) setLocalFocus({ bbox: box, ids: [], nonce: nextNonce() });
   };

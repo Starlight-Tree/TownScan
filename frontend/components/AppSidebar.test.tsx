@@ -298,32 +298,9 @@ describe('globals.css のサイドパネルの境目', () => {
     expect(css).not.toMatch(/\.banner[^{]*\{[^}]*display:\s*none/);
   });
 
-  it('開いたサイドパネルが本文を狭くする間（窓 1024〜1256px）は、チャットと地図を縦に積む', () => {
-    const stacked = block('@media (min-width: 1024px) and (max-width: 1256px)');
-    expect(stacked).toContain(".app:has(.app-sidebar[data-open='true']) .home");
-    expect(stacked).toContain('grid-template-columns: minmax(0, 1fr)');
-  });
-
-  it("縦に積む @media（窓 1024〜1256px）の規則は、すべて data-open='true'（開いているとき）に限る。細い帯のとき（窓 1024〜1055px）は、縦に積まず、高さも変えない", () => {
-    const stacked = block('@media (min-width: 1024px) and (max-width: 1256px)');
-    const inner = stacked
-      .slice(stacked.indexOf('{') + 1, stacked.lastIndexOf('}'))
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    // 入れ子の無い `selector { … }` を、規則ごとに取り出す
-    const rules = [...inner.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: m[1]!.split(',').map((x) => x.trim()), body: m[2]! }));
-    const find = (needle: string) => rules.filter((r) => r.selectors.some((x) => x.endsWith(needle)));
-
-    // 縦に積む規則の本体（高さを auto にする・1 列にする・本文を block にする・チャット／結果領域の高さを決める）が、ここにある
-    expect(find(':has(.home)').some((r) => /height\s*:\s*auto/.test(r.body))).toBe(true);
-    expect(find(' .home').some((r) => /grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/.test(r.body))).toBe(true);
-    expect(find(' .app__main').some((r) => /display\s*:\s*block/.test(r.body))).toBe(true);
-    expect(find(' .home > .chat').some((r) => /max-height/.test(r.body))).toBe(true);
-    expect(find(' .home > .result-area').some((r) => /height\s*:\s*auto/.test(r.body))).toBe(true);
-
-    expect(rules.length).toBeGreaterThanOrEqual(5);
-    // どの規則のどの selector も、開いているとき（data-open='true'）に限る。1 つでも外れると、細い帯のときまで効く
-    for (const r of rules) {
-      for (const selector of r.selectors) expect(selector, selector).toContain("[data-open='true']");
-    }
+  it('チャット（`/`）は 1 列だけ: サイドパネルの開閉で、本文の並び（左右・縦積み）を切り替える規則は無い（開いても、細い帯でも、チャットは残りの幅の中央に収まる）', () => {
+    expect(css).not.toContain('@media (min-width: 1024px) and (max-width: 1256px)');
+    expect(css).not.toMatch(/\.app:has\(\.app-sidebar\[data-open='true'\]\)[^{]*\.home/);
+    expect(css).not.toMatch(/\.app:has\(\.app-sidebar\[data-open='true'\]\)[^{]*\.result-area/);
   });
 });

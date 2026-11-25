@@ -2,8 +2,9 @@
 
 Next.js 16（App Router・TypeScript strict・Node 24）。仕様は [../docs/spec-prototype.md](../docs/spec-prototype.md) §7。
 
-- 画面: `/`（左にチャット、右に結果領域）・`/accuracy`（精度・既知の限界・出典と規約）・`/login`（任意のログイン）・`/healthz`（コンテナのヘルスチェック）
-  結果領域（`components/ResultArea.tsx`）は、地図・グラフ・写真の比較（候補の詳細。`components/CandidateDrawer.tsx`）のタブ。チャットの回答に合わせて自動で切り替わり（`lib/result-view.ts`）、「拡大」でチャットの列を狭めて広げられる。
+- 画面: `/`（チャットの 1 列）・`/accuracy`（精度・既知の限界・出典と規約）・`/login`（任意のログイン）・`/healthz`（コンテナのヘルスチェック）
+  結果（地図・グラフ・写真の比較）は、結果カードのボタンと最初の画面の「解析した地区を地図で見る」を押したときだけ、拡大ビュー（`components/ExpandedView.tsx`。ダイアログ）に開く。回答が届いただけでは開かない。
+  拡大ビューの中身は `components/ResultArea.tsx`（地図・グラフ・写真の比較のタブ。候補の詳細は `components/CandidateDrawer.tsx`）。拡大の単位は回答 1 件で、タブ・絞り込み・選んだ候補は回答ごとに保つ（`lib/answer-view.ts`）。
 - 枠: 幅 1024px 以上は左のサイドパネル（`AppSidebar`。JobNavi・DocuNavi と同じ。開いた表示と細い帯をボタンで切り替える。はじめは開いた状態で、保存しない）。1023px 以下は上の横帯（`AppHeader`。ブランド・3 つのページ・状態の印・テーマ・アカウント）。合成データ・API 不通のバナーは、どちらの幅でも本文の上に出る。`/login` はサイドパネルなし。
   `app/(site)/` が枠つきの 3 ページ、`app/(auth)/` がログイン。
 - API: ブラウザからは同じオリジンの `/api/*` だけを呼ぶ。転送は `proxy.ts`（実行時の環境変数 `API_URL`。既定 `http://127.0.0.1:8500`）。ただし `/api/auth/*`（ログイン）は転送せず、この画面のサーバー（`app/api/auth/[...all]/route.ts`）が受ける。

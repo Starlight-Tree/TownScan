@@ -26,7 +26,7 @@ interface Props {
 }
 
 /**
- * 候補の詳細。右の結果領域の「写真の比較」の中に収まる、流れの中の部品（地図に重ならない）。
+ * 候補の詳細。拡大ビューの「写真の比較」の中に収まる、流れの中の部品（地図に重ならない）。
  * 2018・2023 の切り出し、分類の説明、根拠の数字。重なりの表示（ドロワー）をやめたが、名前は変えない（差分を小さく保つ）
  */
 export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, autoFocus = true, focusNonce = 0 }: Props) {

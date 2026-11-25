@@ -29,7 +29,7 @@ function rowLabel(row: AreaRow, classes: ReadonlySet<CandidateClass>): string {
 }
 
 /**
- * 右の結果領域の「グラフ」画面。地区ごとの件数を、分類で積み上げた横棒で見せる。
+ * 拡大ビューの「グラフ」画面。地区ごとの件数を、分類で積み上げた横棒で見せる。
  * 棒は HTML と CSS だけで描く（幅は、表示している行のうち最大の合計に対する割合）。
  * 分類は色だけでなく、棒の縁の線（実線・破線・点線）と塗りの模様でも区別する（lib/classes.ts の方針）。
  */

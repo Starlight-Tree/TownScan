@@ -28,6 +28,8 @@
   --input-border: #8a919b;
   --danger: #a32020;
   --shadow: rgba(15, 18, 22, 0.14);
+  /* 拡大ビュー（ダイアログ）の後ろの暗い部分。ライトでも、下のページを沈ませる濃さ */
+  --scrim: rgba(15, 18, 22, 0.55);
   --radius: 12px;
   /* 欧文は Inter、日本語は Noto Sans JP の可変フォント（どちらも app/layout.tsx が読み込む）。読み込み前・失敗時は、OS の標準書体 */
   --font: var(--font-inter), 'Noto Sans JP Variable', system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
@@ -79,6 +81,7 @@
     --input-border: #6a717c;
     --danger: #ff8a80;
     --shadow: rgba(0, 0, 0, 0.55);
+    --scrim: rgba(0, 0, 0, 0.7);
     --class-new: #ff8a57;
     --class-omit: #34d399;
     --class-unc: #e879f9;
@@ -119,6 +122,7 @@
   --input-border: #6a717c;
   --danger: #ff8a80;
   --shadow: rgba(0, 0, 0, 0.55);
+  --scrim: rgba(0, 0, 0, 0.7);
   --class-new: #ff8a57;
   --class-omit: #34d399;
   --class-unc: #e879f9;
@@ -388,8 +392,7 @@ code {
 
 /* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
    1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
-   開いた表示だと、本文は窓より 16rem 狭い。チャットと結果領域を左右に並べる @media は、窓の幅 1000px 以上で決まる（本文の幅ではない）。
-   縦に戻す規則は、このファイルの末尾の @media にあり、サイドパネルを開いている（data-open='true'）ときだけ効く。細い帯のときは効かないので、窓が 1024〜1055px（細い帯 56px を引いた本文が 1000px に満たない）でも左右に並ぶ */
+   開いた表示だと、本文は窓より 16rem 狭い。チャット（`/`）は 1 列だけなので、サイドパネルの開閉で、本文の並びを切り替える規則は無い（チャットが、残りの幅の中央に最大 760px で収まる） */
 .app-sidebar { display: none; }
 .app-rail-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -685,7 +688,9 @@ p.banner {
   accent-color: var(--primary);
 }
 
-/* ---- 画面 `/` ---- */
+/* ---- 画面 `/` ----
+   チャットの 1 列だけ。常設の結果領域は無い（地図・グラフ・写真の比較は、結果カードのボタンで開く拡大ビュー。下の .expanded-view）。
+   幅 1000px 以上は、中央に最大 760px。それ未満は全幅 */
 .home {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -697,48 +702,87 @@ p.banner {
   height: min(78dvh, 680px);
 }
 
-.home > .result-area {
-  min-height: 560px;
-  height: 86dvh;
-}
-
 @media (min-width: 1000px) {
   .home {
-    grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 760px);
     grid-template-rows: minmax(0, 1fr);
+    justify-content: center;
     flex: 1;
     min-height: 0;
     padding: 16px 24px;
   }
-  .home > .chat,
-  .home > .result-area {
+  .home > .chat {
     height: auto;
     min-height: 0;
   }
-  /* 最初の画面（会話の前。HomeClient が .home--chat-only を付ける）: チャットだけを、中央の 1 列に置く。
-     結果領域（右の列）は、最初の結果つきの回答か「地図で見る」で開く。開くと、上の 2 列（チャット 340〜440px・結果領域）になる */
-  .home--chat-only {
-    grid-template-columns: minmax(0, 760px);
-    justify-content: center;
-  }
-  /* 結果領域の「拡大」（HomeClient が .home--expanded を付ける）。チャットの列を、普通の幅（340〜440px）より狭い 280px にして、残りを結果領域へ回す。
-     普通の 440px からは 160px 広がる（340px までだと 100px しか増えず、押した効きが小さかった）。
-     チャットのメッセージ一覧（.chat__scroll）と入力欄は、そのまま残る（列が狭くなるだけ）。280px では、質問の例の行だけが窮屈になるので、下の 2 つで整える
-     （そのほかの中身は、ボタンが折り返し、長い文字列は overflow-wrap で折り返し、表は .table-scroll の中で横にスクロールするので、はみ出さない）。
-     サイドパネルを開いた 1024〜1256px の縦積みは、末尾の @media の .app:has(…) .home が、これより強い規則で 1 列に戻す */
-  .home--expanded {
-    grid-template-columns: 280px minmax(0, 1fr);
-  }
-  /* 質問の例（横にスクロールする列）は、「新しい会話」と同じ行だと 150px ほどしか使えない。例を 1 行いっぱいに広げ、「新しい会話」を次の行へ回す */
-  .home--expanded .chat__tools {
-    flex-wrap: wrap;
-  }
-  .home--expanded .chat__chips {
-    flex-basis: 100%;
+}
+
+/* 1000px 未満（ページ全体がスクロールする幅）: チャットは、内容が少ないうちは縮み、増えたら 64dvh（上限 640px）で止まって、記録の中でスクロールする */
+@media (max-width: 999px) {
+  .home > .chat {
+    height: auto;
+    min-height: min(420px, 64dvh);
+    max-height: min(64dvh, 640px);
   }
 }
 
-/* ---- 右の結果領域（地図・グラフ・写真の比較をタブで切り替える。components/ResultArea.tsx）----
+/* ---- 拡大ビュー（components/ExpandedView.tsx。中身は、下の結果領域 .result-area）----
+   body 直下に置く（後ろのページ全体を inert にするため）。幅 1024px 以上は、窓の四方から 24px あけた大きなダイアログ（幅は最大 1440px、高さは窓の高さ − 48px）。
+   1023px 以下は、窓いっぱいの全面のシート（余白・角丸なし）。後ろの暗い部分（.expanded-view 自身）を押すと閉じる。
+   z-index: サイドパネルのアカウントのメニュー（25）・スキップリンク（3000 未満）より上。中の重なり（地図の 1100）は、isolation でこの中に閉じ込める */
+.expanded-view {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--scrim);
+  isolation: isolate;
+}
+
+.expanded-view__dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1440px;
+  height: calc(100dvh - 48px);
+  min-height: 0;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px var(--shadow);
+  outline: none;
+}
+
+/* ダイアログの中は、結果領域（タブの帯と、残りの高さをすべて取る 3 つの画面）だけ */
+.expanded-view__dialog > .result-area {
+  flex: 1;
+}
+
+/* 右端の「閉じる」。タブの高さにそろえる */
+.expanded-view__close {
+  flex: none;
+  min-height: 44px;
+}
+
+@media (max-width: 1023px) {
+  .expanded-view {
+    padding: 0;
+  }
+  .expanded-view__dialog {
+    max-width: none;
+    height: 100dvh;
+    padding: 8px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* ---- 結果領域（拡大ビューの中身。地図・グラフ・写真の比較をタブで切り替える。components/ResultArea.tsx）----
    縦に「タブの帯」と「パネルの置き場」。置き場が残りの高さを取り、3 つのパネルは同じ枠に重ねる（選んでいない画面は hidden） */
 .result-area {
   display: flex;
@@ -746,11 +790,9 @@ p.banner {
   gap: 10px;
   min-width: 0;
   min-height: 0;
-  /* 縦に積む幅で、結果領域の上端へスクロールするとき（ResultArea の revealNonce）、上の縁にぴったり付けない */
-  scroll-margin-top: 12px;
 }
 
-/* タブの帯。左にタブの列（role=tablist。タブだけを入れる）、右端に「拡大」のボタン（tablist の外） */
+/* タブの帯。左にタブの列（role=tablist。タブだけを入れる）、右端に拡大ビューの「閉じる」ボタン（tablist の外） */
 .result-area__bar {
   display: flex;
   align-items: center;
@@ -792,53 +834,6 @@ p.banner {
   font-weight: 700;
 }
 
-/* 「拡大」のボタン。縦に積む幅では出さない（既定は非表示。横に並ぶ幅だけ、上の @media で出す）。
-   押した状態は、タブの選択（塗りつぶし）と見分けがつくよう、太い実線の枠・地色・太字・内向きの矢印（色だけで伝えない。グラフの凡例の押した状態と同じ流儀） */
-.result-area__expand {
-  display: none;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 8px;
-  border: 1px solid var(--input-border);
-  background: var(--surface);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.result-area__expand:hover {
-  background: var(--tag-bg);
-  border-color: var(--primary);
-}
-
-.result-area__expand[aria-pressed='true'] {
-  padding: 0 13px;
-  border: 2px solid var(--primary);
-  background: var(--tag-bg);
-  font-weight: 700;
-}
-
-.result-area__expand-icon {
-  flex: none;
-}
-
-/* 広げているときだけ出す、押すと何が起きるかの文（見た目の補足。名前は「拡大」のまま）。ボタンは太字だが、補足は通常の太さで、名前と見分ける */
-.result-area__expand-hint {
-  font-size: 13px;
-  font-weight: 400;
-  white-space: nowrap;
-}
-
-/* 横に並ぶ幅（上の .home の @media と同じ 1000px）だけ出す。縦に積むと、広げる先の列が無い。
-   サイドパネルを開いた 1024〜1256px も縦に積むので、末尾の @media で隠す。この規則は、上の既定（display: none）より後に置く（同じ強さなので、順で決まる） */
-@media (min-width: 1000px) {
-  .result-area__expand {
-    display: inline-flex;
-  }
-}
-
 .result-area__panels {
   position: relative;
   flex: 1;
@@ -863,7 +858,7 @@ p.banner {
   visibility: hidden;
 }
 
-/* 地図のパネルは、タブの帯の下いっぱいに広げる（.map-panel の高さは、これまで .home の直下の規則で決めていた） */
+/* 地図のパネルは、タブの帯の下いっぱいに広げる */
 .result-area__panel > .map-panel {
   flex: 1;
 }
@@ -2483,7 +2478,7 @@ p.banner {
   border-radius: 50%;
 }
 
-/* ---- ドロワー（候補の詳細。結果領域の「写真の比較」の中に収まる、流れの中の部品。地図に重ねない）---- */
+/* ---- ドロワー（候補の詳細。拡大ビューの「写真の比較」の中に収まる、流れの中の部品。地図に重ねない）---- */
 .drawer {
   flex: 1;
   display: flex;
@@ -2531,17 +2526,16 @@ p.banner {
   padding: 16px;
 }
 
-/* 結果領域は広い（チャットの残り）。写真の 2 枚が画面いっぱいの正方形にならないよう、中身の幅を読みやすい長さに抑える */
+/* 拡大ビューの中は広い。写真の 2 枚が画面いっぱいの正方形にならないよう、中身の幅を読みやすい長さに抑える。
+   窓が 1257px 未満のときは、上限を置かず、拡大ビューの幅いっぱい（ダイアログも、窓の幅から 48px を引いた幅までしか広がらない） */
 .drawer__body > * {
   width: 100%;
-  max-width: 880px;
 }
 
-/* 「拡大」したとき（.home--expanded）は、上の 880px の上限が効く広い窓（チャットの列が 280px なので、細い帯で約 1312px 以上、サイドパネルを開いて約 1512px 以上）で、
-   最大幅を、窓の幅に応じて広げて、2 枚の写真を大きく見せる: 窓の幅の 70%（最小 1040px、最大 1440px）。固定の幅だと、広い窓で余白だけが増える。
-   上限は残す（文の行が間延びしないように）。1257px 以上に限るのは、サイドパネルを開いた 1024〜1256px が縦に積む幅で、広げる対象ではないため */
+/* 窓が 1257px 以上のときは、中身の最大幅を、窓の幅に応じて広げて、2 枚の写真を大きく見せる: 窓の幅の 70%（最小 1040px、最大 1440px）。
+   固定の幅だと、広い窓で余白だけが増える。上限は残す（文の行が間延びしないように） */
 @media (min-width: 1257px) {
-  .home--expanded .drawer__body > * {
+  .expanded-view .drawer__body > * {
     max-width: clamp(1040px, 70vw, 1440px);
   }
 }
@@ -2811,108 +2805,3 @@ p.banner {
   }
 }
 
-/* 縦に積む幅（窓 999px 以下。チャットの下に結果領域）。スクロールは、ページ 1 つに寄せる。
-   結果領域は、高さを固定せず、内容の高さで伸ばす（これまでは 86dvh・最小 560px の枠で、地図・グラフ・写真の比較が、枠の中で別にスクロールした）。
-   見えている画面だけが流れの中に入る。選んでいない画面は、これまでどおり hidden（visibility: hidden。display: none にしない）のまま、結果領域の置き場いっぱいに重ねて置く（流れの外なので、高さを増やさない）。
-   地図は、置き場の高さに依らず、画面の高さの 56%（320〜560px）を持つ。隠れていても、見えても、Leaflet の大きさは同じ。
-   チャットは、内容が少ないうちは縮み、増えたら 64dvh（上限 640px）で止めて、記録の中でスクロールする（チャットの記録は、内側のスクロールが要る）。
-   上限を 78dvh から下げて、結果領域の帯（地図・グラフ・写真の比較）が、最初の画面に入るようにする。
-   サイドパネルを開いた 1024〜1256px の縦積みにも、同じ規則を、このファイルの末尾の @media に持つ（.app:has(.app-sidebar[data-open='true'])。変えるときは両方） */
-@media (max-width: 999px) {
-  .home > .chat {
-    height: auto;
-    min-height: min(420px, 64dvh);
-    max-height: min(64dvh, 640px);
-  }
-  .home > .result-area {
-    height: auto;
-    min-height: 0;
-  }
-  .result-area__panels {
-    flex: none;
-  }
-  .result-area__panel:not([hidden]) {
-    position: relative;
-    inset: auto;
-    overflow: visible;
-  }
-  .result-area__panel > .map-panel {
-    flex: none;
-    overflow-y: visible;
-  }
-  .result-area__panel > .drawer {
-    flex: none;
-  }
-  .result-area__panel > .result-area__empty {
-    flex: none;
-    min-height: 240px;
-  }
-  .map-stage {
-    flex: none;
-    height: clamp(320px, 56dvh, 560px);
-  }
-}
-
-/* サイドパネルを開いている（data-open='true'）間は、本文が窓より 16rem 狭い。窓が 1024〜1256px のあいだ（本文は 768〜1000px）は、チャットと結果領域を縦に積む
-   （上の @media (min-width: 1000px) の、左右に並べる規則を打ち消す）。左右に並べる @media は、本文ではなく窓の幅 1000px 以上で決まり、縦に戻すのは、この規則の data-open='true' のときだけ。
-   細い帯（3.5rem = 56px）のときは、この規則が効かないので、窓が 1024〜1055px（本文が 1000px に満たない。窓 1056px で本文はちょうど 1000px）でも左右に並ぶ。窓が 1257px 以上なら、開いたままでも並ぶ */
-@media (min-width: 1024px) and (max-width: 1256px) {
-  .app:has(.app-sidebar[data-open='true']):has(.home) {
-    height: auto;
-  }
-  .app:has(.app-sidebar[data-open='true']) .home {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-    flex: none;
-    min-height: auto;
-    padding: 16px;
-  }
-  .app:has(.app-sidebar[data-open='true']) .app__main {
-    display: block;
-    overflow: visible;
-  }
-  /* 縦に積む幅の高さの決め方は、上の @media (max-width: 999px) と同じ（結果領域は内容の高さ・ページでスクロール・チャットは 64dvh まで）。変えるときは両方 */
-  .app:has(.app-sidebar[data-open='true']) .home > .chat {
-    height: auto;
-    min-height: min(420px, 64dvh);
-    max-height: min(64dvh, 640px);
-  }
-  .app:has(.app-sidebar[data-open='true']) .home > .result-area {
-    height: auto;
-    min-height: 0;
-  }
-  .app:has(.app-sidebar[data-open='true']) .result-area__panels {
-    flex: none;
-  }
-  .app:has(.app-sidebar[data-open='true']) .result-area__panel:not([hidden]) {
-    position: relative;
-    inset: auto;
-    overflow: visible;
-  }
-  .app:has(.app-sidebar[data-open='true']) .result-area__panel > .map-panel {
-    flex: none;
-    overflow-y: visible;
-  }
-  .app:has(.app-sidebar[data-open='true']) .result-area__panel > .drawer {
-    flex: none;
-  }
-  .app:has(.app-sidebar[data-open='true']) .result-area__panel > .result-area__empty {
-    flex: none;
-    min-height: 240px;
-  }
-  .app:has(.app-sidebar[data-open='true']) .map-stage {
-    flex: none;
-    height: clamp(320px, 56dvh, 560px);
-  }
-  /* 縦に積むので、広げる先の列が無い。「拡大」のボタンを隠す（上の @media (min-width: 1000px) の表示を打ち消す） */
-  .app:has(.app-sidebar[data-open='true']) .result-area__expand {
-    display: none;
-  }
-  /* 広げた状態が残っていても、縦に積むときのチャットは全幅。質問の例を折り返す、狭い列向けの規則（.home--expanded）は、打ち消す */
-  .app:has(.app-sidebar[data-open='true']) .home--expanded .chat__tools {
-    flex-wrap: nowrap;
-  }
-  .app:has(.app-sidebar[data-open='true']) .home--expanded .chat__chips {
-    flex-basis: 0%;
-  }
-}

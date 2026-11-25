@@ -1,39 +1,40 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAreas, getCandidatesGeoJson } from '../lib/api';
-import type { AreaSummary, BBox, CandidateDetail, CandidateFeature, ToolResult } from '../lib/api-types';
-import { AreasProvider } from '../lib/areas-context';
-import { featureBBox, nextNonce, scopeBBox, type MapFocus } from '../lib/map-config';
 import {
-  ALL_FILTER,
-  areaScopeIds,
-  filterFromResults,
-  isWellFormedResult,
-  RESULT_VIEW_LABELS,
-  viewForResults,
-  widenFilterFor,
-  type MapFilter,
-  type ResultView,
-} from '../lib/result-view';
+  answerKey,
+  applyExpandRequest,
+  clearSelection,
+  comparePhotos,
+  detailLoaded,
+  initialAnswerView,
+  NO_IDS,
+  openCandidate,
+  selectFromMap,
+  showDetailOnMap,
+  showMapForFilter,
+  type AnswerContext,
+  type AnswerRef,
+  type AnswerView,
+  type ExpandRequest,
+  type Selection,
+} from '../lib/answer-view';
+import { getAreas, getCandidatesGeoJson } from '../lib/api';
+import type { AreaSummary, CandidateDetail, CandidateFeature } from '../lib/api-types';
+import { AreasProvider } from '../lib/areas-context';
+import type { MapFilter, ResultView } from '../lib/result-view';
 import { useAsync } from '../lib/use-api';
 import { CandidateDrawer } from './CandidateDrawer';
 import { AreaChartView } from './chart/AreaChartView';
 import { ChatPanel } from './chat/ChatPanel';
 import type { ChatActions } from './chat/types';
+import { ExpandedView } from './ExpandedView';
 import { MapPanel } from './map/MapPanel';
-import { ResultArea } from './ResultArea';
 
 const loadAreas = (signal: AbortSignal) => getAreas(signal);
 const loadFeatures = async (signal: AbortSignal): Promise<CandidateFeature[]> => (await getCandidatesGeoJson({}, signal)).features;
 const NO_AREAS: AreaSummary[] = [];
-const NO_IDS: ReadonlySet<string> = new Set();
-
-/** 詳細（写真の比較）で選んでいる候補。focus は、その詳細を開いたとき見出しへフォーカスを移すか（詳細をマウントする時点の値で決まる。PhotosPanel は、写真の比較が見えるまでマウントしない） */
-interface Selection {
-  id: string;
-  focus: boolean;
-}
+const NO_STATES: ReadonlyMap<string, AnswerView> = new Map();
 
 /** 「写真の比較」で候補を選んでいないときの表示 */
 function PhotosEmptyState() {
@@ -88,286 +89,153 @@ function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLo
 }
 
 /**
- * `/`: 左にチャット、右に結果領域（地図・グラフ・写真の比較）。回答・地図・グラフ・詳細の間の受け渡しをここで持つ。
- * 最初はチャットだけ。結果領域は、結果つきの回答か「地図で見る」で開く。defaultResultOpen は、最初から開いた状態で始める（結果領域の中の動きの検査と、将来の会話の復元用）
+ * `/`: チャットの 1 列。結果（地図・グラフ・写真の比較）は、結果カードのボタンと最初の画面の「解析した地区を地図で見る」を押したときだけ、
+ * 拡大ビュー（ダイアログ）に開く。回答が届いただけでは、何も開かず、何も替えない。
+ * 拡大の単位は回答 1 件: 回答ごとに、タブ・絞り込み・強調・選んだ候補・地図の寄せ先を持ち、会話のあいだ保つ（保存しない。地図の拡大・移動は保たない）。
+ * 拡大ビューは同時に 1 つだけ。開いているあいだだけマウントする。「新しい会話」で閉じ、回答ごとの状態を捨てる
  */
-export function HomeClient({ defaultResultOpen = false }: { defaultResultOpen?: boolean } = {}) {
+export function HomeClient() {
   const areasQ = useAsync(loadAreas);
   const candQ = useAsync(loadFeatures);
-  const [selected, setSelected] = useState<Selection | null>(null);
-  const selectedId = selected?.id ?? null;
+  // 回答（鍵は answerKey）ごとの状態。開いているのは、そのうち 1 つ（openKey）
+  const [states, setStates] = useState<ReadonlyMap<string, AnswerView>>(NO_STATES);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  // コールバックの中で（再描画を待たずに）「どの回答を開いているか」を読むための控え
+  const openKeyRef = useRef<string | null>(null);
+  // 開いたボタン。閉じたとき、フォーカスを戻す。「新しい会話」で閉じるときは、ボタンごと消えるので戻さない（resetting。入力欄へ移る）
+  const openerRef = useRef<HTMLElement | null>(null);
+  const resettingRef = useRef(false);
   // ユーザーが押したボタン（チャットの「詳細」・一覧・「写真を比べる」）で詳細を開くたびに +1。すでに同じ候補の詳細が開いていて、マウントし直されないときも、見出しへ移す合図にする
   const [focusNonce, setFocusNonce] = useState(0);
-  const [focus, setFocus] = useState<MapFocus | null>(null);
-  const [highlightIds, setHighlightIds] = useState<ReadonlySet<string>>(NO_IDS);
-  // 詳細を開いたとき、地図の候補データにまだ形が無ければ、詳細が届いてから寄せる
-  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
-  const [view, setView] = useState<ResultView>('map');
-  // 地図・グラフ・一覧に共通の絞り込み。チャットの回答（件数の条件）と、地図・グラフの操作が、同じものを書き換える
-  const [filter, setFilter] = useState<MapFilter>(ALL_FILTER);
-  const [announcement, setAnnouncement] = useState('');
-  // 「いまの画面」を、コールバックの中で（再描画を待たずに）読むための控え。同じ画面への切り替えは、読み上げない
-  const viewRef = useRef<ResultView>('map');
-  // 結果領域を広げているか（チャットの列を狭める）。保存はしない
-  const [expanded, setExpanded] = useState(false);
-  // 回答・結果カード・詳細の操作で画面を替えるたびに +1（画面が同じでも）。縦に積む幅で、結果領域が見える所までスクロールする合図
-  const [revealNonce, setRevealNonce] = useState(0);
-  // 結果領域を開いているか。会話の前（最初の画面）は閉じて、チャットだけを見せる。
-  // 回答・結果カード・「地図で見る」などの操作で画面を見せるとき（applyView の announce）に開き、「新しい会話」で閉じる。
-  // 閉じているあいだは結果領域をマウントしない（Leaflet が、大きさの無い枠で始まらないように）。一度開いたら、閉じるまでマウントしたまま
-  const [resultOpen, setResultOpen] = useState(defaultResultOpen);
-  // コールバックの中で（再描画を待たずに）「開いているか」を読むための控え
-  const resultOpenRef = useRef(defaultResultOpen);
 
   const areas = areasQ.state.status === 'ready' ? areasQ.state.data : NO_AREAS;
   const features = candQ.state.status === 'ready' ? candQ.state.data : null;
   const byId = useMemo(() => new Map((features ?? []).map((f) => [f.properties.id, f])), [features]);
-  // 返答待ちの通信の途中で届く操作（answered・focusMap）が、古い byId を読まないように、最新のものを控える
-  const byIdRef = useRef(byId);
-  // 「地図で見る」が、いまの絞り込み・地区の一覧を読めるように（コールバックを、絞り込みが替わるたびに作り直さない）
-  const filterRef = useRef(filter);
-  const areasRef = useRef(areas);
+  // ボタンの操作が、最新の地区の一覧・候補データを読めるように控える（コールバックを、読み込みのたびに作り直さない）
+  const contextRef = useRef<AnswerContext>({ areas, byId });
   useEffect(() => {
-    byIdRef.current = byId;
-    filterRef.current = filter;
-    areasRef.current = areas;
+    contextRef.current = { areas, byId };
   });
 
   /**
-   * 画面を替える。announce は、ユーザーのタブ操作ではなく、回答・結果カード・詳細の操作から替えたとき。
-   * 見えない live region で知らせる（画面の外でボタンを押した人は、右が替わったことに気づけない）。フォーカスは動かさない。
-   * 同じ操作の中で続けて 2 回呼ばれる（地図の表示と回答）ことがあり、2 回目は画面が変わらない。そのとき 1 回目の知らせを消さない。
-   * 知らせを消すのは、ユーザー自身のタブ操作（announce が false）のときだけ
+   * 拡大ビューを開く（結果カードのボタン・最初の画面のボタン）。その回答の状態が無ければ（はじめて開くとき）、回答の結果から作る。
+   * あれば（開き直すとき）、利用者が変えた状態を残し、押したボタンの画面を選ぶ
    */
-  const applyView = useCallback((next: ResultView, announce: boolean) => {
-    const changed = viewRef.current !== next;
-    viewRef.current = next;
-    setView(next);
-    if (!announce) {
-      setAnnouncement('');
-      return;
-    }
-    // 閉じていた結果領域は、ここで開く（ユーザー自身のタブ操作は、開いているときにしか起こらない）。
-    // 画面が同じ（地図のまま）でも、結果領域が現れたことは知らせる（「地図で見る」を押した人は、右が開いたことに気づけない）
-    const opened = !resultOpenRef.current;
-    resultOpenRef.current = true;
-    setResultOpen(true);
-    if (changed || opened) setAnnouncement(`「${RESULT_VIEW_LABELS[next]}」を表示しました`);
-    setRevealNonce((n) => n + 1);
-  }, []);
-  const chooseView = useCallback((next: ResultView) => applyView(next, false), [applyView]);
-  const switchView = useCallback((next: ResultView) => applyView(next, true), [applyView]);
-
-  /**
-   * 強調・選択する候補が、いまの絞り込みで隠れないように広げる（分類が無ければ足し、地区が外なら全地区に戻す）。
-   * まだ読み込まれていない候補（byId に無い）は、何もしない
-   */
-  const revealInFilter = useCallback((ids: readonly string[]) => {
-    const targets = ids.flatMap((id) => {
-      const f = byIdRef.current.get(id);
-      return f ? [f.properties] : [];
+  const expand = useCallback((answer: AnswerRef | null, request: ExpandRequest, from: HTMLElement | null) => {
+    const key = answerKey(answer);
+    const ctx = contextRef.current;
+    if (openKeyRef.current === null) openerRef.current = from;
+    resettingRef.current = false;
+    openKeyRef.current = key;
+    setStates((prev) => {
+      const base = prev.get(key) ?? initialAnswerView(answer?.results ?? [], ctx);
+      return new Map(prev).set(key, applyExpandRequest(base, request, ctx));
     });
-    if (targets.length > 0) setFilter((cur) => targets.reduce((acc, t) => widenFilterFor(acc, t), cur));
+    setOpenKey(key);
+    if (request.type === 'candidate') setFocusNonce((n) => n + 1);
   }, []);
 
-  // 詳細は結果領域の中（地図に重ならない）なので、寄せるときに右の余白を空ける必要は無い
-  const fitTo = useCallback((bbox: BBox, ids: string[]) => {
-    setFocus({ bbox, ids, nonce: nextNonce() });
+  const close = useCallback(() => {
+    openKeyRef.current = null;
+    setOpenKey(null);
   }, []);
 
-  /** 候補を選び、地図もその候補へ寄せる（画面は替えない）。focus は、開く詳細が見出しへフォーカスを移すか */
-  const selectCandidate = useCallback(
-    (id: string, focus: boolean) => {
-      setSelected({ id, focus });
-      revealInFilter([id]);
-      const f = byIdRef.current.get(id);
-      const box = f ? featureBBox(f) : null;
-      if (box) {
-        setPendingFocusId(null);
-        fitTo(box, [id]);
-      } else {
-        setPendingFocusId(id);
-      }
-    },
-    [fitTo, revealInFilter],
-  );
+  /** 「新しい会話」: 拡大ビューを閉じ、回答ごとの状態をすべて捨てる（前の会話の絞り込み・強調・選んだ候補・タブ・寄せ先が、次の会話に残らないように） */
+  const resetAll = useCallback(() => {
+    resettingRef.current = true;
+    close();
+    setStates(NO_STATES);
+  }, [close]);
 
-  /** チャットの表・検出画像のカード・一覧から（ユーザーが押したボタン）: 写真の比較を開いて、見出しへフォーカスを移し、地図もその候補へ寄せる */
-  const openCandidate = useCallback(
+  /** 開いている回答の状態へ、操作を当てる。変わらなければ、何もしない（無駄な再描画をしない） */
+  const update = useCallback((apply: (state: AnswerView, ctx: AnswerContext) => AnswerView) => {
+    const key = openKeyRef.current;
+    if (key === null) return;
+    const ctx = contextRef.current;
+    setStates((prev) => {
+      const cur = prev.get(key);
+      if (!cur) return prev;
+      const next = apply(cur, ctx);
+      return next === cur ? prev : new Map(prev).set(key, next);
+    });
+  }, []);
+
+  const chatActions = useMemo<ChatActions>(() => ({ expand }), [expand]);
+  const returnFocusTo = useCallback(() => (resettingRef.current ? null : openerRef.current), []);
+
+  const chooseView = useCallback((view: ResultView) => update((s) => ({ ...s, view })), [update]);
+  const changeFilter = useCallback((filter: MapFilter) => update((s) => ({ ...s, filter })), [update]);
+  const clearHighlight = useCallback(() => update((s) => ({ ...s, highlightIds: NO_IDS })), [update]);
+  /** 地図の一覧から: 写真の比較を開いて、見出しへフォーカスを移し、地図もその候補へ寄せる */
+  const openFromList = useCallback(
     (id: string) => {
-      selectCandidate(id, true);
+      update((s, ctx) => openCandidate(s, id, ctx));
       setFocusNonce((n) => n + 1);
-      switchView('photos');
     },
-    [selectCandidate, switchView],
+    [update],
   );
-
-  /**
-   * 地図の印・形から: 地図に留まる（画面は替えない）。その候補を選んで強調し、フォーカスは地図に残す。
-   * 写真の比較へ進むのは、地図の上の「写真を比べる」を押したとき（comparePhotos）
-   */
-  const selectFromMap = useCallback(
+  /** 地図の印・形から: 地図に留まる（画面は替えない）。写真の比較へ進むのは、地図の上の「写真を比べる」を押したとき（compare） */
+  const selectOnMap = useCallback((id: string) => update((s, ctx) => selectFromMap(s, id, ctx)), [update]);
+  const compare = useCallback(
     (id: string) => {
-      setSelected({ id, focus: false });
-      setPendingFocusId(null);
-      revealInFilter([id]);
-    },
-    [revealInFilter],
-  );
-
-  /** 地図の上の「写真を比べる」: その候補を選んで（すでに選んでいても）写真の比較へ切り替える。押したボタンが隠れるので、フォーカスは ResultArea がタブへ移す */
-  const comparePhotos = useCallback(
-    (id: string) => {
-      setSelected({ id, focus: true });
+      update((s) => comparePhotos(s, id));
       setFocusNonce((n) => n + 1);
-      switchView('photos');
     },
-    [switchView],
+    [update],
   );
+  const closeDrawer = useCallback(() => update(clearSelection), [update]);
+  const onDetailLoaded = useCallback((detail: CandidateDetail) => update((s) => detailLoaded(s, detail)), [update]);
+  const showOnMap = useCallback((detail: CandidateDetail) => update((s) => showDetailOnMap(s, detail)), [update]);
+  const showMap = useCallback(() => update((s, ctx) => showMapForFilter(s, ctx)), [update]);
 
-  const focusMap = useCallback(
-    (target: { bbox: BBox; candidateIds: string[] }) => {
-      setHighlightIds(new Set(target.candidateIds));
-      revealInFilter(target.candidateIds);
-      fitTo(target.bbox, target.candidateIds);
-      switchView('map');
-    },
-    [fitTo, revealInFilter, switchView],
-  );
-
-  /**
-   * 回答が届いた: 合う画面へ切り替え、件数・比較の条件を地図・グラフの絞り込みに写す（どちらも、無ければ今のまま。手で選んだ画面は、この呼び出しまで保つ）。
-   * 検出画像があれば、その候補を（チャットの入力のフォーカスを奪わずに）選ぶ
-   */
-  const answered = useCallback(
-    (results: ToolResult[]) => {
-      const next = viewForResults(results.map((r) => r.type));
-      if (next) switchView(next);
-      // 回答の「対象・条件」の行（AnswerScope）と同じ前処理: 壊れた結果（filter の無い count）は、条件なしと読まず、飛ばす
-      const nextFilter = filterFromResults(results.filter(isWellFormedResult));
-      if (nextFilter) setFilter(nextFilter);
-      // ChatPanel は、地図の表示（focusMap）のあとにこれを呼ぶ。上の絞り込みの置き換えで、強調した候補がまた隠れないように、広げ直す
-      for (const r of results) if (r.type === 'map_focus' && Array.isArray(r.candidate_ids)) revealInFilter(r.candidate_ids);
-      const detection = [...results].reverse().find((r) => r.type === 'detection_image');
-      if (detection?.type === 'detection_image' && typeof detection.candidate_id === 'string' && detection.candidate_id !== '') {
-        selectCandidate(detection.candidate_id, false);
-      }
-    },
-    [revealInFilter, selectCandidate, switchView],
-  );
-
-  /** 回答のカードの「グラフで見る」「地図で見る」: カードの条件を渡されたら、地図・グラフの絞り込みをそれに替えてから切り替える */
-  const showView = useCallback(
-    (next: ResultView, nextFilter?: MapFilter) => {
-      if (nextFilter) setFilter(nextFilter);
-      // 地図を見せるときは、その条件の地区（なければ全地区）が収まる範囲へ寄せる。地図がすでに出ていて拡大・移動したあとでも、押して何も変わらない、をなくす
-      if (next === 'map') {
-        const box = scopeBBox(areasRef.current, areaScopeIds(nextFilter ?? filterRef.current));
-        if (box) fitTo(box, []);
-      }
-      switchView(next);
-    },
-    [fitTo, switchView],
-  );
-
-  const chatActions = useMemo<ChatActions>(
-    () => ({ openCandidate, focusMap, showView, answered }),
-    [openCandidate, focusMap, showView, answered],
-  );
-
-  const toggleExpanded = useCallback(() => setExpanded((e) => !e), []);
-
-  /** 「新しい会話」: 最初の画面（チャットだけ）へ戻す。開き直したとき、前の会話の絞り込み・強調・選択・拡大が残らないように、これらも外す */
-  const resetResults = useCallback(() => {
-    resultOpenRef.current = false;
-    setResultOpen(false);
-    setExpanded(false);
-    setSelected(null);
-    setPendingFocusId(null);
-    setHighlightIds(NO_IDS);
-    setFocus(null);
-    setFilter(ALL_FILTER);
-    viewRef.current = 'map';
-    setView('map');
-    setAnnouncement('');
-  }, []);
-
-  const closeDrawer = useCallback(() => {
-    setSelected(null);
-    setPendingFocusId(null);
-  }, []);
-
-  const onDetailLoaded = useCallback(
-    (detail: CandidateDetail) => {
-      if (pendingFocusId === detail.id && detail.bbox) {
-        setPendingFocusId(null);
-        fitTo(detail.bbox, [detail.id]);
-      }
-    },
-    [pendingFocusId, fitTo],
-  );
-
-  const showOnMap = useCallback(
-    (detail: CandidateDetail) => {
-      // 詳細の分類・地区で広げる（まだ地図の候補データに無い候補でも、詳細は届いている）
-      setFilter((cur) => widenFilterFor(cur, detail));
-      fitTo(detail.bbox, [detail.id]);
-      switchView('map');
-    },
-    [fitTo, switchView],
-  );
+  const current = openKey !== null ? states.get(openKey) : undefined;
 
   return (
     <AreasProvider areas={areas}>
-      <div className={!resultOpen ? 'home home--chat-only' : expanded ? 'home home--expanded' : 'home'}>
-        {/* 自動で画面を替えたことを知らせる live region。結果領域が閉じていても、開く前から DOM にある（開くのと同時に作ると、読み上げられない） */}
-        <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
-          {announcement}
-        </div>
-        <ChatPanel actions={chatActions} onNewConversation={resetResults} />
-        {resultOpen && (
-          <ResultArea
-            view={view}
-            onViewChange={chooseView}
-            expanded={expanded}
-            onToggleExpanded={toggleExpanded}
-            revealNonce={revealNonce}
-            revealOnMount={revealNonce > 0}
-            panels={{
-              map: (
-                <MapPanel
-                  areas={areas}
-                  areasState={areasQ.state}
-                  candidatesState={candQ.state.status === 'ready' ? { status: 'ready', data: candQ.state.data } : candQ.state}
-                  reloadCandidates={candQ.reload}
-                  reloadAreas={areasQ.reload}
-                  focus={focus}
-                  selectedId={selectedId}
-                  highlightIds={highlightIds}
-                  onSelect={selectFromMap}
-                  onOpen={openCandidate}
-                  onClearHighlight={() => setHighlightIds(NO_IDS)}
-                  filter={filter}
-                  onFilterChange={setFilter}
-                  onComparePhotos={comparePhotos}
-                  onClearSelection={closeDrawer}
-                />
-              ),
-              chart: <AreaChartView areas={areas} filter={filter} onFilterChange={setFilter} onShowMap={() => showView('map')} />,
-              photos: (
-                <PhotosPanel
-                  selected={selected}
-                  focusNonce={focusNonce}
-                  visible={view === 'photos'}
-                  onClose={closeDrawer}
-                  onShowOnMap={showOnMap}
-                  onLoaded={onDetailLoaded}
-                />
-              ),
-            }}
-          />
-        )}
+      <div className="home">
+        <ChatPanel actions={chatActions} onNewConversation={resetAll} />
       </div>
+      {current && (
+        // 開いているあいだだけマウントする（Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す
+        <ExpandedView
+          view={current.view}
+          onViewChange={chooseView}
+          onClose={close}
+          returnFocusTo={returnFocusTo}
+          panels={{
+            map: (
+              <MapPanel
+                areas={areas}
+                areasState={areasQ.state}
+                candidatesState={candQ.state.status === 'ready' ? { status: 'ready', data: candQ.state.data } : candQ.state}
+                reloadCandidates={candQ.reload}
+                reloadAreas={areasQ.reload}
+                focus={current.mapFocus}
+                selectedId={current.selected?.id ?? null}
+                highlightIds={current.highlightIds}
+                onSelect={selectOnMap}
+                onOpen={openFromList}
+                onClearHighlight={clearHighlight}
+                filter={current.filter}
+                onFilterChange={changeFilter}
+                onComparePhotos={compare}
+                onClearSelection={closeDrawer}
+              />
+            ),
+            chart: <AreaChartView areas={areas} filter={current.filter} onFilterChange={changeFilter} onShowMap={showMap} />,
+            photos: (
+              <PhotosPanel
+                selected={current.selected}
+                focusNonce={focusNonce}
+                visible={current.view === 'photos'}
+                onClose={closeDrawer}
+                onShowOnMap={showOnMap}
+                onLoaded={onDetailLoaded}
+              />
+            ),
+          }}
+        />
+      )}
     </AreasProvider>
   );
 }

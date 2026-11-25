@@ -43,18 +43,21 @@ function barColor(key: string): string {
   return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--primary)';
 }
 
+/** 比較のカードに出す地区の数。これを超える分は、拡大ビューのグラフ・表で読む */
+const COMPARE_ROWS = 5;
+
 /**
- * 件数・比較の結果から、右の結果領域のグラフ（件数は地図も）へ進む（回答の数字を、グラフ・地図でも確かめられるように）。
- * 押すと、このカードの結果から作った条件で開く。古い回答のカードを押しても、いまの絞り込みではなく、その回答の条件になる
+ * 件数・比較の結果から、拡大ビューのグラフ（件数は地図も）へ進む（回答の数字を、グラフ・地図でも確かめられるように）。
+ * 押すと、この回答の拡大ビューを、その画面で開く。絞り込みは、この回答の結果から決まる（はじめて開くとき）。開き直すときは、利用者が変えたまま
  */
-function ViewButtons({ result, actions, withMap }: { result: CountResult | CompareResult; actions: ResultActions; withMap?: boolean }) {
+function ViewButtons({ actions, withMap }: { actions: ResultActions; withMap?: boolean }) {
   return (
     <div className="button-row">
-      <button type="button" className="btn" onClick={() => actions.showView('chart', filterFromResults([result]) ?? undefined)}>
+      <button type="button" className="btn" onClick={() => actions.showView('chart')}>
         グラフで見る
       </button>
       {withMap && (
-        <button type="button" className="btn" onClick={() => actions.showView('map', filterFromResults([result]) ?? undefined)}>
+        <button type="button" className="btn" onClick={() => actions.showView('map')}>
           地図で見る
         </button>
       )}
@@ -68,7 +71,7 @@ export function CountCard({ result, actions }: { result: CountResult; actions: R
   const { nameOf } = useAreas();
   const max = Math.max(1, ...result.breakdown.map((b) => b.value));
   const cls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
-  // 複数の地区（区など）は API の scope をそのまま出す。右の地図・グラフに写す条件と同じ読み方
+  // 複数の地区（区など）は API の scope をそのまま出す。拡大ビューの地図・グラフに写す条件と同じ読み方
   const areaText = areaLabel(filterFromResults([result]) ?? ALL_FILTER, nameOf);
   return (
     <section className="result-card" aria-label={result.title}>
@@ -101,7 +104,7 @@ export function CountCard({ result, actions }: { result: CountResult; actions: R
           ))}
         </ul>
       )}
-      <ViewButtons result={result} actions={actions} withMap />
+      <ViewButtons actions={actions} withMap />
       <ClassGuide />
       <ProvenanceBox provenance={result.provenance} />
     </section>
@@ -196,15 +199,17 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
 // ---- 比較 ----
 
 export function CompareCard({ result, actions }: { result: CompareResult; actions: ResultActions }) {
+  // 会話の中で読み切れる大きさにするため、API の並びの先頭から上位 5 地区まで。全地区は、拡大ビューのグラフ・表で読める
+  const items = result.items.slice(0, COMPARE_ROWS);
   const known: string[] = [...CLASS_ORDER];
   const extraKeys = new Set<string>();
-  for (const item of result.items) {
+  for (const item of items) {
     for (const key of Object.keys(item.counts)) {
       if (!known.includes(key) && key !== 'total') extraKeys.add(key);
     }
   }
-  const hasTotal = result.items.some((i) => typeof i.counts.total === 'number');
-  const max = Math.max(1, ...result.items.flatMap((i) => Object.entries(i.counts).filter(([k]) => k !== 'total').map(([, v]) => v)));
+  const hasTotal = items.some((i) => typeof i.counts.total === 'number');
+  const max = Math.max(1, ...items.flatMap((i) => Object.entries(i.counts).filter(([k]) => k !== 'total').map(([, v]) => v)));
   const classColumns = [
     ...CLASS_ORDER.map((k) => ({ key: k as string, label: CLASS_INFO[k].short, color: CLASS_INFO[k].color })),
     ...[...extraKeys].map((k) => ({ key: k, label: k, color: 'var(--primary)' })),
@@ -245,7 +250,7 @@ export function CompareCard({ result, actions }: { result: CompareResult; action
               </tr>
             </thead>
             <tbody>
-              {result.items.map((item) => (
+              {items.map((item) => (
                 <tr key={item.area_id}>
                   <th scope="row">{item.name}</th>
                   {hasTotal && !sortCls && <td className="mini-cell__value">{formatNumber(item.counts.total ?? 0)}</td>}
@@ -269,8 +274,13 @@ export function CompareCard({ result, actions }: { result: CompareResult; action
           </table>
         </ScrollHint>
       )}
+      {result.items.length > COMPARE_ROWS && (
+        <p className="result-card__note">
+          全 {formatNumber(result.items.length)} 地区中 {formatNumber(COMPARE_ROWS)} 地区を表示
+        </p>
+      )}
       {/* 比べる地区が無いときは、グラフにも出すものが無い */}
-      {result.items.length > 0 && <ViewButtons result={result} actions={actions} />}
+      {result.items.length > 0 && <ViewButtons actions={actions} />}
       {result.items.length > 0 && <ClassGuide />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
@@ -287,7 +297,7 @@ export function MapFocusCard({ result, actions }: { result: MapFocusResult; acti
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
       <p className="result-card__text">
-        結果領域の「地図」で、{result.candidate_ids.length > 0 ? `候補 ${formatNumber(result.candidate_ids.length)} 件を目立たせて` : 'この範囲を'}表示します。
+        地図で、{result.candidate_ids.length > 0 ? `候補 ${formatNumber(result.candidate_ids.length)} 件を目立たせて` : 'この範囲を'}表示します。
       </p>
       <div className="button-row">
         <button

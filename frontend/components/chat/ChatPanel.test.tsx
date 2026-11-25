@@ -16,7 +16,7 @@ const reply = (content: string, results: ChatResponse['message']['results'] = []
 const fetchMock = vi.fn<typeof fetch>();
 
 function makeActions() {
-  return { openCandidate: vi.fn(), focusMap: vi.fn(), showView: vi.fn(), answered: vi.fn() } satisfies ChatActions;
+  return { expand: vi.fn() } satisfies ChatActions;
 }
 
 function setup(opts: { areas?: AreaSummary[] } = {}) {
@@ -157,25 +157,6 @@ describe('チャット', () => {
       role: 'user',
       content: '新規出現の候補は何件ありますか？',
     });
-  });
-
-  it('地図の表示が返ったら、すぐ地図を寄せる', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('地図に出します', [mapFocus])));
-    const { input, actions } = setup();
-    await userEvent.type(input(), '地図で見せて{Enter}');
-    await screen.findByText('地図に出します');
-    await waitFor(() => expect(actions.focusMap).toHaveBeenCalledWith({ bbox: mapFocus.bbox, candidateIds: mapFocus.candidate_ids }));
-  });
-
-  it('回答に地図の表示が複数あるときは、最後のものを寄せる（最初ではない）', async () => {
-    const first = { ...mapFocus, bbox: [130.6, 32.7, 130.61, 32.71] as [number, number, number, number], candidate_ids: ['c-9-9-1'] };
-    const last = { ...mapFocus, bbox: [130.8, 32.9, 130.81, 32.91] as [number, number, number, number], candidate_ids: ['c-9-9-2', 'c-9-9-3'] };
-    fetchMock.mockResolvedValue(jsonResponse(reply('地図を 2 つ出します', [first, table, last])));
-    const { input, actions } = setup();
-    await userEvent.type(input(), '地図で見せて{Enter}');
-    await screen.findByText('地図を 2 つ出します');
-    await waitFor(() => expect(actions.focusMap).toHaveBeenCalledTimes(1));
-    expect(actions.focusMap).toHaveBeenCalledWith({ bbox: last.bbox, candidateIds: last.candidate_ids });
   });
 
   it('日本語入力の変換を確定する Enter は、送信の操作として扱わない', () => {
@@ -374,82 +355,64 @@ describe('最初の画面（説明・サンプルの質問）', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual({ messages: [{ role: 'user', content: '渋谷の新築は？' }] });
   });
 
-  it('「解析した地区を地図で見る」を押すと、地図の画面へ切り替える', async () => {
+  it('「解析した地区を地図で見る」を押すと、回答を持たない拡大ビューを、地図の画面で開く（押したボタンを、フォーカスの戻し先として渡す）', async () => {
     const { actions } = setup({ areas });
-    await userEvent.click(screen.getByRole('button', { name: '解析した地区を地図で見る' }));
-    expect(actions.showView).toHaveBeenCalledTimes(1);
-    expect(actions.showView).toHaveBeenCalledWith('map');
+    const button = screen.getByRole('button', { name: '解析した地区を地図で見る' });
+    await userEvent.click(button);
+    expect(actions.expand).toHaveBeenCalledTimes(1);
+    expect(actions.expand).toHaveBeenCalledWith(null, { type: 'view', view: 'map' }, button);
     // 質問を送ったわけではない
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
-describe('回答が届いた通知（answered）', () => {
-  it('成功して結果があれば、結果を 1 回だけ渡す。地図を寄せる呼び出しの後に呼ぶ', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数と地図です', [count, mapFocus])));
+describe('回答が届いても、拡大ビューは開かず、何も頼まない（開くのは、結果カードのボタンを押したときだけ）', () => {
+  it('結果つきの回答（件数・地図の表示・検出画像）が届いても、拡大ビューを開く操作（expand）を呼ばない。カードは会話の中に出る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数と地図と写真です', [count, mapFocus, detectionImage])));
     const { input, actions } = setup();
     await userEvent.type(input(), '見せて{Enter}');
-    await screen.findByText('件数と地図です');
-    await waitFor(() => expect(actions.answered).toHaveBeenCalledTimes(1));
-    expect(actions.answered).toHaveBeenCalledWith([count, mapFocus]);
-    expect(actions.focusMap).toHaveBeenCalledTimes(1);
-    expect(actions.focusMap.mock.invocationCallOrder[0]!).toBeLessThan(actions.answered.mock.invocationCallOrder[0]!);
+    await screen.findByText('件数と地図と写真です');
+    expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: mapFocus.title })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: detectionImage.title })).toBeInTheDocument();
+    expect(actions.expand).not.toHaveBeenCalled();
   });
 
-  it('再描画（入力・親の再描画）では、もう一度呼ばない。次の回答では、また 1 回呼ぶ', async () => {
+  it('次の回答・再描画（入力・親の再描画）でも、呼ばない', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目', [count]))).mockResolvedValueOnce(jsonResponse(reply('2 回目', [compare])));
     const actions = makeActions();
     const { rerender } = render(<ChatPanel actions={actions} />);
     const input = () => screen.getByRole('textbox', { name: '質問を入力' });
     await userEvent.type(input(), 'ひとつめ{Enter}');
     await screen.findByText('1 回目');
-    expect(actions.answered).toHaveBeenCalledTimes(1);
-
     await userEvent.type(input(), 'あ');
     rerender(<ChatPanel actions={{ ...actions }} />);
-    expect(actions.answered).toHaveBeenCalledTimes(1);
-
     await userEvent.clear(input());
     await userEvent.type(input(), 'ふたつめ{Enter}');
     await screen.findByText('2 回目');
-    expect(actions.answered).toHaveBeenCalledTimes(2);
-    expect(actions.answered).toHaveBeenLastCalledWith([compare]);
+    expect(actions.expand).not.toHaveBeenCalled();
   });
 
-  it('結果が空の回答では呼ばない', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('ただの返事です')));
-    const { input, actions } = setup();
-    await userEvent.type(input(), 'こんにちは{Enter}');
-    await screen.findByText('ただの返事です');
-    expect(actions.answered).not.toHaveBeenCalled();
-  });
-
-  it('results が配列でない回答でも、呼ばず、画面も壊れない', async () => {
+  it('results が配列でない回答でも、画面は壊れず、呼ばない', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ message: { role: 'assistant', content: '結果なし', results: null, tool_calls: [] } }));
     const { input, actions } = setup();
     await userEvent.type(input(), 'こんにちは{Enter}');
     await screen.findByText('結果なし');
-    expect(actions.answered).not.toHaveBeenCalled();
+    expect(actions.expand).not.toHaveBeenCalled();
   });
 
-  it('送信に失敗したときは呼ばない。「もう一度送る」も、失敗なら呼ばず、成功したときに 1 回だけ呼ぶ', async () => {
+  it('送信に失敗したときも、「もう一度送る」で届いたときも、呼ばない', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'だめでした' } }, 500))
-      .mockResolvedValueOnce(jsonResponse({ error: { code: 'mock_failure', message: 'まただめでした' } }, 500))
       .mockResolvedValueOnce(jsonResponse(reply('届きました', [count])));
     const { input, actions } = setup();
     await userEvent.type(input(), '質問{Enter}');
     await userEvent.click(await screen.findByRole('button', { name: 'もう一度送る' }));
-    await screen.findByText('まただめでした');
-    expect(actions.answered).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole('button', { name: 'もう一度送る' }));
     await screen.findByText('届きました');
-    expect(actions.answered).toHaveBeenCalledTimes(1);
-    expect(actions.answered).toHaveBeenCalledWith([count]);
+    expect(actions.expand).not.toHaveBeenCalled();
   });
 
-  it('「新しい会話」で捨てた返答では呼ばない', async () => {
+  it('「新しい会話」で捨てた返答は、新しい会話に混ぜない（出さず、呼ばない）', async () => {
     let resolveFirst!: (r: Response) => void;
     fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (resolveFirst = r)));
     const { input, actions } = setup();
@@ -460,21 +423,7 @@ describe('回答が届いた通知（answered）', () => {
     // 捨てた返答が処理される猶予
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('古い答え')).not.toBeInTheDocument();
-    expect(actions.answered).not.toHaveBeenCalled();
-  });
-
-  it('親の処理が例外を出しても、回答は出したままにし、「送信できませんでした」にしない', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数です', [count])));
-    const { input, actions } = setup();
-    actions.answered.mockImplementation(() => {
-      throw new Error('親の失敗');
-    });
-    await userEvent.type(input(), '何件？{Enter}');
-    await screen.findByText('件数です');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByText('未送信')).not.toBeInTheDocument();
-    expect(spy).toHaveBeenCalled();
+    expect(actions.expand).not.toHaveBeenCalled();
   });
 });
 
@@ -535,15 +484,70 @@ describe('回答の対象・条件の行', () => {
   });
 });
 
-describe('結果カードからグラフへ', () => {
-  it('回答の件数のカードの「グラフで見る」で、グラフの画面へ切り替える', async () => {
+describe('結果カードのボタン: その回答の拡大ビューを開く（拡大の単位は回答 1 件）', () => {
+  it('回答の件数のカードの「グラフで見る」「地図で見る」: その回答（ID と結果）と、画面を渡す。押したボタンを、フォーカスの戻し先として渡す', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
     const { input, actions } = setup();
     await userEvent.type(input(), '何件？{Enter}');
     const card = await screen.findByRole('region', { name: count.title });
-    await userEvent.click(within(card).getByRole('button', { name: 'グラフで見る' }));
-    // そのカードの結果の条件（分類 = 新規出現、地区 = すべて）を添えて渡す
-    expect(actions.showView).toHaveBeenCalledWith('chart', { areaId: '', classes: new Set(['confirmed_new']) });
+    const chart = within(card).getByRole('button', { name: 'グラフで見る' });
+    await userEvent.click(chart);
+    expect(actions.expand).toHaveBeenCalledTimes(1);
+    const [answer, request, opener] = actions.expand.mock.calls[0]!;
+    expect(answer).toEqual({ id: expect.stringMatching(/^m\d+$/), results: [count] });
+    expect(request).toEqual({ type: 'view', view: 'chart' });
+    expect(opener).toBe(chart);
+
+    const map = within(card).getByRole('button', { name: '地図で見る' });
+    await userEvent.click(map);
+    expect(actions.expand).toHaveBeenLastCalledWith(answer, { type: 'view', view: 'map' }, map);
+  });
+
+  it('フォーカスが移らないブラウザー（macOS の Safari・Firefox）でも、押したボタンを戻し先として渡す（click だけを送る）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '何件？{Enter}');
+    const chart = within(await screen.findByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' });
+    expect(chart).not.toHaveFocus();
+    fireEvent.click(chart);
+    expect(actions.expand.mock.calls[0]![2]).toBe(chart);
+  });
+
+  it('回答ごとに別の ID と結果を渡す（古い回答のカードを押すと、その回答として開く）', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目', [count]))).mockResolvedValueOnce(jsonResponse(reply('2 回目', [compare])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('2 回目');
+    await userEvent.click(within(screen.getByRole('region', { name: compare.title })).getByRole('button', { name: 'グラフで見る' }));
+    await userEvent.click(within(screen.getByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' }));
+    const [second, first] = actions.expand.mock.calls.map((c) => c[0]);
+    expect(second).toEqual({ id: expect.any(String), results: [compare] });
+    expect(first).toEqual({ id: expect.any(String), results: [count] });
+    expect(first!.id).not.toBe(second!.id);
+  });
+
+  it('1 つの回答の結果すべてを渡す（回答の条件は、その回答の結果から決まる）。どのカードのボタンでも同じ回答', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数と地図です。', [count, mapFocus])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '見せて{Enter}');
+    await userEvent.click(within(await screen.findByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' }));
+    await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
+    expect(actions.expand.mock.calls[0]![0]).toEqual({ id: expect.any(String), results: [count, mapFocus] });
+    expect(actions.expand.mock.calls[1]![0]!.id).toBe(actions.expand.mock.calls[0]![0]!.id);
+  });
+
+  it('地図の表示の「地図で見る」: 範囲と候補 ID を渡す。表の「詳細」・検出画像の「詳細を開く」: 候補 ID を渡す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('いろいろです。', [mapFocus, table, detectionImage])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '見せて{Enter}');
+    await userEvent.click(within(await screen.findByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
+    expect(actions.expand.mock.calls[0]![1]).toEqual({ type: 'focus', bbox: mapFocus.bbox, candidateIds: mapFocus.candidate_ids });
+    await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-2/ }));
+    expect(actions.expand.mock.calls[1]![1]).toEqual({ type: 'candidate', id: 'c-1-2-2' });
+    await userEvent.click(screen.getByRole('button', { name: '詳細を開く' }));
+    expect(actions.expand.mock.calls[2]![1]).toEqual({ type: 'candidate', id: detectionImage.candidate_id });
   });
 });
 
@@ -590,7 +594,7 @@ describe('チャットのスクロール位置（開いた直後は説明の見�
   });
 });
 
-describe('回答の対象・条件の行: 最後の条件（右の絞り込みと同じ）', () => {
+describe('回答の対象・条件の行: 最後の条件（拡大ビューの絞り込みと同じ）', () => {
   const scopeName = 'この回答の対象・条件';
 
   it('件数のあとに比較がある回答は、比較の条件（地区だけ。分類の行は出さない）。先の件数の条件を出さない', async () => {

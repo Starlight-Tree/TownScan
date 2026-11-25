@@ -318,7 +318,7 @@ export default function LeafletMap(props: LeafletMapProps) {
       }
     };
     el.addEventListener('focusin', onFocusIn);
-    // 枠の大きさが変わったら地図に知らせる（Leaflet は window の大きさしか見ない）。結果領域の「拡大」で、チャットの列が狭まって地図の枠が広がる（戻すと縮む）ため。
+    // 枠の大きさが変わったら地図に知らせる（Leaflet は window の大きさしか見ない）。拡大ビュー（ダイアログ）の枠は、窓の大きさに合わせて広がり縮むため。
     // invalidateSize は、中心と縮尺を変えずに、枠・タイルを描き直す。
     // タブで隠れても枠は 0×0 にならない（結果領域の CSS は display: none でなく visibility: hidden）ので、0 を避ける処理や、見えるまで待つ処理は要らない
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => map.invalidateSize()) : null;
