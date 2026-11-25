@@ -52,7 +52,7 @@
 | P7 | 公開: README・スクリーンショット・限界・デモ。公開前の規約の確認（下記） | 他人が README だけで起動できる | 8〜12 h |
 | PG | **API を Go にする**（[ADR 0005](decisions/0005-api-in-go.md)。2026-11-25 承認）: 契約の検査 `contract/` を先に作り、Go の API（`api/`）が満たしたら Python の API を消す。順序は ADR の「結果」。画像認識・差分・評価・データの読み込み（`pipeline/`・`app.load`）と GEE の事前計算は Python のまま | ①`contract/` が、いまの Python の API で全件合格する。②Go の API が `contract/` に全件合格する（読み取り → 認証 → 検出画像 → チャットの順）。③`compose.yaml` の api が Go になり、Python の API が消え、`scripts/verify.sh` の全段（`go vet`・`go test -race` を含む）と実機の `scripts/dev-up.sh` で、画面の操作が従来どおり | — |
 
-**たたき台（2026-11-24 追加）:** P2〜P4 を薄く一通り通し、ローカルで動いて UI で操作できる縦切りを先に作る。仕様・データの契約・出口条件（E1〜E7）は [spec-prototype.md](spec-prototype.md)。範囲は熊本の 12 地区で、GEE・パネル・公開は含まない。
+**たたき台（2026-11-24 追加）:** P2〜P4 を薄く一通り通し、ローカルで動いて UI で操作できる縦切りを先に作る。仕様・データの契約・出口条件（E1〜E8）は [spec-prototype.md](spec-prototype.md)。範囲は熊本の 12 地区で、GEE・パネル・公開は含まない。
 
 核（P2・P3・P4・P7）で約 78〜127 h。GEE 層を足すと約 93〜157 h、パネルまで足すと約 123〜217 h。**週 20 h × 2 か月（約 160 h）では、全部は収まらない可能性が高い。** P2 の小実験のあとに取り直す。
 
