@@ -196,7 +196,7 @@ describe('AccountMenu（ログイン中）', () => {
     expect(screen.getByRole('menuitemradio', { name: 'システム' })).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('上の横帯のテーマの切り替え（ThemeSwitch）と、同じ選択を見る（片方で選ぶと、もう片方も変わる）', async () => {
+  it('ログイン画面の帯のテーマの切り替え（ThemeSwitch）と、同じ選択を見る（片方で選ぶと、もう片方も変わる）', async () => {
     render(
       <>
         <ThemeSwitch />

@@ -3,14 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { health, jsonResponse } from '../tests/fixtures';
 import { AppSidebar } from './AppSidebar';
-import { HealthProvider } from './HealthProvider';
 import { NewConversationProvider, useRegisterNewConversation } from './NewConversation';
 
 const nav = vi.hoisted(() => ({ pathname: '/', push: vi.fn() }));
 vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname, useRouter: () => ({ push: nav.push }) }));
 
+const inside = () => within(screen.getByRole('complementary'));
 const setup = (pathname: string, props: Partial<Parameters<typeof AppSidebar>[0]> = {}) => {
   nav.pathname = pathname;
   return render(
@@ -91,14 +90,14 @@ describe('AppSidebar', () => {
       setup('/');
       expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'true');
       expect(screen.getByRole('button', { name: 'サイドパネルを閉じる' })).toHaveAttribute('aria-expanded', 'true');
-      expect(screen.queryByRole('button', { name: 'サイドパネルを開く' })).not.toBeInTheDocument();
+      expect(inside().queryByRole('button', { name: 'サイドパネルを開く' })).not.toBeInTheDocument();
     });
 
     it('閉じると、開くボタンに替わってフォーカスが移り、ロゴと下部の中身は残る。開くと元に戻る', async () => {
       setup('/');
       await userEvent.click(screen.getByRole('button', { name: 'サイドパネルを閉じる' }));
       expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'false');
-      const open = screen.getByRole('button', { name: 'サイドパネルを開く' });
+      const open = inside().getByRole('button', { name: 'サイドパネルを開く' });
       expect(open).toHaveAttribute('aria-expanded', 'false');
       expect(open).toHaveFocus();
       expect(screen.queryByRole('button', { name: 'サイドパネルを閉じる' })).not.toBeInTheDocument();
@@ -109,7 +108,7 @@ describe('AppSidebar', () => {
       await userEvent.click(open);
       expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'true');
       expect(screen.getByRole('button', { name: 'サイドパネルを閉じる' })).toHaveFocus();
-      expect(screen.queryByRole('button', { name: 'サイドパネルを開く' })).not.toBeInTheDocument();
+      expect(inside().queryByRole('button', { name: 'サイドパネルを開く' })).not.toBeInTheDocument();
     });
 
     it('閉じた帯の空き部分（下敷きのボタン）をクリックしても開く。下敷きは読み上げ・Tab の対象にしない', async () => {
@@ -130,7 +129,7 @@ describe('AppSidebar', () => {
       setup('/');
       screen.getByRole('button', { name: 'サイドパネルを閉じる' }).focus();
       await userEvent.keyboard('{Enter}');
-      expect(screen.getByRole('button', { name: 'サイドパネルを開く' })).toHaveFocus();
+      expect(inside().getByRole('button', { name: 'サイドパネルを開く' })).toHaveFocus();
       await userEvent.keyboard('{Enter}');
       expect(screen.getByRole('button', { name: 'サイドパネルを閉じる' })).toHaveFocus();
     });
@@ -162,67 +161,89 @@ describe('AppSidebar', () => {
   });
 });
 
-describe('AppSidebar（API の状態の印）', () => {
-  const fetchMock = vi.fn<typeof fetch>();
+describe('AppSidebar（1023px 以下: 重ねて開く）', () => {
   beforeEach(() => {
-    fetchMock.mockReset();
-    vi.stubGlobal('fetch', fetchMock);
+    nav.push.mockReset();
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })));
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  const withHealth = (pathname = '/') => {
-    nav.pathname = pathname;
-    return render(
-      <HealthProvider>
-        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ">
-          <p>下部の中身</p>
-        </AppSidebar>
-      </HealthProvider>,
+  const bar = (container: HTMLElement) => within(container.querySelector<HTMLElement>('.app-narrow-bar')!);
+  const aside = () => screen.getByRole('complementary');
+
+  it('はじめは閉じている。上の細い行のボタンで開くと、閉じるボタンにフォーカスが移り、背景の暗い部分（scrim）が出る。いつも開いた表示', async () => {
+    const { container } = setup('/');
+    expect(aside()).toHaveAttribute('data-drawer', 'closed');
+    expect(aside()).toHaveAttribute('data-open', 'true');
+    expect(container.querySelector('.app-scrim')).toBeNull();
+    const opener = bar(container).getByRole('button', { name: 'サイドパネルを開く' });
+    expect(opener).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(opener);
+    expect(aside()).toHaveAttribute('data-drawer', 'open');
+    expect(opener).toHaveAttribute('aria-expanded', 'true');
+    expect(container.querySelector('.app-scrim')).toHaveAttribute('aria-hidden', 'true');
+    await waitFor(() => expect(inside().getByRole('button', { name: 'サイドパネルを閉じる' })).toHaveFocus());
+  });
+
+  it('閉じるボタン・背景の暗い部分・Esc で閉じて、フォーカスは開くボタンへ戻る', async () => {
+    const { container } = setup('/');
+    const opener = bar(container).getByRole('button', { name: 'サイドパネルを開く' });
+    for (const close of [
+      () => userEvent.click(inside().getByRole('button', { name: 'サイドパネルを閉じる' })),
+      () => userEvent.click(container.querySelector<HTMLElement>('.app-scrim')!),
+      () => userEvent.keyboard('{Escape}'),
+    ]) {
+      await userEvent.click(opener);
+      await waitFor(() => expect(aside()).toHaveAttribute('data-drawer', 'open'));
+      await close();
+      expect(aside()).toHaveAttribute('data-drawer', 'closed');
+      expect(opener).toHaveFocus();
+    }
+  });
+
+  it('アカウントのメニューの Esc は、メニューだけを閉じる（重ねて開いたパネルは閉じない）', async () => {
+    const { container } = render(
+      <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ">
+        <div role="menu" aria-label="アカウント">
+          <button role="menuitem">メニュー項目</button>
+        </div>
+      </AppSidebar>,
     );
-  };
-
-  it('llm が mock のとき「模擬モデルで応答しています」を、アカウントの上に出す（細い帯では名前をツールチップと読み上げで持つ）', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(health));
-    const { container } = withHealth();
-    const text = await screen.findByText('模擬モデルで応答しています');
-    expect(text).toHaveClass('app-rail-label');
-    const pill = text.closest('.app-status-pill')!;
-    expect(pill).toHaveClass('pill--warn');
-    expect(pill).toHaveAttribute('data-tip', '模擬モデルで応答しています');
-    expect(pill.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-    // 下部の並びは、状態の印 → アカウント（children）
-    const foot = container.querySelector('.app-rail-foot')!;
-    expect([...foot.children].map((c) => c.className.split(' ')[0] || c.tagName)).toEqual(['app-status', 'P']);
-    expect(container.querySelector('.app-status')).toHaveAttribute('aria-live', 'polite');
+    await userEvent.click(bar(container).getByRole('button', { name: 'サイドパネルを開く' }));
+    screen.getByRole('menuitem', { name: 'メニュー項目' }).focus();
+    await userEvent.keyboard('{Escape}');
+    expect(aside()).toHaveAttribute('data-drawer', 'open');
   });
 
-  it('health は同じオリジンの /api/health を読む', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(health));
-    withHealth();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(fetchMock.mock.calls[0]![0]).toBe('/api/health');
-    await screen.findByText('模擬モデルで応答しています');
+  it('「新しい会話」・ロゴを押すと閉じる。ページが変わっても閉じる', async () => {
+    const { container, rerender } = setup('/');
+    const opener = bar(container).getByRole('button', { name: 'サイドパネルを開く' });
+    await userEvent.click(opener);
+    await userEvent.click(inside().getByRole('button', { name: '新しい会話' }));
+    expect(aside()).toHaveAttribute('data-drawer', 'closed');
+    expect(nav.push).toHaveBeenCalledWith('/');
+
+    await userEvent.click(opener);
+    await userEvent.click(inside().getByRole('link', { name: 'TownScan' }));
+    expect(aside()).toHaveAttribute('data-drawer', 'closed');
+
+    await userEvent.click(opener);
+    expect(aside()).toHaveAttribute('data-drawer', 'open');
+    nav.pathname = '/accuracy';
+    rerender(
+      <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ">
+        <p>下部の中身</p>
+      </AppSidebar>,
+    );
+    expect(aside()).toHaveAttribute('data-drawer', 'closed');
   });
 
-  it('mock 以外では、モデル名の印（警告の色ではない）。読み込み中・失敗では、何も出さない', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ ...health, llm: 'gemini' }));
-    const { unmount } = withHealth();
-    const text = await screen.findByText('モデル: gemini');
-    expect(text.closest('.app-status-pill')).not.toHaveClass('pill--warn');
-    expect(screen.queryByText('模擬モデルで応答しています')).not.toBeInTheDocument();
-    unmount();
-
-    fetchMock.mockReset();
-    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
-    const { container } = withHealth();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(container.querySelector('.app-status-pill')).toBeNull();
-    expect(container.querySelector('.app-status')).toBeEmptyDOMElement();
-  });
-
-  it('HealthProvider が無くても（読み込み中のまま）落ちない', () => {
-    setup('/');
-    expect(document.querySelector('.app-status-pill')).toBeNull();
+  it('PC 幅で細い帯に畳んでいても、狭い幅で重ねて開くときは、開いた表示（ラベルが見える）', async () => {
+    const { container } = setup('/');
+    // この環境は狭い幅なので、細い帯（rail）にはならない: data-open は、いつも true
+    expect(aside()).toHaveAttribute('data-open', 'true');
+    expect(container.querySelector('.app-rail-open')).toBeNull();
+    expect(inside().queryByRole('button', { name: 'サイドパネルを開く' })).not.toBeInTheDocument();
   });
 });
 
@@ -246,11 +267,32 @@ describe('globals.css のサイドパネルの境目', () => {
     expect(wide).toContain(".app-sidebar[data-open='true'] { flex-basis: 16rem;");
   });
 
-  it('1024px 以上では、上の横帯（AppHeader の <header>）を出さない。バナー（合成データ・API 不通）は、どちらの幅でも出す', () => {
-    const wide = block('@media (min-width: 1024px) {\n  .app:has(> .app-sidebar)');
-    expect(wide).toContain('.app__column > .app-header { display: none; }');
-    // バナーを隠す規則は、どこにも無い
+  it('上の横帯は無い。バナー（合成データ・API 不通）は、どの幅でも出す（隠す規則が無い）', () => {
+    expect(css).not.toMatch(/\.app-header[^_\-]/);
     expect(css).not.toMatch(/\.banner[^{]*\{[^}]*display:\s*none/);
+  });
+
+  it('1023px 以下: 上の細い行（.app-narrow-bar）と背景の暗い部分は、この幅だけ。サイドパネルは、重ねて開く（固定・全面の高さ・scrim の下）。1024px 以上では、細い行も暗い部分も出さない', () => {
+    expect(css).toMatch(/\.app-narrow-bar, \.app-scrim \{ display: none; \}/);
+    const narrow = block('@media (max-width: 1023px) {\n  .app-narrow-bar');
+    expect(narrow).toContain('.app-narrow-bar { display: flex;');
+    expect(narrow).toContain('.app-scrim { display: block; position: fixed;');
+    expect(narrow).toMatch(/\.app-sidebar \{ position: fixed; z-index: 40;/);
+    expect(narrow).toContain(".app-sidebar[data-drawer='open'] { display: flex; }");
+    // 閉じているあいだは出さない（基本の規則）
+    expect(css).toContain('.app-sidebar { display: none; }');
+    // 重ねて開くパネルは、背景の暗い部分（39）より上（40）
+    const z = (re: RegExp) => Number(narrow.match(re)?.[1]);
+    expect(z(/\.app-sidebar \{[^}]*z-index: (\d+)/)).toBeGreaterThan(z(/\.app-scrim \{[^}]*z-index: (\d+)/));
+  });
+
+  it('指で押せる大きさ: 狭い幅の開く・閉じるボタンは 44px', () => {
+    const narrow = block('@media (max-width: 1023px) {\n  .app-narrow-bar');
+    expect(narrow).toMatch(/\.app-narrow-bar \.app-icon-btn, \.app-sidebar \.app-icon-btn \{ width: 44px; height: 44px; \}/);
+  });
+
+  it('状態の印（模擬モデル・モデル名）の規則は無い', () => {
+    expect(css).not.toContain('app-status');
   });
 
   it('チャット（`/`）は 1 列だけ: サイドパネルの開閉で、本文の並び（左右・縦積み）を切り替える規則は無い（開いても、細い帯でも、チャットは残りの幅の中央に収まる）', () => {

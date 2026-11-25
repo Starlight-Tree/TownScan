@@ -255,8 +255,8 @@ code {
 }
 
 /* ---- 全体 ----
-   (site) の画面は、`.app` の中に、左のサイドパネル（.app-sidebar。1024px 以上だけ）と、本文の列（.app__column）がある。
-   本文の列には、上の横帯（.app-header。1023px 以下だけ）、バナー（合成データ・API 不通。どちらの幅でも出す）、本文（.app__main）が縦に並ぶ。
+   (site) の画面は、`.app` の中に、左のサイドパネル（.app-sidebar。1024px 以上は常に左。1023px 以下は、はじめは閉じていて、上の細い行 .app-narrow-bar のボタンで重ねて開く）と、本文の列（.app__column）がある。
+   本文の列には、バナー（合成データ・API 不通。どちらの幅でも出す）、本文（.app__main）が縦に並ぶ。上の横帯は無い。
    ログインの画面（(auth)）は、`.app` の中に、上の帯（.auth-header）と本文だけ（サイドパネルなし）。 */
 .app {
   display: flex;
@@ -291,35 +291,12 @@ code {
   }
 }
 
-.app-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 20px;
-  padding: 10px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.app-header__brand {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  flex: 1 1 320px;
-}
-
 .app-header__logo {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text);
   text-decoration: none;
-}
-
-.app-header__tagline {
-  font-size: 13px;
-  color: var(--muted);
 }
 
 .nav-link {
@@ -338,20 +315,6 @@ code {
   color: var(--text);
 }
 
-.app-header__status {
-  min-height: 28px;
-}
-
-/* ヘッダーの右端: 状態の表示と、テーマの切り替え（JobNavi と同じ部品）。狭いと、まとめて次の行へ折り返す */
-.app-header__tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px 12px;
-  margin-left: auto;
-}
-
 /* テーマの切り替え（ライト / ダーク / システム）。JobNavi の .theme-switch と同じ規則。ヘッダーでは、アイコンの名前（aria-label・title）で足りるので、見出しの文字は出さない */
 .theme-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .theme-switch-label { font-size: 13px; color: var(--muted); }
@@ -359,24 +322,6 @@ code {
 .theme-switch-option { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .theme-switch-option:hover { color: var(--text); }
 .theme-switch-option[aria-pressed='true'] { background: var(--tag-bg); color: var(--tag-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
-.app-header .theme-switch-label { display: none; }
-
-/* 上の横帯の右端のアカウント。メニューは下へ開く（サイドパネルでは、右・上へ開く） */
-.app-header__account {
-  display: flex;
-}
-
-.app-header .account-button {
-  width: 44px;
-  height: 44px;
-}
-
-.app-header .account-menu {
-  top: calc(100% + 0.35rem);
-  right: 0;
-  bottom: auto;
-  left: auto;
-}
 
 /* ---- アカウント（JobNavi・DocuNavi と同じ。アバターのボタンを押すと、メニューが開く）---- */
 .account { position: relative; }
@@ -412,71 +357,75 @@ code {
 .name-dialog__error { margin: 0; padding: 0.5rem 0.7rem; border-radius: 0.5rem; background: var(--error-bg); color: var(--error-text); font-size: 0.85rem; }
 .name-dialog__actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
 
-/* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
-   1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
+/* ---- サイドパネル（JobNavi・DocuNavi と同じ。開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える。細い帯は 1024px 以上だけ）----
+   1023px 以下は、下の「重ねて開く」の規則（.app-narrow-bar・.app-scrim）。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
    開いた表示だと、本文は窓より 16rem 狭い。チャット（`/`）は 1 列だけなので、サイドパネルの開閉で、本文の並びを切り替える規則は無い（チャットは、残りの幅の中央に、幅 46rem の列で収まる） */
 .app-sidebar { display: none; }
 .app-rail-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 @media (min-width: 1024px) {
   .app:has(> .app-sidebar) { flex-direction: row; }
-  .app__column > .app-header { display: none; }
-  /* アカウントのメニューとツールチップが、右の本文の上に重なって見えるよう、重なり順を上げる */
   .app-sidebar { flex: 0 0 3.5rem; align-self: flex-start; position: sticky; top: 0; z-index: 25; isolation: isolate; height: 100dvh; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 0.75rem 0.5rem; background: var(--surface); border-right: 1px solid var(--border); }
-  .app-rail { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
-  .app-rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
-  .app-rail-btn { position: relative; display: grid; width: 2.5rem; height: 2.5rem; flex: none; place-items: center; border: 0; border-radius: 0.6rem; background: transparent; color: var(--muted); text-decoration: none; cursor: pointer; }
-  .app-rail-btn:hover, .app-rail-btn:focus-visible { background: var(--surface-muted); color: var(--text); }
-  /* 「新しい会話」: 開いた表示では、枠のあるボタン（DocuNavi の ws-new と同じ位置・同じ見た目の考え方）。細い帯では、ほかのアイコンと同じ */
-  .app-new { color: var(--text); }
-  .app-sidebar[data-open='true'] .app-new { border: 1px solid var(--border); background: var(--surface); margin-bottom: 0.25rem; }
-  .app-sidebar[data-open='true'] .app-new:hover, .app-sidebar[data-open='true'] .app-new:focus-visible { background: var(--surface-muted); }
-  .app-rail-logo { color: var(--text); }
-  .app-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; }
-  /* 畳む・開くボタン */
-  .app-icon-btn { display: grid; width: 2rem; height: 2rem; flex: none; place-items: center; padding: 0; border: 0; border-radius: 0.4rem; background: transparent; color: var(--muted); cursor: pointer; }
-  .app-icon-btn:hover { background: var(--surface-muted); color: var(--text); }
-  /* 閉じた帯のロゴの位置は、開くボタン。ホバー・フォーカスで、ロゴが開閉の絵に変わる */
-  .app-rail-open { display: none; }
-  .app-open-icon { position: absolute; inset: 0; display: none; place-items: center; }
-  .app-open-btn:hover .app-brand-icon, .app-open-btn:focus-visible .app-brand-icon { visibility: hidden; }
-  .app-open-btn:hover .app-open-icon, .app-open-btn:focus-visible .app-open-icon { display: grid; }
+  .app-sidebar[data-open='true'] { flex-basis: 16rem; }
+}
 
-  /* 状態の印（模擬モデルで応答しています）。細い帯では、アイコンだけ（名前はツールチップと読み上げ）。開いた表示では、アイコンと文 */
-  .app-status:empty { display: none; }
-  /* .pill（あとで定義される）より強くして、細い帯の見た目を決める */
-  .app-sidebar .app-status-pill { position: relative; display: grid; width: 2.5rem; height: 2.5rem; place-items: center; padding: 0; border-radius: 0.6rem; }
+/* アカウントのメニューとツールチップが、右の本文の上に重なって見えるよう、重なり順を上げる */
+.app-rail { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.app-rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.app-rail-btn { position: relative; display: grid; width: 2.5rem; height: 2.5rem; flex: none; place-items: center; border: 0; border-radius: 0.6rem; background: transparent; color: var(--muted); text-decoration: none; cursor: pointer; }
+.app-rail-btn:hover, .app-rail-btn:focus-visible { background: var(--surface-muted); color: var(--text); }
+/* 「新しい会話」: 開いた表示では、枠のあるボタン（DocuNavi の ws-new と同じ位置・同じ見た目の考え方）。細い帯では、ほかのアイコンと同じ */
+.app-new { color: var(--text); }
+.app-sidebar[data-open='true'] .app-new { border: 1px solid var(--border); background: var(--surface); margin-bottom: 0.25rem; }
+.app-sidebar[data-open='true'] .app-new:hover, .app-sidebar[data-open='true'] .app-new:focus-visible { background: var(--surface-muted); }
+.app-rail-logo { color: var(--text); }
+.app-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; }
+/* 畳む・開くボタン */
+.app-icon-btn { display: grid; width: 2rem; height: 2rem; flex: none; place-items: center; padding: 0; border: 0; border-radius: 0.4rem; background: transparent; color: var(--muted); cursor: pointer; }
+.app-icon-btn:hover { background: var(--surface-muted); color: var(--text); }
+/* 閉じた帯のロゴの位置は、開くボタン。ホバー・フォーカスで、ロゴが開閉の絵に変わる */
+.app-rail-open { display: none; }
+.app-open-icon { position: absolute; inset: 0; display: none; place-items: center; }
+.app-open-btn:hover .app-brand-icon, .app-open-btn:focus-visible .app-brand-icon { visibility: hidden; }
+.app-open-btn:hover .app-open-icon, .app-open-btn:focus-visible .app-open-icon { display: grid; }
 
-  /* ツールチップ（ホバーとキーボードのフォーカスで、アイコンの右に出す） */
-  .app-sidebar [data-tip]::after { position: absolute; z-index: 20; top: 50%; left: calc(100% + 0.5rem); padding: 0.25rem 0.5rem; border-radius: 0.4rem; background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 600; white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(-50%); content: attr(data-tip); }
-  .app-sidebar [data-tip]:hover::after, .app-sidebar [data-tip]:focus-visible::after { opacity: 1; }
-  /* メニューを開いている間は、ツールチップを出さない（メニューに重なるため） */
-  .app-sidebar [data-tip][aria-expanded='true']::after { display: none; }
+/* ツールチップ（ホバーとキーボードのフォーカスで、アイコンの右に出す） */
+.app-sidebar [data-tip]::after { position: absolute; z-index: 20; top: 50%; left: calc(100% + 0.5rem); padding: 0.25rem 0.5rem; border-radius: 0.4rem; background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 600; white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(-50%); content: attr(data-tip); }
+.app-sidebar [data-tip]:hover::after, .app-sidebar [data-tip]:focus-visible::after { opacity: 1; }
+/* メニューを開いている間は、ツールチップを出さない（メニューに重なるため） */
+.app-sidebar [data-tip][aria-expanded='true']::after { display: none; }
 
-  .app-sidebar[data-open='false'] .app-brand-link { display: none; }
-  /* 閉じた帯の空き部分で開く。下敷きのボタンがパネル全体を覆い、帯の項目・アイコンは、その上に載って自分のクリックだけを受ける（ページ遷移・メニュー。開閉はしない）。
-     帯の入れ物は pointer-events: none で素通しにし、中身だけ auto に戻す（pointer-events は子に引き継がれるので、下敷きにも auto を戻す） */
-  .app-sidebar[data-open='false'] .app-rail-open { position: absolute; z-index: -1; inset: 0; display: block; padding: 0; border: 0; background: transparent; cursor: e-resize; }
-  .app-sidebar[data-open='false'] .app-rail, .app-sidebar[data-open='false'] .app-rail-foot { pointer-events: none; }
-  .app-sidebar[data-open='false'] .app-rail-open, .app-sidebar[data-open='false'] .app-rail-btn, .app-sidebar[data-open='false'] .app-status-pill, .app-sidebar[data-open='false'] .app-rail-foot .account { pointer-events: auto; }
+.app-sidebar[data-open='false'] .app-brand-link { display: none; }
+/* 閉じた帯の空き部分で開く。下敷きのボタンがパネル全体を覆い、帯の項目・アイコンは、その上に載って自分のクリックだけを受ける（ページ遷移・メニュー。開閉はしない）。
+   帯の入れ物は pointer-events: none で素通しにし、中身だけ auto に戻す（pointer-events は子に引き継がれるので、下敷きにも auto を戻す） */
+.app-sidebar[data-open='false'] .app-rail-open { position: absolute; z-index: -1; inset: 0; display: block; padding: 0; border: 0; background: transparent; cursor: e-resize; }
+.app-sidebar[data-open='false'] .app-rail, .app-sidebar[data-open='false'] .app-rail-foot { pointer-events: none; }
+.app-sidebar[data-open='false'] .app-rail-open, .app-sidebar[data-open='false'] .app-rail-btn, .app-sidebar[data-open='false'] .app-rail-foot .account { pointer-events: auto; }
 
-  .app-sidebar[data-open='true'] { flex-basis: 16rem; align-items: stretch; padding: 0.75rem; }
-  .app-sidebar[data-open='true'] .app-rail { align-items: stretch; }
-  .app-sidebar[data-open='true'] .app-brand-row { padding-bottom: 0.5rem; }
-  .app-sidebar[data-open='true'] .app-rail-btn { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 0.7rem; padding: 0 0.375rem; }
-  .app-sidebar[data-open='true'] .app-brand-link { width: auto; min-width: 0; flex: 1; padding: 0 0.25rem; gap: 0.45rem; }
-  .app-sidebar[data-open='true'] .app-rail-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; font-size: 14.72px; font-weight: 500; }
-  .app-sidebar[data-open='true'] .app-brand-name { display: flex; flex-direction: column; font-size: 16.8px; font-weight: 800; line-height: 1.15; }
-  .app-sidebar[data-open='true'] [data-tip]::after { display: none; }
-  .app-sidebar[data-open='true'] .app-rail-foot { width: 100%; align-items: stretch; }
-  .app-sidebar[data-open='true'] .app-status-pill { display: flex; width: 100%; height: auto; align-items: center; justify-content: flex-start; gap: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 0.6rem; font-size: 12.5px; line-height: 1.4; }
-  .app-sidebar[data-open='true'] .app-status-pill svg { flex: none; }
-  .app-sidebar[data-open='true'] .app-status-pill .app-rail-label { font-size: inherit; font-weight: 600; white-space: normal; }
-  .app-sidebar[data-open='true'] .account { width: 100%; }
-  .app-sidebar[data-open='true'] .account-button { display: flex; width: 100%; justify-content: flex-start; gap: 0.6rem; padding: 0 0.5rem; }
-  .app-sidebar[data-open='true'] .account-label { display: block; min-width: 0; flex: 1; overflow: hidden; font-size: 13.6px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-  .app-sidebar[data-open='true'] .account-caret { display: block; flex: none; }
-  .app-sidebar[data-open='true'] .account-menu { top: auto; right: 0; bottom: calc(100% + 0.35rem); left: 0; width: auto; }
+.app-sidebar[data-open='true'] { align-items: stretch; padding: 0.75rem; }
+.app-sidebar[data-open='true'] .app-rail { align-items: stretch; }
+.app-sidebar[data-open='true'] .app-brand-row { padding-bottom: 0.5rem; }
+.app-sidebar[data-open='true'] .app-rail-btn { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 0.7rem; padding: 0 0.375rem; }
+.app-sidebar[data-open='true'] .app-brand-link { width: auto; min-width: 0; flex: 1; padding: 0 0.25rem; gap: 0.45rem; }
+.app-sidebar[data-open='true'] .app-rail-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; font-size: 14.72px; font-weight: 500; }
+.app-sidebar[data-open='true'] .app-brand-name { display: flex; flex-direction: column; font-size: 16.8px; font-weight: 800; line-height: 1.15; }
+.app-sidebar[data-open='true'] [data-tip]::after { display: none; }
+.app-sidebar[data-open='true'] .app-rail-foot { width: 100%; align-items: stretch; }
+.app-sidebar[data-open='true'] .account { width: 100%; }
+.app-sidebar[data-open='true'] .account-button { display: flex; width: 100%; justify-content: flex-start; gap: 0.6rem; padding: 0 0.5rem; }
+.app-sidebar[data-open='true'] .account-label { display: block; min-width: 0; flex: 1; overflow: hidden; font-size: 13.6px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.app-sidebar[data-open='true'] .account-caret { display: block; flex: none; }
+.app-sidebar[data-open='true'] .account-menu { top: auto; right: 0; bottom: calc(100% + 0.35rem); left: 0; width: auto; }
+
+/* 1023px 以下: サイドパネルは、はじめは閉じていて（出さない）、上の細い行（.app-narrow-bar）のボタンで、本文の上に重ねて開く（DocuNavi の狭い幅と同じく、開閉できる）。
+   開いたときは、いつも「開いた表示」（data-open='true'。AppSidebar が決める）。背景の暗い部分（.app-scrim）を押すと閉じる */
+.app-narrow-bar, .app-scrim { display: none; }
+@media (max-width: 1023px) {
+  .app-narrow-bar { display: flex; align-items: center; min-height: 44px; padding: 0 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .app-narrow-bar .app-icon-btn, .app-sidebar .app-icon-btn { width: 44px; height: 44px; }
+  .app-scrim { display: block; position: fixed; z-index: 39; inset: 0; padding: 0; border: 0; background: var(--scrim); }
+  .app-sidebar { position: fixed; z-index: 40; inset: 0 auto 0 0; width: min(18rem, 86vw); height: 100dvh; flex-direction: column; gap: 0.4rem; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border); box-shadow: 0 12px 40px var(--shadow); }
+  .app-sidebar[data-drawer='open'] { display: flex; }
 }
 
 /* ---- ログインの画面（サイドパネルなし。上の帯は「← チャットと地図」とテーマの切り替えだけ）---- */
@@ -937,7 +886,7 @@ p.banner {
   padding: 0 var(--chat-pad);
 }
 
-/* 「新しい会話」は、サイドパネルの無い幅（1023px 以下）だけで見せる。1024px 以上は、サイドパネルの「新しい会話」（DocuNavi と同じ位置）が同じ処理を呼ぶ */
+/* 「新しい会話」は、サイドパネルを開いていない幅（1023px 以下）だけで見せる。1024px 以上は、サイドパネルの「新しい会話」（DocuNavi と同じ位置）が同じ処理を呼ぶ */
 @media (min-width: 1024px) {
   .chat__tools {
     display: none;
@@ -2969,7 +2918,6 @@ p.banner {
 }
 
 @media (max-width: 600px) {
-  .app-header,
   .auth-header,
   .banner {
     padding-left: 16px;
@@ -2989,46 +2937,7 @@ p.banner {
   }
 }
 
-/* 狭い画面（600px 以下）の上の横帯。390px で 281px（画面の約 36%）あった高さを、2〜3 段（約 100〜130px）に収め、チャットの入力欄を最初の画面に入れる。
-   1 段目: ロゴと、アカウントのボタン。2 段目: 状態の印（模擬モデルなど。あるときだけ）。説明文は隠す。テーマの切り替えは、アカウントのメニューの中に同じものがあるので、帯からは隠す（アカウントが無いときだけ、帯に残す）。
-   .app-header__tools は、中身（状態・テーマ・アカウント）を帯の格子に直接並べるため display: contents にする */
-@media (max-width: 600px) {
-  .app-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'brand account'
-      'status status';
-    align-items: center;
-    gap: 0 8px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-  }
-  .app-header__brand {
-    grid-area: brand;
-  }
-  .app-header__tagline {
-    display: none;
-  }
-  .app-header__tools {
-    display: contents;
-  }
-  .app-header__account {
-    grid-area: account;
-  }
-  .app-header__status {
-    grid-area: status;
-    min-height: 0;
-  }
-  .app-header__status:not(:empty) {
-    padding: 2px 0 6px;
-  }
-  .app-header__tools:has(.app-header__account) .theme-switch {
-    display: none;
-  }
-}
-
-/* 指で押す画面（狭い幅、または指などの粗いポインター）の、押す大きさ。帯のロゴのリンク（34px）・テーマの切り替え（40×36px）・「根拠を見る」（32px）を 44px にする。
+/* 指で押す画面（狭い幅、または指などの粗いポインター）の、押す大きさ。ログイン画面の帯のロゴのリンク（34px）・テーマの切り替え（40×36px）・「根拠を見る」（32px）を 44px にする。
    マウスで使う広い画面は、密なままにする */
 @media (max-width: 600px), (pointer: coarse) {
   .app-header__logo {

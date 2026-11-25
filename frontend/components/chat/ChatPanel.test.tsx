@@ -1056,7 +1056,7 @@ describe('最初の画面: 地区の大きさ・分類の意味・「候補」�
     expect(more).not.toContainElement(screen.getByText('まず、こんな質問から'));
   });
 
-  it('入力欄の下に、モデル名や「ツールの結果をそのまま」の注記を出さない（モデルの印はサイドパネル・上の横帯に 1 か所）', () => {
+  it('入力欄の下に、モデル名や「ツールの結果をそのまま」の注記を出さない（モデルの印は、どこにも出さない）', () => {
     setup();
     expect(document.querySelector('.chat__footnote')).toBeNull();
     expect(screen.queryByText(/模擬モデルで応答しています/)).not.toBeInTheDocument();

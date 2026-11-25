@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
-// 画面の枠は、グループごとの layout が持つ: (site) = サイドパネルと上の横帯と本文（ログイン中の人も、そこで取る）、(auth) = ログイン画面（サイドパネルなし）。
+// 画面の枠は、グループごとの layout が持つ: (site) = サイドパネルとバナーと本文（ログイン中の人も、そこで取る）、(auth) = ログイン画面（サイドパネルなし）。
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     // data-theme は描画前のスクリプトが付ける（サーバーの出力とは違うので、警告を止める）

@@ -111,7 +111,8 @@ describe('拡大ビュー（.expanded-view。結果領域を入れるダイア�
   });
 
   it('幅 1023px 以下: 窓いっぱいの全面のシート（余白・角丸なし）', () => {
-    const block = mediaBlock('@media (max-width: 1023px)');
+    const block = mediaBlocks('@media (max-width: 1023px)').find((b) => b.includes('.expanded-view {'))!;
+    expect(block).toBeDefined();
     expect(decl(ruleIn(block, '.expanded-view'), 'padding')).toBe('0');
     const dialog = ruleIn(block, '.expanded-view__dialog');
     expect(decl(dialog, 'max-width')).toBe('none');
@@ -142,36 +143,6 @@ describe('拡大ビュー（.expanded-view。結果領域を入れるダイア�
   it('「閉じる」は、タブの帯の右端（タブと同じ高さ 44px）', () => {
     expect(decl(ruleIn(css, '.expanded-view__close'), 'min-height')).toBe('44px');
     expect(decl(ruleIn(css, '.expanded-view__close'), 'flex')).toBe('none');
-  });
-});
-
-describe('狭い画面（600px 以下）の上の横帯', () => {
-  // 同じ条件の @media が 2 つある（余白などの既存と、上の帯の組み直し）。上の帯の方を取る
-  const block = mediaBlocks('@media (max-width: 600px)').find((b) => b.includes('.app-header__tagline'))!;
-  it('上の帯の @media がある', () => {
-    expect(block).toBeDefined();
-  });
-
-  it('帯は 2 段の格子（ロゴ＋アカウント / 状態）。390px で 281px あった高さを収める', () => {
-    const header = ruleIn(block, '.app-header');
-    expect(decl(header, 'display')).toBe('grid');
-    expect(header).toMatch(/grid-template-areas:\s*'brand account'\s*'status status'/);
-    expect(decl(ruleIn(block, '.app-header__tools'), 'display')).toBe('contents');
-  });
-
-  it('説明文は隠す。ページの入口（nav）の規則は無い（横帯にページの入口は無い）', () => {
-    expect(decl(ruleIn(block, '.app-header__tagline'), 'display')).toBe('none');
-    expect(block).not.toContain('.app-header__nav');
-  });
-
-  it('テーマの切り替えは、アカウントのメニューに同じものがあるときだけ、帯から隠す（アカウントが無ければ帯に残る）', () => {
-    expect(decl(ruleIn(block, '.app-header__tools:has(.app-header__account) .theme-switch'), 'display')).toBe('none');
-    expect(block).not.toMatch(/\n\s*\.theme-switch\s*\{/);
-  });
-
-  it('状態の印は、あるときだけ 3 段目に出る（空なら高さを取らない）', () => {
-    expect(decl(ruleIn(block, '.app-header__status'), 'min-height')).toBe('0');
-    expect(block).toContain('.app-header__status:not(:empty)');
   });
 });
 

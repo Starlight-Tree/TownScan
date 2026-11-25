@@ -69,25 +69,6 @@ export function PlusIcon() {
   );
 }
 
-/** 「模擬モデルで応答しています」の印のアイコン（フラスコ）。 */
-export function MockModelIcon() {
-  return (
-    <Line size={18}>
-      <path d="M8 3.5h4M8.6 3.5v4.3L4.9 14.4a1.5 1.5 0 0 0 1.3 2.2h7.6a1.5 1.5 0 0 0 1.3-2.2l-3.7-6.6V3.5" />
-      <path d="M6.6 12.5h6.8" />
-    </Line>
-  );
-}
-
-/** 「モデル: …」の印のアイコン（4 つの先がとがった星）。 */
-export function ModelIcon() {
-  return (
-    <Line size={18}>
-      <path d="M10 2.5 11.9 8.1 17.5 10 11.9 11.9 10 17.5 8.1 11.9 2.5 10 8.1 8.1Z" />
-    </Line>
-  );
-}
-
 /** アカウントのアバターの絵（線画の人型）。 */
 export function PersonIcon() {
   return (

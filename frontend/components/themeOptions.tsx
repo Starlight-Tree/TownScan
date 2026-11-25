@@ -10,7 +10,7 @@ function Svg({ children }: { children: ReactNode }) {
   );
 }
 
-/** ライト / ダーク / システム（OS に従う）。上の横帯の切り替え（ThemeSwitch）と、アカウントのメニュー（AccountMenu）が共有する（JobNavi と同じ）。 */
+/** ライト / ダーク / システム（OS に従う）。ログイン画面の帯の切り替え（ThemeSwitch）と、アカウントのメニュー（AccountMenu）が共有する（JobNavi と同じ）。 */
 export const THEME_OPTIONS: ReadonlyArray<{ value: Theme | 'system'; label: string; icon: ReactNode }> = [
   {
     value: 'light',
