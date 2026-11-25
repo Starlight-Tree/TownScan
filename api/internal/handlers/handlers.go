@@ -1,9 +1,9 @@
 // Package handlers は、読み取りのエンドポイント（backend/app/routes.py の GET /api/health・/api/areas・/api/candidates・
-// /api/candidates.geojson・/api/candidates/{candidate_id}・/api/metrics）。
+// /api/candidates.geojson・/api/candidates/{candidate_id}・/api/metrics）と、認証（GET /api/me。me.go）。
 //
 // 応答の JSON のキー・型・並び順・件数の上限・検証エラーの形と文言・ページ分け・null の扱い・Content-Type は、Python の API と同じ。
 // 検証 →（run が無ければ 503）→ 問い合わせ →（無ければ 404）の順も同じ。
-// 認証（/api/me）・検出画像（/api/candidates/{id}/image）・チャット（/api/chat）は、あとの段で足す（ルートを足すだけでよい形）。
+// 検出画像（/api/candidates/{id}/image）・チャット（/api/chat）は、あとの段で足す（ルートを足すだけでよい形）。
 package handlers
 
 import (
@@ -35,6 +35,8 @@ var _ Reader = (*store.Store)(nil)
 // Deps は、ハンドラーが使うもの。
 type Deps struct {
 	Store Reader
+	// /api/me のログインの確認。nil ならログインは未設定（/api/me は 503。ほかの入口は影響を受けない）。どの入口も、ログインを要求しない
+	Auth Authenticator
 	// /api/health が返す LLM の名前（"mock" か "gemini"）。GeminiModel は gemini のときだけ返す（キーは持たない）
 	LLMProvider string
 	GeminiModel string
@@ -69,6 +71,7 @@ func New(d Deps) *httpx.Router {
 	rt.Handle(http.MethodGet, "/api/candidates.geojson", a.candidatesGeoJSON)
 	rt.Handle(http.MethodGet, "/api/candidates/{candidate_id}", a.candidateDetail)
 	rt.Handle(http.MethodGet, "/api/metrics", a.metrics)
+	rt.Handle(http.MethodGet, "/api/me", a.me)
 	return rt
 }
 

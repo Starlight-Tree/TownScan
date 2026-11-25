@@ -13,7 +13,7 @@
 Date・Server・Content-Length（本文が違うとき）は比べない。Go が足す X-Content-Type-Options も比べない（Python には無い。意図した違い）。
 Allow も比べない: Python の API は 405 に Allow を付けない（RFC 9110 §15.5.6 に反する。独自のエラー応答が落とす）。Go は付ける。check_allow が、その違いだけを確かめる。
 
-あとの段（認証・検出画像・チャット）が足すとき: PHASE_CASES に段階を足すか、cases_* の関数に入力を足す。
+あとの段（検出画像・チャット）が足すとき: PHASE_CASES に段階を足すか、cases_* の関数に入力を足す。
 Go にまだ無いルート（NOT_YET_IN_GO）は、比べずに、状態だけを表示する（Go は、ルートが無いときの 404 を返すこと）。
 """
 
@@ -83,7 +83,7 @@ BAD_DETAIL_IDS = [
 ROUTING_PATHS = [
     "/", "/api", "/api/", "/nothing", "/api/nothing", "/api/nothing/", "/API/areas", "/api/AREAS", "/api//areas", "//api/areas",
     "/api/areas/", "/api/areas//", "/api/areas///", "/api/areas/?limit=2&x=%20y", "/api/areas/x", "/api/areas/x/",
-    "/api/health/", "/api/health//", "/api/metrics/", "/api/metrics/?a=b",
+    "/api/health/", "/api/health//", "/api/metrics/", "/api/metrics/?a=b", "/api/me", "/api/me/", "/api/me//", "/api/me/?a=b", "/api/ME",
     "/api/candidates/", "/api/candidates//", "/api/candidates/?limit=1", "/api/candidates.geojson/", "/api/candidates.geojson/?cls=x",
     "/api/candidates.geojson//", "/api/candidates.geojson/x", "/api/candidates.geojson.", "/api/candidates.GEOJSON", "/api/candidatesxgeojson",
     "/api/candidates/c-1-2-3/", "/api/candidates/c-1-2-3//", "/api/candidates/c-1-2/", "/api/candidates/c-1-2-3/foo", "/api/candidates/c-1-2-3/foo/",
@@ -96,7 +96,7 @@ ROUTING_PATHS = [
 
 # Go にまだ無いルート（Python にはある）。比べずに、状態だけを表示する。Go は、ルートが無いときの 404 を返すこと
 NOT_YET_IN_GO = [
-    ("GET", "/api/me"), ("GET", "/api/me/"), ("POST", "/api/chat"), ("GET", "/api/chat"), ("GET", "/api/candidates/c-1-2-3/image?year=2018"),
+    ("POST", "/api/chat"), ("GET", "/api/chat"), ("GET", "/api/candidates/c-1-2-3/image?year=2018"),
     ("GET", "/api/candidates/c-226250-105759-1/image?year=2018&size=64"), ("GET", "/api/docs"), ("GET", "/api/openapi.json"),
 ]
 GO_NOT_FOUND = '{"error":{"code":"not_found","message":"見つかりません"}}'
@@ -354,12 +354,15 @@ def cases_basic(areas: list[str], ids: list[str]) -> list[Case]:
         out.append(get("routing", p))
     # メソッド（実在するルートに、GET 以外）
     for p in ["/api/health", "/api/areas", "/api/candidates", "/api/candidates.geojson", "/api/candidates/c-226250-105759-1", "/api/metrics",
-              "/api/areas/", "/api/nothing", "/"]:
+              "/api/me", "/api/areas/", "/api/nothing", "/"]:
         for m in ["POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "FOO"]:
             out.append(Case("methods", m, p))
     out.append(Case("methods", "POST", "/api/areas", headers={"Content-Type": "application/json"}, body=b'{"a":1}'))
     out.append(Case("methods", "GET", "/api/areas", headers={"Content-Type": "application/json"}, body=b'{"a":1}'))
     out.append(Case("methods", "GET", "/api/health", headers={"Authorization": "Bearer abc", "Accept": "text/html", "Accept-Encoding": "gzip"}))
+    # /api/me: この検査の API は、どちらも AUTH_* なしで起動する（ログインの設定が無い）。トークンの有無・形を見る前に 503（固定の文・no-store）
+    for h in [None, {"Authorization": ""}, {"Authorization": "Basic abc"}, {"Authorization": "Bearer abc"}, {"Authorization": "Bearer a.b.c"}]:
+        out.append(Case("auth-unconfigured", "GET", "/api/me", headers=h or {}))
     out.append(Case("methods", "GET", "/api/areas", headers={"Origin": "http://localhost:3500", "Cache-Control": "no-cache"}))
     out.append(Case("methods", "OPTIONS", "/api/areas", headers={"Origin": "http://localhost:3500", "Access-Control-Request-Method": "GET"}))
     return out

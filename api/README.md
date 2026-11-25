@@ -1,9 +1,10 @@
 # api/（Go の API）
 
-TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは第 1 段（土台と読み取り API）だけ**で、`compose.yaml` はまだ Python の API を指している。
+TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは第 1 段（土台と読み取り API）と第 3 段（認証）だけ**で、`compose.yaml` はまだ Python の API を指している。
 
 - 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`
-- あとの段（ルートを足すだけでよい形にしてある）: 認証（`/api/me`）→ 検出画像（`/api/candidates/{id}/image`）→ チャット（`/api/chat`）→ 切り替え
+- 認証: `GET /api/me`（JWT を JWKS の公開鍵で検証。下の「認証」）
+- あとの段（ルートを足すだけでよい形にしてある）: 検出画像（`/api/candidates/{id}/image`）→ チャット（`/api/chat`）→ 切り替え
 - 作らない: `/api/docs`・OpenAPI（契約は `docs/spec-prototype.md` §4.4 と `contract/` が持つ）
 
 振る舞いの正本は `backend/app/`・`backend/tests/`・`docs/spec-prototype.md`。JSON のキー・型・並び順・数の書式（Python の `100.0`・`1e-05`）・検証エラーの文言・307 の Location・405 の本文まで、Python の API と**バイト列が同じ**になるように作ってある（`difftest/` が確かめる）。
@@ -17,12 +18,30 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 | `internal/apierr` | エラーの形（`{"error":{"code","message"}}`・422 の `details`） |
 | `internal/httpx` | ルーター（Starlette と同じ 405・307・404）・クエリの読み方（`parse_qsl` と同じ）・Pydantic と同じ検証・ミドルウェア（アクセスログ・panic の回復・nosniff・本文の上限） |
 | `internal/pyjson` | Python の `json.dumps` と同じ書式（`float` の repr・jsonb の書き直し） |
+| `internal/auth` | `GET /api/me` の JWT の検証: ES256 だけ・JWKS の取得と保持（600 秒）・iss / aud / exp / nbf / iat / sub の規則・`email` / `name` / `picture` の整形・`Authorization: Bearer` の読み方 |
 | `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/` は `backend/db/` の写し。一致をテストで確かめる） |
 | `internal/handlers` | 読み取りのハンドラー（DB は `Reader` インターフェース。テストは偽の実装） |
 | `internal/testdb` | DB のテストが、テストごとに新しいデータベースを作る |
 | `difftest/` | Python の API との差分検査（標準ライブラリだけの Python。`run.sh` が全部用意する） |
 
-依存は標準ライブラリと `github.com/jackc/pgx/v5` だけ（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync・x/text）。
+依存は標準ライブラリと `github.com/jackc/pgx/v5`（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync・x/text）と、JWT の検証の `github.com/golang-jwt/jwt/v5`（v5.3.1。ES256 の署名とクレームの検査だけに使う。鍵の取得・保持・JWK の読み取りは自前）。
+
+## 認証（`GET /api/me`）
+
+仕様は `docs/spec-prototype.md` §2.1・§4.4、振る舞いの正本は `backend/app/jwt_auth.py`・`auth.py`、契約は `contract/test_me.py`・`test_me_unconfigured.py`・`test_auth_independence.py`。Python の `backend/tests/test_jwt_auth.py`・`test_me.py` の観点は、`internal/auth`・`internal/handlers/me_test.go` の Go のテストに移してある。
+
+- `AUTH_ISSUER`・`AUTH_JWKS_URL` が無い／形が不正なときは、トークンを見る前に 503（起動は止めない）。ほかの入口は、認証の設定にも JWKS の状態にも影響されず、JWKS を取りに行かない。DB も使わない。
+- 鍵は最初の `/api/me` の要求で取る（起動のときは取らない）。10 分覚え、未知の kid による取り直しは 60 秒に 1 回まで、鍵が 1 つも無いまま失敗したら 5 秒は取りに行かない（その間は待たせずに 503）。取り直しに失敗しても、前の鍵で続ける。同時に来た要求の取得は 1 回に束ねる。
+- 鍵なしで断れるもの（ヘッダーなし・形違い・alg が ES256 でない・kid なし）は、JWKS が落ちていても 401。鍵が要るものだけが 503。
+- ログに残すのは、失敗の種類（固定の語。`malformed`・`signature`・`expired` など）だけ。トークン・`Authorization`・JWKS の URL・通信のエラーの文は出さない。
+
+Python との意図した違い（応答の外から見える規則は同じ。どれも、より厳しい側）:
+
+- JWKS の取得は、転送（3xx）に従わない（設定した URL だけを取る。Python の `urllib` は従う）。環境の `HTTP_PROXY` も使わない。
+- 取得の待ちの上限 3 秒は、接続・応答・本文の読み込みの全部で数える（Python は、1 回の通信ごと）。
+- 本文が壊れていて、ヘッダーは正しいトークンは、JWKS が取れないときも 401（Python は、鍵を取りに行って 503）。鍵なしで断れるものは 401、という分け方に沿う。
+- JWK は、`crv` が `P-256`、`alg` があれば `ES256`、`use` があれば `sig` のものだけ（Python は、`alg` と `crv` の食い違う鍵を通しうる）。
+- `exp`・`nbf`・`iat` は JSON の数だけ（Python は、数を表す文字列も通す）。
 
 ## 検査
 

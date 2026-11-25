@@ -1,8 +1,8 @@
 // TownScan の API（Go）。設定 → DB の接続とスキーマの適用 → 待ち受け → 停止の合図（SIGINT・SIGTERM）で、処理中の応答を終えてから止まる。
 //
 // 決定: docs/decisions/0005-api-in-go.md（API は Go、解析は Python）。振る舞いの正本は backend/app/ と docs/spec-prototype.md §4.4。
-// いまあるのは読み取りのエンドポイントだけ（/api/health・/api/areas・/api/candidates・/api/candidates.geojson・/api/candidates/{id}・/api/metrics）。
-// 認証・検出画像・チャットは、あとの段で internal/handlers に足す。
+// いまあるのは読み取りのエンドポイント（/api/health・/api/areas・/api/candidates・/api/candidates.geojson・/api/candidates/{id}・/api/metrics）と、
+// 認証（/api/me。internal/auth）。検出画像・チャットは、あとの段で internal/handlers に足す。
 //
 // 使い方:
 //
@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"townscan/api/internal/auth"
 	"townscan/api/internal/config"
 	"townscan/api/internal/handlers"
 	"townscan/api/internal/httpx"
@@ -121,6 +122,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 func buildHandler(cfg config.Config, st handlers.Reader, logf func(string, ...any)) http.Handler {
 	router := handlers.New(handlers.Deps{
 		Store:       st,
+		Auth:        newAuthenticator(cfg, logf),
 		LLMProvider: cfg.LLMProvider,
 		GeminiModel: cfg.GeminiModel,
 		Logf:        logf,
@@ -131,6 +133,20 @@ func buildHandler(cfg config.Config, st handlers.Reader, logf func(string, ...an
 		httpx.SecurityHeaders(),
 		httpx.LimitBody(maxBodyBytes),
 	)
+}
+
+// newAuthenticator は、/api/me のログインの確認。ログインが未設定（cfg.Auth が nil）なら nil で、/api/me が 503 になるだけ（ほかの入口は影響を受けない）。
+// JWKS は、ここでは取りに行かない（最初の /api/me の要求まで取らない。web が先に起きていなくても、api は起動できる）。
+func newAuthenticator(cfg config.Config, logf func(string, ...any)) handlers.Authenticator {
+	if cfg.Auth == nil {
+		return nil
+	}
+	v, err := auth.NewVerifier(*cfg.Auth, logf)
+	if err != nil { // config が空にしないので、起きない。起きても、起動は止めない（ログインは任意の機能）
+		logf("ログインの検証を無効にしました: %v", err)
+		return nil
+	}
+	return v
 }
 
 // newServer は、タイムアウトを付けた http.Server。WriteTimeout は付けない（あとの段のチャット・ストリーミングを、途中で切らないため。
