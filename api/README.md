@@ -5,6 +5,7 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 - 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`・`POST /api/chat`（模擬モデルと Gemini。下の「チャット」）
 - 認証: `GET /api/me`（JWT を JWKS の公開鍵で検証。下の「認証」）
 - 検出画像: `GET /api/candidates/{id}/image`（写真タイルの切り出しと輪郭の描画。`internal/imaging`。Python の Pillow と構造が同じで、画素は平均絶対差 1.07 ほど。`difftest/image.sh` が確かめる）
+- 会話の履歴（ログイン中だけ）: `GET /api/conversations`・`GET /api/conversations/{id}/messages`・`DELETE /api/conversations/{id}`（どれも `Authorization: Bearer`・`Cache-Control: no-store`）と、`POST /api/chat` の任意の `conversation_id`（付けたときだけ、回答と一緒に保存する）。表は `internal/store/sql/history.sql`（API の起動のたびに流れる）。仕様は `docs/spec-prototype.md` §2.3・ADR 0006。保存期間の掃除は `history-cleanup`（下）
 - あとの段: Python の API を消す（ADR 0005 の 6）
 - 作らない: `/api/docs`・OpenAPI（契約は `docs/spec-prototype.md` §4.4 と `contract/` が持つ）
 
@@ -14,6 +15,7 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 
 | 場所 | 責務 |
 |---|---|
+| `cmd/history-cleanup` | 保存期間を過ぎた会話の履歴を消す運用者のコマンド。**既定は件数の表示だけ**で、`--apply` を付けたときだけ消す（件数以外は出さない。終了コード 0 / 1 = DB の失敗 / 2 = 使い方の誤り）。`docker compose run --rm --entrypoint /history-cleanup api --older-than-days 7 [--apply]` |
 | `cmd/api/main.go` | 設定 → DB とスキーマ → 待ち受け → 停止の合図（SIGINT・SIGTERM）で処理中の応答を終えてから止まる。`-healthcheck`（distroless 用） |
 | `internal/config` | 環境変数（`backend/app/config.py` と同じ名前・既定・検証）。秘密は `Secret` 型で、どの書き方でも伏せ字 |
 | `internal/apierr` | エラーの形（`{"error":{"code","message"}}`・422 の `details`） |
@@ -22,8 +24,8 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 | `internal/auth` | `GET /api/me` の JWT の検証: ES256 だけ・JWKS の取得と保持（600 秒）・iss / aud / exp / nbf / iat / sub の規則・`email` / `name` / `picture` の整形・`Authorization: Bearer` の読み方 |
 | `internal/imaging` | 検出画像: 候補の外周の緯度経度 → 写真タイル（`TILES_DIR`）の切り出し・拡縮（CatmullRom）・輪郭（縁取りと実線・破線）の描画 → PNG。入力の上限（正方形・一辺 1024 以下・8 MB 以下・外周 1 万頂点以下）と、`os.Root` による置き場の閉じ込め、同時に作る画像は 8 枚まで |
 | `internal/chat` | チャット（模擬モデルの規則・ツール・返答文・数字の検査 `GuardNumbers`・1 往復の `Service`）と、実 LLM の Gemini（`gemini.go` = 窓口: HTTP・再試行・期限・失敗の分類、`gemini_model.go` = function calling の往復）。`backend/app/chat/` と同じ応答。Python が作った期待値（golden）で照合する |
-| `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/` は `backend/db/` の写し。一致をテストで確かめる）・DB の `statement_timeout`（`WithStatementTimeout`） |
-| `internal/handlers` | 読み取りのハンドラーと `POST /api/chat`（DB は `Reader`、チャットは `Chatter` インターフェース。テストは偽の実装） |
+| `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/schema.sql`・`auth.sql` は `backend/db/` の写しで、一致をテストで確かめる。`history.sql` は Go だけの表）・会話の履歴の保存・一覧・削除（`history.go`）・DB の `statement_timeout`（`WithStatementTimeout`） |
+| `internal/handlers` | 読み取りのハンドラー・`POST /api/chat`・会話の履歴の 3 本（`history.go`。DB は `Reader`・`HistoryStore`、チャットは `Chatter` インターフェース。テストは偽の実装） |
 | `internal/testdb` | DB のテストが、テストごとに新しいデータベースを作る |
 | `difftest/` | Python の API との差分検査（標準ライブラリだけの Python。`run.sh` が JSON の差分、`image.sh` が検出画像の差分を、全部用意して流す） |
 

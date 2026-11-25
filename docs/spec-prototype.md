@@ -79,7 +79,7 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 
 ### 2.3 会話の履歴（ログイン中だけ）
 
-位置づけ: **仕様のみ。実装は Go への切り替え（[ADR 0005](decisions/0005-api-in-go.md)）のあと、Go の API にだけ入れる**（Python の API には入れない。同じ業務ロジックを 2 つの言語に置かない）。コードも DDL も、まだ無い。決定の理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。表 2 つの追加は承認済み（ユーザー、2026-11-25）だが、**§4.3 の DDL は仕様の案で、実行しない**。土台のユーザー決定は「履歴は DocuNavi と同じ型（ログイン中だけ・サーバーに保存・サイドバーに一覧・削除は 2 段階）。ログインは任意で、ログインしていないときは今までどおり画面の中だけの会話」。画面は §7.1、API の形は §4.4、表は §4.3。本文の〔J1〕〜〔J7〕の印は、**ユーザー決定ではなく、起草者の判断**（異議があれば直す。一覧は ADR 0006）。印の無い項目のうち、ユーザーが決めたものは ADR 0006 の U1〜U10 に載る。
+位置づけ: **API は Go に実装した（2026-11-25。`api/internal/store/history.go`・`api/internal/handlers/history.go`・`api/cmd/history-cleanup`）。画面（§7.1）は未実装。** Go の API にだけ入れ、Python の API には入れない（同じ業務ロジックを 2 つの言語に置かない）。決定の理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。表 2 つの追加は承認済み（ユーザー、2026-11-25）だが、**DDL（§4.3）は `api/internal/store/sql/history.sql` にあり、API の起動のたびに（すでにあるボリュームの DB にも）流れる**。土台のユーザー決定は「履歴は DocuNavi と同じ型（ログイン中だけ・サーバーに保存・サイドバーに一覧・削除は 2 段階）。ログインは任意で、ログインしていないときは今までどおり画面の中だけの会話」。画面は §7.1、API の形は §4.4、表は §4.3。本文の〔J1〕〜〔J7〕の印は、**ユーザー決定ではなく、起草者の判断**（異議があれば直す。一覧は ADR 0006）。印の無い項目のうち、ユーザーが決めたものは ADR 0006 の U1〜U10 に載る。
 
 #### 2.3.1 目的と範囲
 
@@ -110,7 +110,7 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 
 #### 2.3.2 表の設計
 
-DDL は §4.3（仕様の案。実行しない）。置き場は `api/internal/store/sql/history.sql`（新設の予定。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。
+DDL は §4.3。置き場は `api/internal/store/sql/history.sql`（実装済み。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。
 
 - **主キーは `(user_id, id)`。** `id` は画面が作る（§2.3.4）ので、別の人が同じ `id` を使っても、別の会話になる（衝突も、他人の会話の存在の確認もできない）。DocuNavi の `<利用者 ID>:<thread_id>` と同じ効果を、連結した文字列ではなく列で持つ。
 - **外部キーは `auth_user.id`（制約名 `conversations_user_fk`。`ON DELETE CASCADE`）。** 利用者の行が消えれば、会話も発言も消える（§2.3.7）。`auth_` の表は、これまでどおり web だけが書く。API は、履歴のために **`auth_user.id` の存在だけ**を読む（`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.1）。JWT は有効でも `auth_user` に行が無いとき（消された直後の 15 分間など）の**書き込み**（`conversation_id` つきの chat）は、**LLM を呼ぶ前**の存在の確認で **401** にする（§2.3.3・§2.3.4）。保存の段で外部キー違反（SQLSTATE 23503）になるのは、その確認の直後に行が消える競合だけで、**制約名が `conversations_user_fk` のときだけ 401**。読み取り（一覧・発言の取得・削除）は、行を確かめず、空・404 のままでよい（`auth_user` を余計に読まない）。
@@ -285,7 +285,7 @@ reason: "new_absent_2018" | "present_2018" | "ambiguous" | "edge"
 
 `runs(run_id pk, kind, created_at, model, params jsonb, notes)`・`areas(id pk, run_id, z, x, y, west, south, east, north, centroid_lon, centroid_lat, name, ward, municipality, name_source)`・`buildings(id bigserial pk, run_id, area_id, year, area_m2, prob_mean, geom jsonb)`・`candidates(id text pk, run_id, area_id, class, area_m2, west, south, east, north, centroid_lon, centroid_lat, geom jsonb, evidence jsonb, reason)`・`metrics(run_id pk, body jsonb)`。`class` は CHECK 制約。ローダーは冪等（同じ run_id を入れ直すと置き換える。トランザクション）。表示する現在の run は「最新の created_at」。
 
-**会話の履歴の表 2 つ**（§2.3。**仕様の案で、実行しない。** 表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。実装は Go への切り替えのあと、Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（新設の予定。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴は、その SQL の並びの `authSQL` のあとに `historySQL` を足す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
+**会話の履歴の表 2 つ**（§2.3。**実装済み**。表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（新設の予定。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴は、その SQL の並びの `authSQL` のあとに `historySQL` を足す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
 
 **承認の関門:** `historySQL` を `go:embed` へ足すコミットを main へ入れると、次の API の起動で、**すでにあるボリュームの DB に表が入る**。表の追加の承認は、この関門を通る承認として扱う（マージの前に、適用先の DB と影響を示す）。Python のローダー（`python -m app.load`）の `apply_schema` は、この表を作らない（使わない）。
 
@@ -335,9 +335,9 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 | GET `/api/candidates/{id}` | `CandidateDetail`（summary + evidence + 説明文のキー + 画像 URL + provenance） |
 | GET `/api/candidates/{id}/image?year=2018\|2023&size=512` | PNG。候補の外接矩形に余白（約 20 m）を足した切り出しをタイルから作り、輪郭を描く。タイルの外へは出ない |
 | GET `/api/metrics` | `eval.json` の内容 + provenance |
-| POST `/api/chat` | 入力 `{messages:[{role,content}], conversation_id?}`（`conversation_id` は任意。会話の履歴〔§2.3。仕様のみ〕を保存するときだけ付ける）、出力 `{message:{role:"assistant", content, results:ToolResult[], tool_calls:[{name,args}]}}`（`conversation_id` の有無で変わらない） |
+| POST `/api/chat` | 入力 `{messages:[{role,content}], conversation_id?}`（`conversation_id` は任意。会話の履歴〔§2.3〕を保存するときだけ付ける）、出力 `{message:{role:"assistant", content, results:ToolResult[], tool_calls:[{name,args}]}}`（`conversation_id` の有無で変わらない） |
 | GET `/api/me` | 任意のログイン（§2.1）の受け口。`Authorization: Bearer <JWT>` を検証し、`{sub, email, name, picture}` を返す |
-| GET `/api/conversations` | 会話の履歴（§2.3。**仕様のみ。実装は Go への切り替えのあと**）: 本人の会話の一覧。`Authorization: Bearer` が要る |
+| GET `/api/conversations` | 会話の履歴（§2.3。Go の API だけ）: 本人の会話の一覧。`Authorization: Bearer` が要る |
 | GET `/api/conversations/{conversation_id}/messages` | 同上: 会話の発言（古い順） |
 | DELETE `/api/conversations/{conversation_id}` | 同上: 会話を 1 件消す |
 
@@ -351,7 +351,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 - **503** `{error:{code:"unavailable", message}}`: `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無い、または URL の形が不正（ログインの設定が無い扱い。起動は止まらない。§2.1。JWT の有無を見る前に返す）、または JWKS を取りに行けず前に取れた鍵も無い。ほかの入口には影響しない。
 - 使うのはアカウントのロジック（ログインの確認・JWT と JWKS の疎通の確かめ）だけ。チャット・地図・詳細・精度などの入口は、これを呼ばず、これに依存しない。
 
-**会話の履歴の API**（§2.3。**仕様のみ。実装は Go への切り替えのあと。Python の API には入れない**。保存の動き・検査の順・上限は §2.3.4・§2.3.5）:
+**会話の履歴の API**（§2.3。**Go の API に実装済み。Python の API には入れない**。保存の動き・検査の順・上限は §2.3.4・§2.3.5）:
 
 - **共通**: ログインは `Authorization: Bearer <JWT>`（§2.1。ES256・`iss`・`aud`・`exp`・`sub` を検査。`GET /api/me` と同じ検証）。**利用者は、検証に通った JWT の `sub` だけから決める**（本文・クエリ・ヘッダーの別の値は使わない）。エラーは既存の形 `{error:{code,message}}`。422 は `details`（`loc`・`msg`）も付く。`details[].loc` は**文字列の配列**（例 `["path","conversation_id"]`・`["body","conversation_id"]`）で、`message` の側が先頭の `loc` を `.` でつないだ形（例「引数が不正です（path.conversation_id）」。`backend/app/errors.py`・`api/internal/apierr`）。入力値は応答に出さない。履歴の保存先が使えないときの文に、例外の内容・接続先・SQL を含めない。
 - **`Cache-Control: no-store`**: 3 本の API は、成功・失敗のどの応答にも（204・401・404・422・500・503 を含めて）付ける（人ごとに違う内容。`/api/me` と同じ）。ルーターが 3 経路に合わせたあとの応答だけが対象（経路もメソッドも合わない 404・405 は含めない）。`POST /api/chat` には付けない（既存のまま）。
@@ -618,9 +618,9 @@ DocuNavi の `ThreadSidebar` と同じ。
 | E6 | 実データを読み込み、DB の件数 = `candidates.geojson` の件数 = UI の件数 | メイン |
 | E7 | Chrome で、質問 → 結果カード → 拡大ビュー（地図・グラフ）→ 詳細（2018/2023 の写真）→ 精度の画面、の一連を操作して確認（スクリーンショット） | メイン |
 | E8 | `frontend` のテストが、回答の中の図と拡大ビュー（§7）を確かめる: ①最初の画面はチャットだけで、結果つきの回答が届いても、拡大ビューは開かず、画面は替わらない（図は回答の中に出る） ②**図の出る条件**: 件数＝地図とグラフ、比較＝グラフ、地図の表示＝地図。表・検出画像・精度・お断り・壊れた結果は出さない（件数・比較のカードに「グラフで見る」「地図で見る」は無く、地図の表示の「地図で見る」は残る） ③図の「地図を拡大」「グラフを拡大」・カードのボタンで、その回答の画面（地図・グラフ・写真の比較）が `role="dialog"`・`aria-modal="true"` で開き、「閉じる」・Esc で閉じて、開いたボタン（図の「拡大」を含む）へフォーカスが戻る（詳細の中の Esc は、詳細だけを閉じる） ④回答ごとにタブ・絞り込み・選んだ候補を保ち、**図で変えた絞り込み・選択が拡大ビューに引き継がれ（逆も）**、鍵（回答）を渡す操作が別の回答の状態を壊さない ⑤「新しい会話」で拡大ビューを閉じ、図も回答ごとの状態も捨てる ⑥比較のカードは上位 5 地区までで、5 を超えるとき「全 N 地区中 5 地区を表示」と出る ⑦**地図は、画面に近づくまでマウントしない**（`IntersectionObserver` が無い環境では、すぐマウントする）。一度マウントしたら保つ。図は名前つきの region（`aria-live="off"`）で、記録（`role="log"`）の中にあり、Tab で図の外へ抜けられる ⑧地図・グラフ・写真の比較・回答の条件の既存のテストが、拡大ビューの中で同じ振る舞いで通る | frontend |
-| E9 | 会話の履歴（§2.3・§4.3・§4.4・§7.1。**仕様のみ。実装は Go への切り替えのあと。まだ一度も流していない**）。次の 3 つが、すべて合格する（内訳は下の「E9 の内訳」）: ①`scripts/test-contract.sh go` が、構成 `history` の H-系（26 行）と、既存の構成へ足す H-A5〜A7（3 行）に加えて、既存の検査（H-A3 = `contract/test_auth_independence.py`。変更しない）まで、全件合格する。**Python の API には H-系を流さない**: `scripts/test-contract.sh python` では、H-系が deselect され、落ちない ②`api/` の `go vet` と `go test -race -count=1` が、下の「契約にしない」項目（並行・巻き戻し・LLM を呼ぶ前の拒否・ログ・保守コマンドなど）を含めて合格する ③`frontend` の型検査・lint・Vitest が、下の「画面（Vitest）」の項目を含めて合格する | api（Go）・contract・frontend |
+| E9 | 会話の履歴（§2.3・§4.3・§4.4・§7.1。**API（Go）は実装済みで、①②は合格した〔2026-11-25: 契約 660 件・Go のテスト 445 件〕。③の画面は未実装**）。次の 3 つが、すべて合格する（内訳は下の「E9 の内訳」）: ①`scripts/test-contract.sh go` が、構成 `history` の H-系（26 行）と、既存の構成へ足す H-A5〜A7（3 行）に加えて、既存の検査（H-A3 = `contract/test_auth_independence.py`。変更しない）まで、全件合格する。**Python の API には H-系を流さない**: `scripts/test-contract.sh python` では、H-系が deselect され、落ちない ②`api/` の `go vet` と `go test -race -count=1` が、下の「契約にしない」項目（並行・巻き戻し・LLM を呼ぶ前の拒否・ログ・保守コマンドなど）を含めて合格する ③`frontend` の型検査・lint・Vitest が、下の「画面（Vitest）」の項目を含めて合格する | api（Go）・contract・frontend |
 
-**E9 の内訳**（契約の検査 `contract/` に足すもの。**仕様のみ。いまの `contract/` に、これらの検査は無い**。DocuNavi の対応する検査は、`tests/test_threads.py` の関数名で示す）:
+**E9 の内訳**（契約の検査 `contract/` の H-系。**書き終えていて、Go の API が合格している**。DocuNavi の対応する検査は、`tests/test_threads.py` の関数名で示す）:
 
 **前提:** 契約の検査は、HTTP だけで叩く（アプリのコードを import しない）。履歴は、Python の API には入れない（ADR 0006 の D8）ので、新しい構成 **`history`**（環境は `main` と同じ。合成データ・偽の JWKS）を作り、`scripts/test-contract.sh` の既定の構成の並びには、**対象が `go` のときだけ**入れる。認証の設定が無い・JWKS に届かない・DB が止まる、の検査（H-A5〜A7）は、既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す。
 
