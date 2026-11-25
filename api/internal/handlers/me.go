@@ -29,24 +29,33 @@ var _ Authenticator = (*auth.Verifier)(nil)
 //
 // 応答はどれも Cache-Control: no-store。本文は固定の文（理由は返さない）。ログに残すのは失敗の種類だけ（トークン・ヘッダーの値は出さない）。
 func (a *api) me(w http.ResponseWriter, r *http.Request, _ httpx.Params) {
-	if a.d.Auth == nil {
-		httpx.WriteError(w, apierr.AuthNotConfigured())
+	identity, e := a.identify(r)
+	if e != nil {
+		httpx.WriteError(w, e)
 		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	a.writeJSON(w, httpx.ContentTypeJSON, identity)
+}
+
+// identify は、Authorization の JWT を検証して、ログイン中の人を返す。受け付けないときは、そのまま応答にできるエラー（/api/me と、会話の履歴の入口が使う）。
+// 設定が無ければ 503（トークンの有無・形を見る前に）、Authorization が無い・Bearer でない・JWT を受け付けない（期限切れなど）なら 401、
+// JWKS を取れず前に取れた鍵も無ければ 503。ログに残すのは失敗の種類だけ（トークン・ヘッダーの値は出さない）。
+func (a *api) identify(r *http.Request) (auth.Identity, *apierr.Error) {
+	if a.d.Auth == nil {
+		return auth.Identity{}, apierr.AuthNotConfigured()
 	}
 	token, ok := auth.BearerToken(r.Header.Get("Authorization"))
 	if !ok {
-		httpx.WriteError(w, apierr.NotLoggedIn())
-		return
+		return auth.Identity{}, apierr.NotLoggedIn()
 	}
 	identity, err := a.d.Auth.Verify(token)
 	switch {
 	case errors.Is(err, auth.ErrUnavailable):
-		httpx.WriteError(w, apierr.AuthUnavailable())
+		return auth.Identity{}, apierr.AuthUnavailable()
 	case err != nil:
 		a.logf("認証に失敗しました (reason=%s)", auth.Reason(err))
-		httpx.WriteError(w, apierr.NotLoggedIn())
-	default:
-		w.Header().Set("Cache-Control", "no-store")
-		a.writeJSON(w, httpx.ContentTypeJSON, identity)
+		return auth.Identity{}, apierr.NotLoggedIn()
 	}
+	return identity, nil
 }

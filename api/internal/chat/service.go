@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"townscan/api/internal/store"
 )
@@ -30,6 +31,9 @@ type Reply struct {
 	Content   string   `json:"content"`
 	Results   []Result `json:"results"`
 	ToolCalls []Call   `json:"tool_calls"`
+	// RunCreatedAt は、この回答を作ったときに読んだ run の created_at（run が無かったら nil）。応答には出さない（json:"-"）。
+	// 会話の履歴が、回答と一緒に保存する（開き直したとき、いまの解析結果に基づくかを見分ける。仕様 §2.3.2）。
+	RunCreatedAt *time.Time `json:"-"`
 }
 
 // Service は、チャットの 1 往復を行う。
@@ -125,5 +129,10 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 	if replaced {
 		s.logf("返答文を安全なテンプレートに差し替えました（通算 %d 回）", s.replaced.Add(1))
 	}
-	return Reply{Role: "assistant", Content: guarded, Results: results, ToolCalls: calls}, nil
+	reply := Reply{Role: "assistant", Content: guarded, Results: results, ToolCalls: calls}
+	if run != nil {
+		created := run.CreatedAt
+		reply.RunCreatedAt = &created
+	}
+	return reply, nil
 }

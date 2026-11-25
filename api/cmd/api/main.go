@@ -140,8 +140,11 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 // buildHandler は、ルーターをミドルウェアで包む。外側から: アクセスログ → panic の回復 → セキュリティヘッダー → 本文の上限 → 要求全体の期限 → ルーター。
 // アクセスログが外側なのは、panic を 500 にしたあとの状態を記録するため。
 func buildHandler(cfg config.Config, st handlers.Reader, chatSvc handlers.Chatter, logf func(string, ...any)) http.Handler {
+	// 会話の履歴は、同じ DB の窓口（*store.Store）が持つ。読み取りだけの偽の Store（テスト）は持たないので、履歴の入口は作られない
+	history, _ := st.(handlers.HistoryStore)
 	router := handlers.New(handlers.Deps{
 		Store:       st,
+		History:     history,
 		Auth:        newAuthenticator(cfg, logf),
 		LLMProvider: cfg.LLMProvider,
 		GeminiModel: cfg.GeminiModel,

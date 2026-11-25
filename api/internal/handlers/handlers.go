@@ -44,7 +44,9 @@ type Deps struct {
 	TilesDir string
 	// POST /api/chat を行うもの。nil なら、このルートは作らない（chat.go）
 	Chat Chatter
-	Logf httpx.Logf
+	// 会話の履歴（history.go）。nil なら、履歴の 3 本は作らず、POST /api/chat は conversation_id を見ない
+	History HistoryStore
+	Logf    httpx.Logf
 }
 
 // 検証の形（routes.py の AREA_ID_PATTERN・CANDIDATE_ID_PATTERN・ClassKey・Query の範囲）
@@ -76,8 +78,9 @@ func New(d Deps) *httpx.Router {
 	rt.Handle(http.MethodGet, "/api/candidates/{candidate_id}", a.candidateDetail)
 	rt.Handle(http.MethodGet, "/api/metrics", a.metrics)
 	rt.Handle(http.MethodGet, "/api/me", a.me)
-	a.registerImage(rt) // GET /api/candidates/{candidate_id}/image（image.go）
-	a.addChatRoute(rt)  // POST /api/chat（chat.go。Deps.Chat が nil なら作らない）
+	a.registerImage(rt)    // GET /api/candidates/{candidate_id}/image（image.go）
+	a.addChatRoute(rt)     // POST /api/chat（chat.go。Deps.Chat が nil なら作らない）
+	a.addHistoryRoutes(rt) // GET・DELETE /api/conversations…（history.go。Deps.History が nil なら作らない）
 	return rt
 }
 

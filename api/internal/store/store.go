@@ -119,8 +119,11 @@ type Run struct {
 }
 
 // CreatedAtISO は、Python の datetime.isoformat()（UTC）と同じ書き方。マイクロ秒が 0 でなければ 6 桁で付ける。
-func (r Run) CreatedAtISO() string {
-	t := r.CreatedAt.UTC()
+func (r Run) CreatedAtISO() string { return ISOTime(r.CreatedAt) }
+
+// ISOTime は、時刻を、Python の datetime.isoformat()（UTC）と同じ書き方にする。マイクロ秒が 0 でなければ 6 桁で付ける。
+func ISOTime(at time.Time) string {
+	t := at.UTC()
 	s := t.Format("2006-01-02T15:04:05")
 	if us := t.Nanosecond() / 1000; us != 0 {
 		s += fmt.Sprintf(".%06d", us)

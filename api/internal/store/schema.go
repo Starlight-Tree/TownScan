@@ -18,10 +18,15 @@ var schemaSQL string
 //go:embed sql/auth.sql
 var authSQL string
 
+// history.sql は、会話の履歴の表（Go の API だけが使う。backend/db/ に写しは無い）。auth_user を参照するので、authSQL のあとに流す。
+//
+//go:embed sql/history.sql
+var historySQL string
+
 // 同時に流れても（api の起動とローダー）スキーマ適用が競合しないための鍵。backend/app/db.py の _SCHEMA_LOCK_KEY と同じ値
 const schemaLockKey int64 = 704_218_001
 
-// ApplySchema は、schema.sql と auth.sql を、1 つのトランザクションで流す。どちらも冪等（既存の表・行は変えない）なので、
+// ApplySchema は、schema.sql・auth.sql・history.sql を、この順に 1 つのトランザクションで流す。どれも冪等（既存の表・行は変えない）なので、
 // すでにあるボリュームにも、起動のたびに流してよい。SQL の誤りはエラーのまま返す（起動を止める）。
 func (s *Store) ApplySchema(ctx context.Context) error {
 	c, err := s.conn(ctx)
@@ -37,7 +42,7 @@ func (s *Store) ApplySchema(ctx context.Context) error {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", schemaLockKey); err != nil {
 		return classify(err)
 	}
-	for _, sql := range []string{schemaSQL, authSQL} {
+	for _, sql := range []string{schemaSQL, authSQL, historySQL} {
 		// 引数なしの Exec は単純プロトコルで送られ、複数の文を 1 度に流せる
 		if _, err := tx.Exec(ctx, sql); err != nil {
 			return classify(err)

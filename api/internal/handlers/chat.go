@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"townscan/api/internal/apierr"
@@ -13,7 +14,8 @@ import (
 )
 
 // POST /api/chat（backend/app/routes.py の chat）。会話（messages）を受け、ツールの結果つきの返答を返す。
-// サーバーは会話を保存しない。文脈は、送られた messages の末尾 chat.ContextMessages 件だけから作る。
+// 保存は、任意の conversation_id が付いた要求だけ（ログイン中の会話の履歴。history.go・仕様 §2.3）。付けなければ、保存せず Authorization も見ない。
+// 文脈は、保存の有無に関わらず、送られた messages の末尾 chat.ContextMessages 件だけから作る（保存した発言から組み直さない）。
 // 本文の検証（形・件数・文字数）は、Pydantic のモデルと同じ場所（loc）・同じ文言のエラー（422）にする。入力値は応答に出さない。
 
 // Chatter は、チャット 1 往復を行うもの。*chat.Service が満たす。テストは偽の実装を差し込む。
@@ -41,6 +43,8 @@ const (
 	pdNotString     = "Input should be a valid string"
 	pdBadRole       = "Input should be 'user' or 'assistant'"
 	pdTooShort      = "List should have at least 1 item after validation, not 0"
+	// conversation_id つきの要求で、NUL（U+0000）を含む発言を断る文（Pydantic に同じ検査は無い。TownScan 固有。仕様 §2.3.4）
+	pdNul = "String should not contain NUL characters"
 )
 
 var (
@@ -64,6 +68,10 @@ func (a *api) chat(w http.ResponseWriter, r *http.Request, _ httpx.Params) {
 		return
 	}
 	messages, details := parseChatRequest(body)
+	convID, hasConv, convDetail := parseConversationID(body)
+	if convDetail != nil {
+		details = append(details, *convDetail)
+	}
 	if len(details) > 0 {
 		httpx.WriteError(w, apierr.Validation(details))
 		return
@@ -71,6 +79,26 @@ func (a *api) chat(w http.ResponseWriter, r *http.Request, _ httpx.Params) {
 	if last := messages[len(messages)-1]; last.Role != "user" || chat.IsBlank(last.Content) {
 		httpx.WriteError(w, apierr.New(http.StatusUnprocessableEntity, "validation_error", chatLastMessageRule))
 		return
+	}
+	// conversation_id つき（会話の履歴。history.go）: 検査の順は、本文（形・空でない最後の user・conversation_id の形・NUL）→ ログイン → 利用者の行 →
+	// 発言数の上限 → 回答の作成 → 保存。回答の作成（LLM）の前に、すべて済ませる（拒否された要求で課金しない）。
+	// conversation_id が無い（または null）要求は、今までと同じ（Authorization を見ない・保存しない）
+	save := hasConv && a.d.History != nil
+	var userID string
+	if save {
+		if details := nulDetails(messages); len(details) > 0 {
+			httpx.WriteError(w, apierr.Validation(details))
+			return
+		}
+		identity, e := a.identify(r)
+		if e != nil {
+			httpx.WriteError(w, e)
+			return
+		}
+		userID = identity.Sub
+		if !a.precheckConversation(w, r, userID, convID) {
+			return
+		}
 	}
 	reply, err := a.d.Chat.Answer(r.Context(), messages)
 	if err != nil {
@@ -86,9 +114,52 @@ func (a *api) chat(w http.ResponseWriter, r *http.Request, _ httpx.Params) {
 		a.fail(w, err)
 		return
 	}
+	if save && !a.saveConversationTurn(w, r, userID, convID, messages[len(messages)-1].Content, reply) {
+		return // 保存できなかったときは、回答を返さない（回答だけ見えて履歴に無い食い違いを作らない）
+	}
 	a.writeJSON(w, httpx.ContentTypeJSON, struct {
 		Message chat.Reply `json:"message"`
 	}{reply})
+}
+
+// parseConversationID は、本文の conversation_id（任意。会話の履歴を保存するときだけ付ける）を読む。
+// 無い・null は「無し」（present=false）。文字列で、形（^[A-Za-z0-9_-]{1,128}$）に合えば、その値。合わなければ 422 の項目（["body","conversation_id"]）。
+// 空文字は「無し」にしない（形に合わないので 422。DocuNavi の古い呼び出しとの互換は、TownScan には無い）。本文が JSON の object でなければ、何も返さない
+// （それは parseChatRequest が 422 にする）。
+func parseConversationID(b httpx.Body) (id string, present bool, d *apierr.Detail) {
+	if b.Kind == httpx.BodyMissing || b.Kind == httpx.BodyOpaque {
+		return "", false, nil
+	}
+	obj, ok := b.Value.(map[string]any)
+	if !ok {
+		return "", false, nil
+	}
+	raw, ok := obj["conversation_id"]
+	if !ok || raw == nil {
+		return "", false, nil
+	}
+	s, isStr := raw.(string)
+	if !isStr {
+		x := detail(pdNotString, "conversation_id")
+		return "", false, &x
+	}
+	if msg := conversationIDPattern.Check(s); msg != "" {
+		x := detail(msg, "conversation_id")
+		return "", false, &x
+	}
+	return s, true, nil
+}
+
+// nulDetails は、NUL（U+0000）を含む発言の 422 の項目（["body","messages","<番号>","content"]。番号は文字列）。
+// 保存（text は SQLSTATE 22021、jsonb は 22P05）に失敗して 500 になり、LLM の費用だけが掛かるのを避けるため、LLM を呼ぶ前に断る。取り除いて保存はしない。
+func nulDetails(messages []chat.Message) []apierr.Detail {
+	var out []apierr.Detail
+	for i, m := range messages {
+		if strings.ContainsRune(m.Content, 0) {
+			out = append(out, detail(pdNul, "messages", strconv.Itoa(i), "content"))
+		}
+	}
+	return out
 }
 
 func detail(msg string, loc ...string) apierr.Detail {

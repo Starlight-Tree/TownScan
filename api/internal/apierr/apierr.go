@@ -154,3 +154,13 @@ func Write(w http.ResponseWriter, e *Error) {
 	w.WriteHeader(e.Status)
 	_, _ = w.Write(b)
 }
+
+// ConversationNotFound は、会話の履歴の 404（会話が無い。他人の会話も同じ文。存在を確かめさせない。仕様 §2.3.7・§4.4）。
+func ConversationNotFound() *Error {
+	return New(http.StatusNotFound, "not_found", "会話が見つかりません")
+}
+
+// ConversationFull は、1 会話の発言数の上限（500 件）に達したときの 422（回答の作成の前に断る。仕様 §2.3.5）。
+func ConversationFull() *Error {
+	return New(http.StatusUnprocessableEntity, "conversation_full", "この会話は長くなりすぎました。新しい会話を始めてください")
+}
