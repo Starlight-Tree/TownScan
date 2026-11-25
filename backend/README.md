@@ -8,7 +8,7 @@ FastAPI（Python 3.13）・Postgres 17（psycopg 3・SQL は自前でパラメ�
 scripts/dev-up.sh [--no-web]                      # ホストで。.env 作成 → ビルド → compose up → healthy 待ち → 実データがあれば読み込み
                                                   # .env が無いのに DB のボリュームが残っているときは、パスワードを作り直さず止まる（DB と合わなくなるため）
 scripts/test-backend.sh [pytest の引数]            # ホストで。使い捨ての Postgres（townscan-test-db・256m）でテストを流し、終わったら片付ける
-docker compose exec -T api python -m app.load --run /data/townscan/run1/out [--check]   # pipeline の出力を DB へ（冪等）
+docker compose run --rm loader python -m app.load --run /data/townscan/run1/out [--check]   # pipeline の出力を DB へ（冪等。api は Go なので、読み込みは loader で）
 python tests/synthetic.py --out DIR [--tiles DIR]  # 合成データ（kind=synthetic）の書き出し。tests/fixtures/synthetic_run はその写し
 ```
 

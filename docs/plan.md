@@ -50,7 +50,7 @@
 | P5 | **GEE 層（拡張 1。go/no-go あり）**: 衛星の年次埋め込みの差で、変化の当たり（ヒートマップ）を事前計算。チャットの道具に追加。**始める前に小検証**: 熊本の 2018→2023 で、ヒートマップが手ラベルの新築棟を何割拾うか | 小検証の数字が出て、go/no-go をユーザーが決める。go なら、事前計算の結果が静的に配信され、チャットから呼べる。写真が無い期間は UI で明示 | 15〜30 h |
 | P6 | **パネル（拡張 2）**: 先に、0.5 m/px でパネルが見えるかを確かめる。事前学習モデルでの推論と評価 | 指標が、参考コンペの尺度で出る。誤りの例も示す | 30〜60 h |
 | P7 | 公開: README・スクリーンショット・限界・デモ。公開前の規約の確認（下記） | 他人が README だけで起動できる | 8〜12 h |
-| PG | **API を Go にする**（[ADR 0005](decisions/0005-api-in-go.md)。2026-11-25 承認）: 契約の検査 `contract/` を先に作り、Go の API（`api/`）が満たしたら Python の API を消す。順序は ADR の「結果」。画像認識・差分・評価・データの読み込み（`pipeline/`・`app.load`）と GEE の事前計算は Python のまま | ①`contract/` が、いまの Python の API で全件合格する。②Go の API が `contract/` に全件合格する（読み取り → 認証 → 検出画像 → チャットの順）。③`compose.yaml` の api が Go になり、Python の API が消え、`scripts/verify.sh` の全段（`go vet`・`go test -race` を含む）と実機の `scripts/dev-up.sh` で、画面の操作が従来どおり | — |
+| PG | **API を Go にする**（[ADR 0005](decisions/0005-api-in-go.md)。2026-11-25 承認）: 契約の検査 `contract/` を先に作り、Go の API（`api/`）が満たしたら Python の API を消す。順序は ADR の「結果」。画像認識・差分・評価・データの読み込み（`pipeline/`・`app.load`）と GEE の事前計算は Python のまま | ①`contract/` が、いまの Python の API で全件合格する。②Go の API が `contract/` に全件合格する（読み取り → 認証 → 検出画像 → チャットの順）。③`compose.yaml` の api が Go になり（**済み 2026-11-25**。FastAPI 版は Gemini が Go に入るまで `compose.python-api.yaml`）、Python の API が消え、`scripts/verify.sh` の全段（`go vet`・`go test -race` を含む）と実機の `scripts/dev-up.sh` で、画面の操作が従来どおり | — |
 
 **たたき台（2026-11-24 追加）:** P2〜P4 を薄く一通り通し、ローカルで動いて UI で操作できる縦切りを先に作る。仕様・データの契約・出口条件（E1〜E8）は [spec-prototype.md](spec-prototype.md)。範囲は熊本の 12 地区で、GEE・パネル・公開は含まない。
 

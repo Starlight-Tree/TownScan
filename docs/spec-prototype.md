@@ -9,6 +9,7 @@
 改訂 2026-11-25（6）: `/` の画面（§7）を、実装に合わせて直した。分類の凡例を地図の上から外して集計の帯のチェックボックスへ移し、地図についての通知を地図の下の 1 行の帯へ移した。選択中の候補は、地図に重なるカード（地図の大きさは変わらない）にし、読み上げを足した。「拡大」の列幅を 340px から 280px にした。チャットは、開いた直後に説明の見出しから読み始められるようにした。詳細（写真の比較）は、「写真の比較」が見えるまでマウントも通信もしない。詳細を閉じたあとのフォーカスが body に落ちないようにした。回答の「対象・条件」は、右の絞り込みと同じ「最後の `count` か `compare`」から作る。API の振る舞いは変えない。**実画面（ブラウザー）では未確認**（コードと jsdom のテストで確かめた。幅の見積もりは CSS からの計算）。
 改訂 2026-11-25（7）: `/` の最初の画面（§7）を、**チャットだけ**に変えた（旧: 会話の前から右に地図の結果領域が開いていた）。結果領域は、結果つきの回答か「地図で見る」などの操作で開き、「新しい会話」で閉じる。知らせの live region を結果領域の外へ出した。
 改訂 2026-11-25（8）: `/` の画面（§7）を、**チャットだけの 1 列と「拡大ビュー」**に変えた（ユーザー決定 2026-11-25「そもそも　チャットウィンドウの中に回答全部出して　最大化ボタンみたいなのでキャンバスにした方がいい？」→ 案 D・既定案どおり）。常設の右の結果領域をなくし、結果は回答カードの中に出す。カードのボタン（「グラフで見る」「地図で見る」「詳細」など）を押すと、その回答の地図・グラフ・写真の比較が、大きなダイアログ（狭い幅では全面のシート）で開く。回答が届いても、画面は自動で開かない・替わらない。回答の条件の反映・詳細・地図の中身は、拡大ビューの中で今までと同じ。比較のカードは上位 5 地区までにした。API の振る舞いは変えない。**この改訂は仕様だけで、実装はまだ**（実装したら、この注を消す）。
+改訂 2026-11-25（9）: **`compose.yaml` の api を Go に切り替えた**（ユーザー承認 2026-11-25「y」）。api は `api/` の Go（mem_limit 1g・`GOMEMLIMIT`・`/api -healthcheck`）。FastAPI 版は `compose.python-api.yaml`（`scripts/dev-up.sh --api python`）として、Gemini の窓口が Go に入るまで残す。データの読み込み（`app.load`）は、常駐しない `loader`（Python）で行う（`docker compose run --rm loader python -m app.load …`）。Go の API は `LLM_PROVIDER=gemini` で起動を止める（黙って模擬に落とさない）。API の契約（§4）は変えない。
 位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）を、薄く一通り通す。GEE 層（P5）・パネル（P6）・公開（P7）は対象外。
 
 ## 1. 何ができれば「たたき台」か
@@ -24,12 +25,12 @@
 ## 2. 構成
 
 ```
-host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送──> api (FastAPI, 127.0.0.1:8500) ──> db (Postgres 17, 公開しない)
+host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送──> api (Go, 127.0.0.1:8500) ──> db (Postgres 17, 公開しない)
                                                                   └─ ./data/townscan を読み取り専用でマウント（写真タイル）
 ```
 
 - 起動はホストの Docker Compose（`compose.yaml`）。ポートは `127.0.0.1` だけに公開（既存の jobnavi 3200/8200・shoporder 3400/8400・docunavi 5433 と重ねない）。db は公開しない。
-- Docker VM は 8 GB で、他プロジェクトが約 5.3 GB を使っている。**本番ビルド（`next build` + standalone 実行）**にし、compose の `mem_limit` を db 256m・api 512m・web 512m とする。実測の使用量を報告する。
+- Docker VM は 8 GB で、他プロジェクトが約 5.3 GB を使っている。**本番ビルド（`next build` + standalone 実行）**にし、compose の `mem_limit` を db 256m・api 1g（Go の JSON の読み込みが本文の数十倍のメモリーを使うため。FastAPI 版は 512m）・web 512m とする。実測の使用量を報告する。
 - **メモリーの制約（2026-11-24 夜に実測）:** Docker VM の空きは約 0.5 GB（`free -m` の available 519 MB。jobnavi-frontend 1.9 GB・shoporder-frontend 3.3 GB が常駐）。ここで `next build`・`tsc`・`vitest` のような重い処理を流すと、OOM キラーが他プロジェクトのコンテナを落とす恐れがある。**他プロジェクトのコンテナは止めない・触らない。** よって **frontend の重い処理（`npm ci`・型検査・テスト・`next build`）はホストの Node 24 で行う**（理由: VM の空きメモリー。ホストの RAM は 17 GB。Node 24 は `npx -y -p node@24 -- <コマンド>` で得られる。実測で node v24.22.3）。Python の処理（pipeline・backend の単体テスト）は軽いので開発コンテナで行う。
 - web のイメージは 2 つの target を持つ: `runtime`（イメージの中で `npm ci` と `next build` まで行う。メモリーに余裕のある環境・CI 用）と `prebuilt`（ホストで作った `.next/standalone` を載せるだけ。この VM ではこちらを使う）。`scripts/dev-up.sh` は `WEB_BUILD=host`（既定）／`docker` で選ぶ。
 - コード・テストの実行は、可能なものは開発コンテナ（`devcontainer exec --workspace-folder /Users/Home/Projects/TownScan bash -lc '…'`、venv は `~/.venvs/townscan`）で行う。compose・DB を使うものはホストの Docker。

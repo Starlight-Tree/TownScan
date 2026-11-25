@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # TownScan をローカルで起動する（ホストの Docker。開発コンテナの中では実行しない）。仕様: docs/spec-prototype.md §2・§8 E5
-# 使い方: scripts/dev-up.sh [--no-web]
+# 使い方: scripts/dev-up.sh [--no-web] [--api go|python]
 #   --no-web       db と api だけ起動する（frontend がまだ無いとき・API だけ確かめたいとき）
+#   --api python   API を FastAPI 版にする（既定は Go。LLM_PROVIDER=gemini のときに要る。Gemini の窓口は、まだ Go に無い。ADR 0005）
 #   WEB_BUILD=host    （既定）frontend をホストの Node 24 でビルドしてから、できた .next/standalone を載せて web を作る
 #   WEB_BUILD=docker  web のイメージの中でビルドする（Docker VM に空きメモリーがあるとき・CI 用）
 # やること: .env を作る（無ければ。乱数のパスワード。値は表示しない）→ frontend をビルド → docker compose up -d --build
@@ -28,13 +29,20 @@ random_hex() {
 }
 
 NO_WEB=0
-for arg in "$@"; do
-  case "$arg" in
+API_IMPL=go
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-web) NO_WEB=1 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
-    *) die "不明な引数: $arg（使い方: scripts/dev-up.sh [--no-web]）" ;;
+    --api) [ $# -ge 2 ] || die "--api には go か python を付けてください"; API_IMPL="$2"; shift ;;
+    --api=*) API_IMPL="${1#--api=}" ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    *) die "不明な引数: $1（使い方: scripts/dev-up.sh [--no-web] [--api go|python]）" ;;
   esac
+  shift
 done
+case "$API_IMPL" in go|python) ;; *) die "--api は go か python です（実際: $API_IMPL）" ;; esac
+# FastAPI 版は、上書きのファイルを重ねる（このスクリプトの中の docker compose は、全部これを読む）
+if [ "$API_IMPL" = python ]; then export COMPOSE_FILE="compose.yaml:compose.python-api.yaml"; fi
 WEB_BUILD="${WEB_BUILD:-host}"
 case "$WEB_BUILD" in host|docker) ;; *) die "WEB_BUILD は host か docker です（実際: $WEB_BUILD）" ;; esac
 
@@ -50,6 +58,12 @@ if [ -n "$INFISICAL_PROJECT" ]; then
   case "$INFISICAL_PROJECT$INFISICAL_ENV" in
     *[!A-Za-z0-9_-]*) die "TOWNSCAN_INFISICAL_PROJECT_ID・TOWNSCAN_INFISICAL_ENV には、英数字・ハイフン・アンダースコアだけを使えます" ;;
   esac
+fi
+
+# Go の API は、まだ LLM_PROVIDER=gemini を使えない（起動時に止まる）。.env に書いてあるなら、起動する前に止めて、直し方を出す
+# （.env の LLM_PROVIDER の行だけを、値を表示せずに調べる。Infisical の値は、ここでは読めない。その場合は、api が unhealthy になったとき、下で同じ案内を出す）。
+if [ "$API_IMPL" = go ] && [ -f .env ] && grep -Eq '^LLM_PROVIDER=gemini[[:space:]]*$' .env; then
+  die ".env が LLM_PROVIDER=gemini です。Gemini の窓口は、まだ Go の API に無く、起動時に止まります。scripts/dev-up.sh --api python（FastAPI 版）で起動するか、LLM_PROVIDER を mock にしてください"
 fi
 
 # 1. .env（秘密は乱数で作り、値は表示しない。既にあれば触らない）
@@ -146,6 +160,9 @@ for svc in "${SERVICES[@]}"; do
       healthy) echo "   $svc: healthy"; break ;;
       unhealthy)
         docker compose logs --tail 30 "$svc" >&2 || true
+        if [ "$svc" = api ] && [ "$API_IMPL" = go ]; then
+          echo "ヒント: Go の API は LLM_PROVIDER=gemini を、まだ使えません（ログに「設定の誤り」が出ているとき）。scripts/dev-up.sh --api python で起動できます。" >&2
+        fi
         # パスワードの食い違い（パスワードを作り直した・変えた）は api のログには出ない。db のログで見分けて、直し方を出す
         db_log="$(docker compose logs --tail 50 db 2>&1 || true)"
         case "$db_log" in *"password authentication failed"*) pgdata_hint ;; esac
@@ -156,13 +173,14 @@ for svc in "${SERVICES[@]}"; do
   done
 done
 
-# 5. 実データがあれば読み込む（api のコンテナの中で。データは読み取り専用でマウント済み）
+# 5. 実データがあれば読み込む（Python の loader で。api が Go でも、読み込みは Python の仕事。データは読み取り専用でマウント済み）
 if [ -f data/townscan/run1/out/run.json ]; then
   echo "== 実データを読み込む（同じ run_id なら置き換え）"
-  docker compose exec -T api python -m app.load --run /data/townscan/run1/out
+  docker compose build loader
+  docker compose run --rm -T loader python -m app.load --run /data/townscan/run1/out
 else
   echo "== 実データ（data/townscan/run1/out/run.json）がまだ無いので、読み込みは飛ばします。"
-  echo "   pipeline の出力を置いたあとで: docker compose exec -T api python -m app.load --run /data/townscan/run1/out"
+  echo "   pipeline の出力を置いたあとで: docker compose run --rm -T loader python -m app.load --run /data/townscan/run1/out"
 fi
 
 # 6. 結果
@@ -170,7 +188,11 @@ echo
 echo "== 状態"
 curl -fsS http://127.0.0.1:8500/api/health || true
 echo
-echo "API  : http://127.0.0.1:8500/api/health  （仕様: http://127.0.0.1:8500/api/docs）"
+if [ "$API_IMPL" = python ]; then
+  echo "API  : http://127.0.0.1:8500/api/health  （FastAPI 版。仕様: http://127.0.0.1:8500/api/docs）"
+else
+  echo "API  : http://127.0.0.1:8500/api/health  （Go。仕様のページは無い。契約は docs/spec-prototype.md §4.4 と contract/）"
+fi
 if [ "$NO_WEB" = 0 ]; then
   echo "画面 : http://127.0.0.1:3500"
   # Cookie はホスト単位。ログインの往復（Google → /api/auth/callback/google）の state の Cookie は BETTER_AUTH_URL と同じホスト（localhost）に付くので、

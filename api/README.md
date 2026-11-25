@@ -1,11 +1,11 @@
 # api/（Go の API）
 
-TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは、土台・読み取り API・認証・検出画像・チャット（模擬モデルだけ）**で、`compose.yaml` はまだ Python の API を指している。
+TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは、土台・読み取り API・認証・検出画像・チャット（模擬モデルだけ）**で、`compose.yaml` の api は、この Go の API（2026-11-25 に切り替えた。FastAPI 版は `compose.python-api.yaml`。Gemini が Go に入るまで残す）。
 
 - 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`・`POST /api/chat`（模擬モデル。下の「チャット」）
 - 認証: `GET /api/me`（JWT を JWKS の公開鍵で検証。下の「認証」）
 - 検出画像: `GET /api/candidates/{id}/image`（写真タイルの切り出しと輪郭の描画。`internal/imaging`。Python の Pillow と構造が同じで、画素は平均絶対差 1.07 ほど。`difftest/image.sh` が確かめる）
-- あとの段（ルートを足すだけでよい形にしてある）: チャットの Gemini → 切り替え
+- あとの段（ルートを足すだけでよい形にしてある）: チャットの Gemini → Python の API を消す
 - 作らない: `/api/docs`・OpenAPI（契約は `docs/spec-prototype.md` §4.4 と `contract/` が持つ）
 
 振る舞いの正本は `backend/app/`・`backend/tests/`・`docs/spec-prototype.md`。JSON のキー・型・並び順・数の書式（Python の `100.0`・`1e-05`）・検証エラーの文言・307 の Location・405 の本文まで、Python の API と**バイト列が同じ**になるように作ってある（`difftest/` が確かめる）。

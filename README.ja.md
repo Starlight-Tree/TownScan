@@ -34,7 +34,7 @@ flowchart LR
 
 質問は API のチャットを通ります。規則ベースの模擬モデル（Gemini は任意）がツール（件数・比較・一覧・検出画像）を選び、返答はツールの結果から作ります。数字の検査が、その結果に無い数字を含む返答を、安全な文に差し替えます。
 
-切り替え（ADR 0005 の最後の段）までは、`compose.yaml` は同じ API の FastAPI 版を動かしています。Go の API は同じ契約の検査（`contract/`）に合格し、FastAPI と応答ごとに比べています（`api/difftest/`。検出画像は画素の差）。Gemini はまだ呼べないので、`LLM_PROVIDER=gemini` には FastAPI 版が要ります。
+`compose.yaml` は Go の API を動かします。FastAPI 版（`backend/`）が残っているのは 1 つの理由だけです。Gemini がまだ Go に無いので、`LLM_PROVIDER=gemini` には `scripts/dev-up.sh --api python` が要ります。Go の API は同じ契約の検査（`contract/`）に合格し、FastAPI と応答ごとに比べています（`api/difftest/`。検出画像は画素の差）。データの読み込みは Python のままです（`docker compose run --rm loader python -m app.load …`）。
 
 データは、必要なときに流すオフラインの処理で作ります。
 

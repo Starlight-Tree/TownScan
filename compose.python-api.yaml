@@ -1,0 +1,12 @@
+# api を FastAPI 版（backend/）に替える上書き。使い方: scripts/dev-up.sh --api python（compose の -f を自分で付けるなら: docker compose -f compose.yaml -f compose.python-api.yaml …）
+# いつ要るか: LLM_PROVIDER=gemini のとき。Gemini の窓口は、まだ Go に無い（ADR 0005 の 5。Go に作ったら、このファイルと backend/app の API を消す）。
+# 入口・環境変数・ポート・ネットワーク・名前（townscan-api）は compose.yaml と同じ。違うのは、イメージ・メモリー・ヘルスチェックだけ。
+# GOMEMLIMIT（compose.yaml の api）は、Python は読まないので、残っていても害は無い。
+services:
+  api:
+    build:
+      context: ./backend
+      target: runtime
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
