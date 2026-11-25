@@ -71,25 +71,18 @@ npx -y -p node@24 -- sh -c 'npm ci && npm run verify'   # 型検査 → lint →
 
 `next build` は、書体 Inter を Google Fonts（fonts.googleapis.com・fonts.gstatic.com）からビルド時に取得する（`next/font/google`。JobNavi・DocuNavi と同じ）。ビルドの環境は外部に出られること。実行時には出ない。
 
-## 画面を確かめる（スタブ API）
+## 画面を確かめる（実 API）
 
 ```sh
-npx -y -p node@24 -- sh -c 'MOCK_API_PORT=8599 node dev/mock-api.mjs'            # スタブ（合成データ。run.kind=synthetic）
-npx -y -p node@24 -- sh -c 'API_URL=http://127.0.0.1:8599 PORT=3500 npm run dev'  # 開発サーバー
+scripts/dev-up.sh                                                 # リポジトリの直下で（ホスト）。db・api（Go）・web を起動する
+npx -y -p node@24 -- sh -c 'API_URL=http://127.0.0.1:8500 PORT=3501 npm run dev'   # 開発サーバーを別に立てるとき（api は dev-up の Go）
 # 本番相当: npm run build のあと
-npx -y -p node@24 -- sh -c 'API_URL=http://127.0.0.1:8599 PORT=3500 HOSTNAME=127.0.0.1 npm start'
+npx -y -p node@24 -- sh -c 'API_URL=http://127.0.0.1:8500 PORT=3501 HOSTNAME=127.0.0.1 npm start'
 ```
 
 `npm start` は `dev/start.ts` を通す（Node 24 の型除去でそのまま実行する。型は `npm run typecheck` が見る）。standalone 出力（`.next/standalone/server.js`）には `.next/static`（CSS・JS）と `public`（アイコン）が入らないので、起動の前にそれらを `.next/standalone/` の下へ写す（`server.js` だけを実行すると、HTML は返っても CSS・JS が 404 になる）。Docker の `prebuilt`／`runtime` は Dockerfile の COPY で同じことをしている。
 
-`MOCK_RUN_KIND=real` でバナーの無い状態、チャットに「エラーを起こして」と送ると 500（エラー表示の確認用）。
-
-## 実 API が契約に合っているかを調べる
-
-```sh
-npx -y -p node@24 -- node dev/check-api.mjs http://127.0.0.1:8500   # backend 直
-npx -y -p node@24 -- node dev/check-api.mjs http://127.0.0.1:3500   # web 経由（プロキシも）
-```
+API の応答が契約に合っているかは、リポジトリの `contract/`（`scripts/test-contract.sh`）が確かめる。
 
 ## Docker
 

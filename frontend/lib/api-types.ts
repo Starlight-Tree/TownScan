@@ -1,5 +1,4 @@
 // API の型（docs/spec-prototype.md §4.4・§4.5 が契約）。仕様を変えるときは先に仕様を直す。
-// 注意: dev/check-api.mjs が Node の型除去で直接読み込むため、enum・namespace などの「消せない構文」は使わない。
 
 export const CANDIDATE_CLASSES = ['confirmed_new', 'existing_omission', 'uncertain'] as const;
 export type CandidateClass = (typeof CANDIDATE_CLASSES)[number];

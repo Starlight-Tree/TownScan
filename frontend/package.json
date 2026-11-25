@@ -10,8 +10,6 @@
     "dev": "NEXT_TELEMETRY_DISABLED=1 next dev",
     "build": "NEXT_TELEMETRY_DISABLED=1 next build",
     "start": "NEXT_TELEMETRY_DISABLED=1 node dev/start.ts",
-    "mock-api": "node dev/mock-api.mjs",
-    "check-api": "node dev/check-api.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
