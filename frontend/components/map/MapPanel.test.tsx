@@ -24,12 +24,14 @@ vi.mock('./LeafletMap', () => ({
     onTileStatus: (s: TileStatus) => void;
     onZoom: (z: number) => void;
     coverRef?: { current: HTMLElement | null };
+    guardWheel?: boolean;
   }) => {
     seen.coverRef = p.coverRef ?? null;
     return (
       <div
         data-testid="leaflet"
         className="leaflet-host"
+        data-guard-wheel={String(p.guardWheel === true)}
         data-count={p.features.length}
         data-focus={p.focus ? 'fit' : ''}
         data-focus-keys={p.focus ? Object.keys(p.focus).sort().join(',') : ''}
@@ -878,5 +880,41 @@ describe('選択の解除（カードの「選択を解除」・Esc・地図の�
     screen.getByTestId('leaflet').focus();
     await userEvent.keyboard('{Escape}');
     expect(onClearSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe('回答の中の図として使う（inline）と、2 つの地図パネルが同時にあるとき', () => {
+  it('inline のときだけ、地図へ guardWheel を渡す（チャットのスクロールの中で、ホイールでページのスクロールを奪わない）。拡大ビューの中（inline なし）では、渡さない', () => {
+    const { unmount } = render(<MapPanel {...propsFor()} inline />);
+    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-guard-wheel', 'true');
+    unmount();
+    render(<MapPanel {...propsFor()} />);
+    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-guard-wheel', 'false');
+  });
+
+  it('回答の中の図と拡大ビューの地図が同時にあっても、地区の選択の id は重ならない。ラベルは、自分の選択を指す', () => {
+    render(
+      <>
+        <section aria-label="図">
+          <MapPanel {...propsFor()} inline />
+        </section>
+        <section aria-label="拡大ビュー">
+          <MapPanel {...propsFor()} />
+        </section>
+      </>,
+    );
+    const selects = screen.getAllByRole('combobox', { name: '地区' });
+    expect(selects).toHaveLength(2);
+    expect(selects[0]!.id).not.toBe('');
+    expect(selects[0]!.id).not.toBe(selects[1]!.id);
+    // 文書全体で、id が 1 つも重ならない
+    const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // それぞれのラベル（「地区」）が、同じパネルの選択を指す
+    for (const name of ['図', '拡大ビュー']) {
+      const panel = screen.getByRole('region', { name });
+      const select = within(panel).getByRole('combobox', { name: '地区' });
+      expect(within(panel).getByText('地区', { selector: 'label' })).toHaveAttribute('for', select.id);
+    }
   });
 });

@@ -713,7 +713,7 @@ p.banner {
 }
 
 /* ---- 画面 `/` ----
-   チャットの 1 列だけ。常設の結果領域は無い（地図・グラフ・写真の比較は、結果カードのボタンで開く拡大ビュー。下の .expanded-view）。
+   チャットの 1 列だけ。常設の結果領域は無い（地図・グラフは回答の中の図に出て、その「拡大」と、カードのボタンで、拡大ビューを開く。下の .expanded-view）。
    チャットは、枠も背景も持たず、本文の領域いっぱいに広がる（ページの地が見える）。会話・質問の例の行・入力欄は、幅 46rem（--chat-w）の列を中央に置く（DocuNavi と同じ。左右の余白は --chat-pad）。
    幅 1000px 以上は、本文の高さいっぱい。それ未満は、下の @media で高さを決める */
 .home {
@@ -1414,6 +1414,72 @@ p.banner {
 .result-card__note {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* ---- 回答の中の図（地図・グラフ。components/AnswerFigure.tsx）----
+   枠・背景・幅は結果カードと同じ（.result-card を重ねて使う。幅は、回答の列＝--chat-w のまま）。頭の行に、名前と「拡大」ボタン。
+   色は既存のトークン（--border・--surface・--surface-muted・--muted）だけで、ライト・ダークとも、結果カードと同じに読める。
+   地図は、高さを固定の枠にする（狭い幅でも 360px、広い幅で 420px まで。下の .answer-figure__map .map-stage と、地図を出す前の枠で同じ値）。
+   地図の上下の帯（ツールバー・集計・現在表示・一覧）は、その分だけ高くなる */
+.answer-figure__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.answer-figure__title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* .btn--small の左の余白（8px）は、頭の行の右端に置くので要らない */
+.answer-figure__head .btn--small {
+  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.answer-figure__body {
+  min-width: 0;
+}
+
+/* 地図・グラフを出す前の枠（地図は、画面に近づくまで作らない）。地図の高さと同じにして、出たときに下の内容が動かないようにする */
+.answer-figure__placeholder {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.answer-figure__placeholder--chart {
+  min-height: 120px;
+}
+
+/* 回答の中の地図: パネルは、拡大ビューの枠いっぱいではなく、中身の高さ。地図（.map-stage）は、固定の高さ。
+   パネルの overflow-y: auto は、中身のフォーカスの輪を切り、入れ子のスクロールも作るので、ここでは外す */
+.answer-figure__map .map-panel {
+  overflow: visible;
+}
+
+.answer-figure__map .map-stage {
+  flex: none;
+  min-height: 0;
+}
+
+.answer-figure__placeholder--map,
+.answer-figure__map .map-stage {
+  height: clamp(360px, 55vw, 420px);
+}
+
+/* 回答の中のグラフ: 拡大ビューのパネルの余白（フォーカスの輪が、親の overflow で切れないための 6px）は、ここでは要らない。カードの余白に任せる */
+.answer-figure__body > .area-chart {
+  padding: 0;
 }
 
 .count-hero {

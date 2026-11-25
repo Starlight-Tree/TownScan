@@ -6,7 +6,7 @@ import { ResultPanelBoundary } from './ResultPanelBoundary';
 
 interface Props {
   view: ResultView;
-  /** ユーザー自身のタブ操作（クリック・矢印キー・Home・End）。結果カードのボタンで開いたときの画面は、親が view を直接決める */
+  /** ユーザー自身のタブ操作（クリック・矢印キー・Home・End）。図の「拡大」・結果カードのボタンで開いたときの画面は、親が view を直接決める */
   onViewChange: (view: ResultView) => void;
   /** 3 つの画面の中身。どれも外さず、選んでいない画面は hidden にする（地図の Leaflet が、位置や拡大を保つため） */
   panels: Record<ResultView, ReactNode>;

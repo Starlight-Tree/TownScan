@@ -1,13 +1,13 @@
 import type { BBox, ToolCall, ToolResult } from '../../lib/api-types';
 import type { AnswerRef, ExpandRequest } from '../../lib/answer-view';
-import type { ResultView } from '../../lib/result-view';
 
 /** チャットの入力欄の id。拡大ビューを閉じるとき、開いたボタンが無ければ、フォーカスをここへ戻す */
 export const CHAT_INPUT_ID = 'chat-input';
 
 /**
- * 結果カードから親へ伝える操作。どれも、拡大ビュー（地図・グラフ・写真の比較）を開く。
- * 開くのは押したときだけ（回答が届いただけでは開かない）。どの回答のカードかは、ChatPanel が回答ごとに束ねて渡す
+ * 結果カードから親へ伝える操作。拡大ビュー（地図・グラフ・写真の比較）を開くものと、質問を送るもの。
+ * 開くのは押したときだけ（回答が届いただけでは開かない）。どの回答のカードかは、ChatPanel が回答ごとに束ねて渡す。
+ * グラフ・地図そのものは、回答の中の図（ChatPanel の renderFigure）に出る。カードのボタンは、図では足りない動作（候補を目立たせて寄せる・詳細）だけ
  */
 export interface ResultActions {
   /** 候補の詳細を開く（写真の比較。地図もその候補へ寄せる） */
@@ -16,17 +16,12 @@ export interface ResultActions {
   focusMap: (target: { bbox: BBox; candidateIds: string[] }) => void;
   /** サジェスト（お断りの提案）を質問として送る */
   ask: (text: string) => void;
-  /**
-   * 拡大ビューを、その画面（地図・グラフ・写真の比較）で開く。
-   * 絞り込みは、そのカードを含む回答の結果から決まる（はじめて開くとき）。開き直すときは、利用者が変えた絞り込みのまま
-   */
-  showView: (view: ResultView) => void;
 }
 
 /** ChatPanel が親（HomeClient）に頼む操作 */
 export interface ChatActions {
   /**
-   * 拡大ビューを開く。answer は、押したボタンのある回答（最初の画面のボタンは null）。拡大の単位は回答 1 件で、状態は回答ごとに保つ。
+   * 拡大ビューを開く。answer は、押したボタンのある回答（最初の画面のボタンは null）。拡大の単位は回答 1 件で、状態は回答ごとに保つ（回答の中の図と共有する）。
    * opener は、押したボタン。閉じたとき、フォーカスをここへ戻す（無い・外れているときは、チャットの入力欄）
    */
   expand: (answer: AnswerRef | null, request: ExpandRequest, opener: HTMLElement | null) => void;

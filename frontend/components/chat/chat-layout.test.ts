@@ -94,3 +94,34 @@ describe('チャット欄のスクロールする枠: 中身のフォーカス�
     expect(Number(narrow![1]) * 16).toBeGreaterThanOrEqual(ring());
   });
 });
+
+describe('回答の中の図（.answer-figure。components/AnswerFigure.tsx）: 結果カードと同じ列・同じ枠で、地図は固定の高さ', () => {
+  const MAP_HEIGHT = 'clamp(360px, 55vw, 420px)';
+
+  it('枠・背景は結果カード（.result-card）のもの。図は、独自の枠・背景・色を持たない（既存のトークンだけ）', () => {
+    const all = css.match(/\.answer-figure[\w-]*[^{]*\{[^}]*\}/g) ?? [];
+    expect(all.length).toBeGreaterThan(3);
+    for (const rule of all) expect(rule, rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/);
+    // 結果カードの枠と背景（図は、同じ class を重ねて使う）
+    const [card] = bodies('.result-card');
+    expect(card).toMatch(/border:\s*1px solid var\(--border\)/);
+    expect(card).toMatch(/background:\s*var\(--surface\)/);
+    // 図の側では、枠・背景を上書きしない（.answer-figure の規則に border・background が無い）
+    const own = bodies('.answer-figure').join('\n');
+    expect(own).not.toMatch(/border|background/);
+  });
+
+  it('地図の枠（.map-stage）は、固定の高さ 360〜420px（狭い幅でも 360px。幅に合わせて 420px まで）。読み込み前の枠も、同じ高さ（出たとき、下の内容が動かない）', () => {
+    const joined = css.match(/\.answer-figure__placeholder--map,\s*\.answer-figure__map \.map-stage\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(joined).toContain(`height: ${MAP_HEIGHT}`);
+    const [stage] = bodies('.answer-figure__map .map-stage');
+    // 拡大ビューの地図は残りの高さをすべて取る（flex: 1 1 0・最小 320px）。図の中では、伸び縮みさせず、固定にする
+    expect(stage).toMatch(/flex:\s*none/);
+    expect(stage).toMatch(/min-height:\s*0/);
+  });
+
+  it('図の中の地図パネルは、overflow: visible（入れ子のスクロールを作らず、中身のフォーカスの輪を切らない）', () => {
+    const [panel] = bodies('.answer-figure__map .map-panel');
+    expect(panel).toMatch(/overflow:\s*visible/);
+  });
+});

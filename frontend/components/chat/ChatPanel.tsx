@@ -1,8 +1,8 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, postChat } from '../../lib/api';
-import type { AnswerRef, ExpandRequest } from '../../lib/answer-view';
+import { figureKinds, type AnswerRef, type ExpandRequest, type FigureKind } from '../../lib/answer-view';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { formatSentAt } from '../../lib/sentAt';
@@ -33,6 +33,11 @@ export const SUGGESTIONS = [...IN_SCOPE_SUGGESTIONS, ...OUT_OF_SCOPE_SUGGESTIONS
 
 interface Props {
   actions: ChatActions;
+  /**
+   * 回答の中に出す図（地図・グラフ）。回答の結果から図が出る種類が決まり（figureKinds）、結果カードの並びの下に、この関数が返すものを 1 つずつ出す。
+   * 図は、親（HomeClient）が持つ回答ごとの状態を読み書きするので、ここでは中身を知らない。渡さなければ、図は出さない
+   */
+  renderFigure?: (answer: AnswerRef, kind: FigureKind) => ReactNode;
   /** 「新しい会話」（チャットの中のボタンも、サイドパネルのボタンも）で会話を空にしたあとに呼ぶ。親が、拡大ビューを閉じ、回答ごとの状態を捨てる */
   onNewConversation?: () => void;
 }
@@ -77,7 +82,7 @@ function prefersTouch(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 }
 
-export function ChatPanel({ actions, onNewConversation }: Props) {
+export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -87,7 +92,7 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   // 再送する中身と、画面上のどの発言か（失敗の印をつけ外しするため）
   const retryRef = useRef<{ messages: ChatRequestMessage[]; entryId: string } | null>(null);
-  // 最後に押されたボタン（結果カードの「グラフで見る」など）。拡大ビューを閉じたとき、フォーカスをここへ戻す。
+  // 最後に押されたボタン（結果カードの「地図で見る」・「詳細」など）。拡大ビューを閉じたとき、フォーカスをここへ戻す。
   // ボタンを押してもフォーカスが移らないブラウザー（macOS の Safari・Firefox）でも、押したボタンを正しく指すため、押した時点の対象を控える
   const pressedRef = useRef<HTMLElement | null>(null);
 
@@ -179,14 +184,13 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
   // サイドパネルの「新しい会話」も、同じ処理を呼ぶ
   useRegisterNewConversation(reset);
 
-  // 結果カードの操作を、その回答に束ねる。拡大の単位は回答 1 件で、どの回答のカードを押したかを、親へ渡す
+  // 結果カードの操作を、その回答に束ねる。状態の単位は回答 1 件で、どの回答のカードを押したかを、親へ渡す
   const actionsFor = useCallback(
     (entry: ChatEntry): ResultActions => {
       const answer: AnswerRef = { id: entry.id, results: entry.results ?? [] };
       const expand = (req: ExpandRequest) => actions.expand(answer, req, pressedRef.current);
       return {
         ask: send,
-        showView: (view) => expand({ type: 'view', view }),
         openCandidate: (id) => expand({ type: 'candidate', id }),
         focusMap: (target) => expand({ type: 'focus', bbox: target.bbox, candidateIds: target.candidateIds }),
       };
@@ -261,6 +265,11 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
                   <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} />
                 </ToolCallContext.Provider>
               ))}
+              {/* 図（地図・グラフ）は、結果カードの並びの下。出る種類は、回答の結果で決まる（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図） */}
+              {renderFigure &&
+                figureKinds(entry.results ?? []).map((kind) => (
+                  <Fragment key={kind}>{renderFigure({ id: entry.id, results: entry.results ?? [] }, kind)}</Fragment>
+                ))}
             </div>
           );
         })}

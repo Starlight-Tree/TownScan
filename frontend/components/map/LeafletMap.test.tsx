@@ -1087,3 +1087,57 @@ describe('「動きを減らす」設定（prefers-reduced-motion）', () => {
     expect(container.querySelector('.leaflet-container')).not.toBeNull();
   });
 });
+
+describe('回答の中の図（guardWheel）: ホイールで、ページのスクロールを奪わない', () => {
+  // Leaflet の ScrollWheelZoom は、有効なあいだ、ホイールの事象を受け取ると preventDefault（ページのスクロールを止める）する。無効なら、触らない
+  const wheel = (el: Element) => {
+    const ev = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('既定（拡大ビューの地図）は、ホイールで拡大・縮小する', () => {
+    const { container } = render(<LeafletMap {...props()} />);
+    expect(wheel(container.querySelector('.leaflet-container')!)).toBe(true);
+  });
+
+  it('guardWheel: フォーカスが地図に無いあいだは、ホイールを受け取らない（チャットをホイールで流せる）', () => {
+    const { container } = render(<LeafletMap {...props({ guardWheel: true })} />);
+    expect(wheel(container.querySelector('.leaflet-container')!)).toBe(false);
+  });
+
+  it('guardWheel: 地図へフォーカスが着く（押す・Tab で入る）と、ホイールで拡大・縮小できる。フォーカスが地図の外へ出ると、また止める。地図の中の移動では、止めない', () => {
+    const { container } = render(<LeafletMap {...props({ guardWheel: true, areas: wideAreas })} />);
+    const host = container.querySelector('.leaflet-container') as HTMLElement;
+    fireEvent.focusIn(host);
+    expect(wheel(host)).toBe(true);
+    // 地図の中の別の部品へ移るだけ（relatedTarget が地図の中）なら、有効のまま
+    const inner = host.querySelector('.leaflet-control-container') as HTMLElement;
+    fireEvent.focusOut(host, { relatedTarget: inner });
+    expect(wheel(host)).toBe(true);
+    // 地図の外へ
+    fireEvent.focusOut(host, { relatedTarget: document.body });
+    expect(wheel(host)).toBe(false);
+    fireEvent.focusIn(host);
+    fireEvent.focusOut(host, { relatedTarget: null });
+    expect(wheel(host)).toBe(false);
+  });
+
+  it('アンマウントで、地図に付けた focusin・focusout の処理を片付ける（片付けた地図に触れない）', () => {
+    const { container, unmount } = render(<LeafletMap {...props({ guardWheel: true })} />);
+    const host = container.querySelector('.leaflet-container') as HTMLElement;
+    unmount();
+    expect(() => {
+      fireEvent.focusIn(host);
+      fireEvent.focusOut(host, { relatedTarget: null });
+    }).not.toThrow();
+  });
+});

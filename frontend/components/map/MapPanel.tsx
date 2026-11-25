@@ -54,6 +54,11 @@ interface Props {
   onComparePhotos?: (id: string) => void;
   /** 選択を外す（カードの「選択を解除」・Esc・地図の空いている所を押したとき）。無ければ、解除の手段を出さない */
   onClearSelection?: () => void;
+  /**
+   * 回答の中に出す図として使う（チャットのスクロールの中）。地図の上でホイールを回しても、ページのスクロールを奪わない
+   * （地図を押す・地図へフォーカスを移すと、ホイールで拡大・縮小できる）。拡大ビューの中では付けない
+   */
+  inline?: boolean;
 }
 
 /** 地区の選択ボックスで、複数の地区（区など）の条件を表す項目の値。選んでも何も変えない */
@@ -88,6 +93,8 @@ export function MapPanel(props: Props) {
   const multiArea = scope !== null && scope.size > 1;
   const listAreaId = scope !== null && scope.size === 1 ? [...scope][0]! : null;
   const selectedLabelId = useId();
+  // 地区の選択の id。回答の中の図と拡大ビューの地図が同時にあっても、重ならない
+  const areaSelectId = useId();
   const stageRef = useRef<HTMLDivElement>(null);
   // 選択中の候補のカード。地図に渡して、印がカードの下に隠れるときに、地図を上へ寄せてもらう
   const cardRef = useRef<HTMLDivElement>(null);
@@ -195,11 +202,11 @@ export function MapPanel(props: Props) {
           解析した地区の枠
         </label>
         <div className="map-toolbar__group map-toolbar__group--area">
-          <label htmlFor="area-select" className="map-toolbar__label">
+          <label htmlFor={areaSelectId} className="map-toolbar__label">
             地区
           </label>
           <select
-            id="area-select"
+            id={areaSelectId}
             className="select"
             value={multiName ? MULTI_AREA_VALUE : areaId}
             onChange={(e) => onAreaChange(e.target.value)}
@@ -244,6 +251,7 @@ export function MapPanel(props: Props) {
           onZoom={setZoom}
           onClearSelection={props.onClearSelection ? clearSelection : undefined}
           coverRef={cardRef}
+          guardWheel={props.inline}
         />
 
         {/* 地図の中に重ねるので、選んでも地図の大きさは変わらず、押した印が動かない。DOM では印（Leaflet の本体）より後ろ（Tab で印から近い） */}

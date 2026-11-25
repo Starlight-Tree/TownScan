@@ -7,7 +7,7 @@ import { ResultCard } from './ResultCard';
 import type { ResultActions } from './types';
 
 function makeActions(): ResultActions {
-  return { openCandidate: vi.fn(), focusMap: vi.fn(), ask: vi.fn(), showView: vi.fn() };
+  return { openCandidate: vi.fn(), focusMap: vi.fn(), ask: vi.fn() };
 }
 
 describe('結果カード: 型ごとの描画', () => {
@@ -21,32 +21,19 @@ describe('結果カード: 型ごとの描画', () => {
     expect(within(card).getByText(count.provenance.model)).toBeInTheDocument();
   });
 
-  it('count: 「グラフで見る」でグラフの画面へ切り替える（根拠の手前に並ぶ）', async () => {
+  it('count: 「グラフで見る」「地図で見る」のボタンは無い（グラフ・地図そのものが、回答の中の図に出る）。カードは、拡大ビューを開く操作を持たない', () => {
     const actions = makeActions();
-    render(<ResultCard result={count} actions={actions} />);
-    const card = screen.getByRole('region', { name: count.title });
-    const button = within(card).getByRole('button', { name: 'グラフで見る' });
-    expect(button.compareDocumentPosition(within(card).getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await userEvent.click(button);
-    expect(actions.showView).toHaveBeenCalledTimes(1);
-    // 画面だけを渡す。絞り込み（分類 = 新規出現、地区 = すべて）は、カードではなく、その回答の拡大ビューをはじめて開くとき、回答の結果から決まる（lib/answer-view.ts）
-    expect(actions.showView).toHaveBeenCalledWith('chart');
+    for (const result of [count, countWards]) {
+      const { unmount } = render(<ResultCard result={result} actions={actions} />);
+      const card = screen.getByRole('region', { name: result.title });
+      expect(within(card).queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
+      expect(within(card).queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
+      // 根拠の箱（「根拠を見る」）と分類の説明だけが、ボタンの代わりに残る
+      expect(within(card).getByText('根拠を見る')).toBeInTheDocument();
+      unmount();
+    }
     expect(actions.focusMap).not.toHaveBeenCalled();
-  });
-
-  it('count: 「地図で見る」も、地図の画面で開く（根拠の手前。グラフで見るの隣）', async () => {
-    const actions = makeActions();
-    render(<ResultCard result={countWards} actions={actions} />);
-    const card = screen.getByRole('region', { name: countWards.title });
-    const chart = within(card).getByRole('button', { name: 'グラフで見る' });
-    const map = within(card).getByRole('button', { name: '地図で見る' });
-    expect(chart.parentElement).toBe(map.parentElement);
-    expect(map.compareDocumentPosition(within(card).getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await userEvent.click(map);
-    expect(actions.showView).toHaveBeenCalledTimes(1);
-    expect(actions.showView).toHaveBeenCalledWith('map');
-    await userEvent.click(chart);
-    expect(actions.showView).toHaveBeenLastCalledWith('chart');
+    expect(actions.openCandidate).not.toHaveBeenCalled();
   });
 
   it('count: 絞り込み条件のチップ。複数の地区は API の scope をそのまま、scope が無ければ「N 地区」（「すべて」とは言わない）', () => {
@@ -57,23 +44,21 @@ describe('結果カード: 型ごとの描画', () => {
     expect(within(screen.getByLabelText('絞り込み条件')).getByText('地区: 2 地区')).toBeInTheDocument();
   });
 
-  it('compare: 「グラフで見る」でグラフの画面へ切り替える。比べる地区が無いときは出さない', async () => {
-    const actions = makeActions();
-    const { unmount } = render(<ResultCard result={compare} actions={actions} />);
-    await userEvent.click(screen.getByRole('button', { name: 'グラフで見る' }));
-    // 比較のカードの絞り込み（3 分類と合計を出すので、分類はすべて）は、その回答の結果から決まる（lib/answer-view.ts）
-    expect(actions.showView).toHaveBeenCalledWith('chart');
+  it('compare: 「グラフで見る」のボタンは無い（グラフが、回答の中の図に出る）。比べる地区が無いときも、ボタンは出さない', () => {
+    const { unmount } = render(<ResultCard result={compare} actions={makeActions()} />);
+    expect(screen.queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
     unmount();
-    render(<ResultCard result={{ ...compare, items: [] }} actions={actions} />);
+    render(<ResultCard result={{ ...compare, items: [] }} actions={makeActions()} />);
     expect(screen.getByText('比べる地区がありません。')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
   });
 
-  it('グラフで見るボタンは、件数・比較だけに付く', () => {
-    for (const result of [table, mapFocus, detectionImage, accuracy, refusal]) {
+  it('「グラフで見る」ボタンは、どの型のカードにも無い。「地図で見る」は、地図の表示（map_focus）のカードだけ', () => {
+    for (const result of ALL_RESULTS) {
       const { unmount } = render(<ResultCard result={result} actions={makeActions()} />);
-      expect(screen.queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'グラフで見る' }), result.type).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '地図で見る' }) !== null, result.type).toBe(result.type === 'map_focus');
       unmount();
     }
   });
@@ -103,7 +88,7 @@ describe('結果カード: 型ごとの描画', () => {
     expect(screen.getByRole('columnheader', { name: '合計' })).toBeInTheDocument();
   });
 
-  describe('compare: 上位 5 地区まで（拡大ビューのグラフ・表で、全地区を読める）', () => {
+  describe('compare: 上位 5 地区まで（全地区は、回答の中のグラフで読める）', () => {
     /** API の並びのまま、n 地区（件数は地区ごとに違う値） */
     const many = (n: number): CompareResult => ({
       ...compare,
@@ -124,10 +109,10 @@ describe('結果カード: 型ごとの描画', () => {
       const first = within(dataRows()[0]!);
       expect(first.getByText('12')).toBeInTheDocument();
       expect(first.getByText('13')).toBeInTheDocument();
-      // 表の下（グラフで見るの手前）に出る。グラフ・地図の拡大ビューで全地区を読めるので、ボタンは残る
+      // 表の下（分類の説明・根拠の手前）に出る。全地区は、回答の中のグラフで読める（ボタンは無い）
       const note = screen.getByText('全 12 地区中 5 地区を表示');
       expect(screen.getByRole('table').compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(note.compareDocumentPosition(screen.getByRole('button', { name: 'グラフで見る' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(note.compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('6 地区（5 をちょうど超える）でも、5 地区まで。注記の数は、結果の地区の数', () => {
@@ -145,7 +130,7 @@ describe('結果カード: 型ごとの描画', () => {
       }
     });
 
-    it('比べる地区が無いときは、注記もグラフのボタンも出さない', () => {
+    it('比べる地区が無いときは、注記を出さない', () => {
       render(<ResultCard result={many(0)} actions={makeActions()} />);
       expect(screen.getByText('比べる地区がありません。')).toBeInTheDocument();
       expect(screen.queryByText(/地区中 5 地区を表示/)).not.toBeInTheDocument();

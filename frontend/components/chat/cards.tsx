@@ -43,31 +43,13 @@ function barColor(key: string): string {
   return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--primary)';
 }
 
-/** 比較のカードに出す地区の数。これを超える分は、拡大ビューのグラフ・表で読む */
+/** 比較のカードに出す地区の数。これを超える分は、回答の中のグラフ（「表で見る」で表も）で読む */
 const COMPARE_ROWS = 5;
-
-/**
- * 件数・比較の結果から、拡大ビューのグラフ（件数は地図も）へ進む（回答の数字を、グラフ・地図でも確かめられるように）。
- * 押すと、この回答の拡大ビューを、その画面で開く。絞り込みは、この回答の結果から決まる（はじめて開くとき）。開き直すときは、利用者が変えたまま
- */
-function ViewButtons({ actions, withMap }: { actions: ResultActions; withMap?: boolean }) {
-  return (
-    <div className="button-row">
-      <button type="button" className="btn" onClick={() => actions.showView('chart')}>
-        グラフで見る
-      </button>
-      {withMap && (
-        <button type="button" className="btn" onClick={() => actions.showView('map')}>
-          地図で見る
-        </button>
-      )}
-    </div>
-  );
-}
 
 // ---- 件数 ----
 
-export function CountCard({ result, actions }: { result: CountResult; actions: ResultActions }) {
+// グラフ・地図は、回答の中の図（ChatPanel の renderFigure）に出る。件数のカードに、拡大ビューを開くボタンは無い
+export function CountCard({ result }: { result: CountResult }) {
   const { nameOf } = useAreas();
   const max = Math.max(1, ...result.breakdown.map((b) => b.value));
   const cls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
@@ -104,7 +86,6 @@ export function CountCard({ result, actions }: { result: CountResult; actions: R
           ))}
         </ul>
       )}
-      <ViewButtons actions={actions} withMap />
       <ClassGuide />
       <ProvenanceBox provenance={result.provenance} />
     </section>
@@ -198,8 +179,8 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
 
 // ---- 比較 ----
 
-export function CompareCard({ result, actions }: { result: CompareResult; actions: ResultActions }) {
-  // 会話の中で読み切れる大きさにするため、API の並びの先頭から上位 5 地区まで。全地区は、拡大ビューのグラフ・表で読める
+export function CompareCard({ result }: { result: CompareResult }) {
+  // 会話の中で読み切れる大きさにするため、API の並びの先頭から上位 5 地区まで。全地区は、回答の中のグラフ（「表で見る」で表も）で読める
   const items = result.items.slice(0, COMPARE_ROWS);
   const known: string[] = [...CLASS_ORDER];
   const extraKeys = new Set<string>();
@@ -279,8 +260,6 @@ export function CompareCard({ result, actions }: { result: CompareResult; action
           全 {formatNumber(result.items.length)} 地区中 {formatNumber(COMPARE_ROWS)} 地区を表示
         </p>
       )}
-      {/* 比べる地区が無いときは、グラフにも出すものが無い */}
-      {result.items.length > 0 && <ViewButtons actions={actions} />}
       {result.items.length > 0 && <ClassGuide />}
       <ProvenanceBox provenance={result.provenance} />
     </section>

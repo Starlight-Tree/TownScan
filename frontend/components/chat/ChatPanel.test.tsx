@@ -1,11 +1,12 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AreaSummary, ChatResponse } from '../../lib/api-types';
 import { AreasProvider } from '../../lib/areas-context';
-import { areas, compare, count, countWards, detectionImage, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
+import { accuracy, areas, compare, count, countWards, detectionImage, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
 import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
 import { NewConversationProvider, useStartNewConversation } from '../NewConversation';
+import type { AnswerRef, FigureKind } from '../../lib/answer-view';
 import { ChatPanel, SUGGESTIONS } from './ChatPanel';
 import type { ChatActions } from './types';
 
@@ -512,57 +513,62 @@ describe('回答の対象・条件の行', () => {
   });
 });
 
-describe('結果カードのボタン: その回答の拡大ビューを開く（拡大の単位は回答 1 件）', () => {
-  it('回答の件数のカードの「グラフで見る」「地図で見る」: その回答（ID と結果）と、画面を渡す。押したボタンを、フォーカスの戻し先として渡す', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+describe('結果カードのボタン: その回答の拡大ビューを開く（状態の単位は回答 1 件）', () => {
+  it('グラフ・地図そのものは回答の中の図に出る。件数・比較のカードに、「グラフで見る」「地図で見る」は無い', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数と比較です。', [count, compare])));
     const { input, actions } = setup();
     await userEvent.type(input(), '何件？{Enter}');
-    const card = await screen.findByRole('region', { name: count.title });
-    const chart = within(card).getByRole('button', { name: 'グラフで見る' });
-    await userEvent.click(chart);
+    await screen.findByRole('region', { name: count.title });
+    expect(screen.queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
+    expect(actions.expand).not.toHaveBeenCalled();
+  });
+
+  it('地図の表示の「地図で見る」: その回答（ID と結果）と、範囲・候補 ID を渡す。押したボタンを、フォーカスの戻し先として渡す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('地図です。', [mapFocus])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '見せて{Enter}');
+    const button = within(await screen.findByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' });
+    await userEvent.click(button);
     expect(actions.expand).toHaveBeenCalledTimes(1);
     const [answer, request, opener] = actions.expand.mock.calls[0]!;
-    expect(answer).toEqual({ id: expect.stringMatching(/^m\d+$/), results: [count] });
-    expect(request).toEqual({ type: 'view', view: 'chart' });
-    expect(opener).toBe(chart);
-
-    const map = within(card).getByRole('button', { name: '地図で見る' });
-    await userEvent.click(map);
-    expect(actions.expand).toHaveBeenLastCalledWith(answer, { type: 'view', view: 'map' }, map);
+    expect(answer).toEqual({ id: expect.stringMatching(/^m\d+$/), results: [mapFocus] });
+    expect(request).toEqual({ type: 'focus', bbox: mapFocus.bbox, candidateIds: mapFocus.candidate_ids });
+    expect(opener).toBe(button);
   });
 
   it('フォーカスが移らないブラウザー（macOS の Safari・Firefox）でも、押したボタンを戻し先として渡す（click だけを送る）', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    fetchMock.mockResolvedValue(jsonResponse(reply('地図です。', [mapFocus])));
     const { input, actions } = setup();
-    await userEvent.type(input(), '何件？{Enter}');
-    const chart = within(await screen.findByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' });
-    expect(chart).not.toHaveFocus();
-    fireEvent.click(chart);
-    expect(actions.expand.mock.calls[0]![2]).toBe(chart);
+    await userEvent.type(input(), '見せて{Enter}');
+    const button = within(await screen.findByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' });
+    expect(button).not.toHaveFocus();
+    fireEvent.click(button);
+    expect(actions.expand.mock.calls[0]![2]).toBe(button);
   });
 
   it('回答ごとに別の ID と結果を渡す（古い回答のカードを押すと、その回答として開く）', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目', [count]))).mockResolvedValueOnce(jsonResponse(reply('2 回目', [compare])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目', [mapFocus]))).mockResolvedValueOnce(jsonResponse(reply('2 回目', [table])));
     const { input, actions } = setup();
     await userEvent.type(input(), 'ひとつめ{Enter}');
     await screen.findByText('1 回目');
     await userEvent.type(input(), 'ふたつめ{Enter}');
     await screen.findByText('2 回目');
-    await userEvent.click(within(screen.getByRole('region', { name: compare.title })).getByRole('button', { name: 'グラフで見る' }));
-    await userEvent.click(within(screen.getByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' }));
+    await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
+    await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
     const [second, first] = actions.expand.mock.calls.map((c) => c[0]);
-    expect(second).toEqual({ id: expect.any(String), results: [compare] });
-    expect(first).toEqual({ id: expect.any(String), results: [count] });
+    expect(second).toEqual({ id: expect.any(String), results: [table] });
+    expect(first).toEqual({ id: expect.any(String), results: [mapFocus] });
     expect(first!.id).not.toBe(second!.id);
   });
 
   it('1 つの回答の結果すべてを渡す（回答の条件は、その回答の結果から決まる）。どのカードのボタンでも同じ回答', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数と地図です。', [count, mapFocus])));
+    fetchMock.mockResolvedValue(jsonResponse(reply('表と地図です。', [table, mapFocus])));
     const { input, actions } = setup();
     await userEvent.type(input(), '見せて{Enter}');
-    await userEvent.click(within(await screen.findByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' }));
+    await userEvent.click(await screen.findByRole('button', { name: /詳細.*c-1-2-1/ }));
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
-    expect(actions.expand.mock.calls[0]![0]).toEqual({ id: expect.any(String), results: [count, mapFocus] });
+    expect(actions.expand.mock.calls[0]![0]).toEqual({ id: expect.any(String), results: [table, mapFocus] });
     expect(actions.expand.mock.calls[1]![0]!.id).toBe(actions.expand.mock.calls[0]![0]!.id);
   });
 
@@ -576,6 +582,98 @@ describe('結果カードのボタン: その回答の拡大ビューを開く�
     expect(actions.expand.mock.calls[1]![1]).toEqual({ type: 'candidate', id: 'c-1-2-2' });
     await userEvent.click(screen.getByRole('button', { name: '詳細を開く' }));
     expect(actions.expand.mock.calls[2]![1]).toEqual({ type: 'candidate', id: detectionImage.candidate_id });
+  });
+});
+
+describe('回答の中の図（renderFigure。結果カードの並びの下に、結果の種類で決まる図を出す）', () => {
+  /** 図の中身は、親（HomeClient）が持つ。ここでは、呼ばれた回答と種類だけを見る */
+  const figure = vi.fn((answer: AnswerRef, kind: FigureKind) => <div data-testid={`figure-${kind}`} data-answer={answer.id} />);
+
+  function setupFigures() {
+    const actions = makeActions();
+    figure.mockClear();
+    render(<ChatPanel actions={actions} renderFigure={figure} />);
+    return { actions, input: () => screen.getByRole('textbox', { name: '質問を入力' }) };
+  }
+
+  const kindsShown = () => screen.queryAllByTestId(/^figure-/).map((el) => el.dataset.testid);
+
+  it('件数: 地図とグラフ（この順）。結果カードの並びの下（根拠の箱より後）に出る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    const { input } = setupFigures();
+    await userEvent.type(input(), '何件？{Enter}');
+    await screen.findByRole('region', { name: count.title });
+    expect(kindsShown()).toEqual(['figure-map', 'figure-chart']);
+    const card = screen.getByRole('region', { name: count.title });
+    for (const f of screen.getAllByTestId(/^figure-/)) {
+      expect(card.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(f.closest('[data-entry="assistant"]')).toContainElement(card);
+    }
+  });
+
+  it('比較: グラフだけ。地図の表示: 地図だけ。1 つの回答に両方あれば、地図・グラフの順に 1 つずつ', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('比較です。', [compare])));
+    const { input } = setupFigures();
+    await userEvent.type(input(), '比べて{Enter}');
+    await screen.findByText('比較です。');
+    expect(kindsShown()).toEqual(['figure-chart']);
+    cleanup();
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('地図です。', [mapFocus])));
+    const second = setupFigures();
+    await userEvent.type(second.input(), '地図で{Enter}');
+    await screen.findByText('地図です。');
+    expect(kindsShown()).toEqual(['figure-map']);
+    cleanup();
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('両方です。', [mapFocus, compare])));
+    const third = setupFigures();
+    await userEvent.type(third.input(), '両方{Enter}');
+    await screen.findByText('両方です。');
+    expect(kindsShown()).toEqual(['figure-map', 'figure-chart']);
+  });
+
+  it('表・検出画像・精度・お断りは、図を出さない（写真の比較は図に入れない）。比較で地区が 0 件のときも出さない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('図は出ません。', [table, detectionImage, accuracy, refusal, { ...compare, items: [] }])));
+    const { input } = setupFigures();
+    await userEvent.type(input(), '見せて{Enter}');
+    await screen.findByText('図は出ません。');
+    expect(kindsShown()).toEqual([]);
+    expect(figure).not.toHaveBeenCalled();
+  });
+
+  it('図に渡す回答は、カードの操作と同じ（回答の ID と結果すべて）。回答ごとに別の ID。結果の無い回答には、図を出さない', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(reply('1 回目', [count, table])))
+      .mockResolvedValueOnce(jsonResponse(reply('2 回目', [compare])))
+      .mockResolvedValueOnce(jsonResponse(reply('3 回目')));
+    const { input } = setupFigures();
+    for (const [q, a] of [['ひとつめ', '1 回目'], ['ふたつめ', '2 回目'], ['みっつめ', '3 回目']] as const) {
+      await userEvent.type(input(), `${q}{Enter}`);
+      await screen.findByText(a);
+    }
+    const [first, second] = figure.mock.calls.filter((c, i, all) => all.findIndex((x) => x[0].id === c[0].id) === i).map((c) => c[0]);
+    expect(first).toEqual({ id: expect.any(String), results: [count, table] });
+    expect(second).toEqual({ id: expect.any(String), results: [compare] });
+    expect(kindsShown()).toEqual(['figure-map', 'figure-chart', 'figure-chart']);
+    const ids = screen.getAllByTestId(/^figure-/).map((el) => el.dataset.answer);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
+  it('renderFigure を渡さなければ、図は出ない（カードだけ）。拡大ビューを開く操作も呼ばない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '何件？{Enter}');
+    await screen.findByRole('region', { name: count.title });
+    expect(screen.queryAllByTestId(/^figure-/)).toEqual([]);
+    expect(actions.expand).not.toHaveBeenCalled();
+  });
+
+  it('図は、チャットの記録（role="log"）の中に出る（回答のすぐ下。読み上げの扱いは、図の側で決める）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    const { input } = setupFigures();
+    await userEvent.type(input(), '何件？{Enter}');
+    await screen.findByRole('region', { name: count.title });
+    expect(screen.getByRole('log')).toContainElement(screen.getByTestId('figure-map'));
   });
 });
 

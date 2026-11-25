@@ -2,10 +2,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { useEffect, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AnswerRef, ExpandRequest } from '../lib/answer-view';
+import type { AnswerRef, ExpandRequest, FigureKind } from '../lib/answer-view';
 import type { AreaSummary, CandidateFeature, ToolResult } from '../lib/api-types';
 import type { MapFilter, ResultView } from '../lib/result-view';
-import { areas, compare, count, countWards, detail, detectionImage, jsonResponse, mapFocus, table } from '../tests/fixtures';
+import { accuracy, areas, compare, count, countWards, detail, detectionImage, jsonResponse, mapFocus, refusal, table } from '../tests/fixtures';
 import type { CandidateDrawer } from './CandidateDrawer';
 import type { ChatActions } from './chat/types';
 import { HomeClient } from './HomeClient';
@@ -148,7 +148,10 @@ const detailCalls = () => fetchMock.mock.calls.filter(([u]) => /^\/api\/candidat
 
 const tab = (name: string) => screen.getByRole('tab', { name });
 const dialog = () => screen.queryByRole('dialog', { name: '結果' });
-const chart = () => screen.getByTestId('chart');
+/** 拡大ビュー（ダイアログ）の中のグラフ。回答の中の図にも同じ部品が出るので、ダイアログの中に限る */
+const chart = () => within(screen.getByRole('dialog')).getByTestId('chart');
+/** 拡大ビュー（ダイアログ）の中の地図 */
+const dialogMap = () => within(screen.getByRole('dialog')).getByTestId('leaflet');
 const input = () => screen.getByRole('textbox', { name: '質問を入力' });
 const heading = () => screen.getByRole('heading', { name: '候補の詳細' });
 /** 拡大ビューの右端の「閉じる」（詳細の「閉じる」とは別。タブの帯にある） */
@@ -156,6 +159,13 @@ const closeButton = () => within(screen.getByRole('dialog')).getAllByRole('butto
 const closeDialog = () => userEvent.click(closeButton());
 /** 後ろの暗い部分（ダイアログの親） */
 const backdrop = () => screen.getByRole('dialog').parentElement!;
+
+/** 回答の中の図（名前つきの region）。root は、探す範囲（既定は画面全体。回答が複数あるときは、その回答の発言） */
+const figureRegion = (kind: FigureKind, root: Pick<typeof screen, 'getByRole'> = screen) => root.getByRole('region', { name: kind === 'map' ? '地図' : 'グラフ' });
+const figureExpand = (kind: FigureKind, root: Pick<typeof screen, 'getByRole'> = screen) =>
+  within(figureRegion(kind, root)).getByRole('button', { name: kind === 'map' ? '地図を拡大ビューで開く' : 'グラフを拡大ビューで開く' });
+/** 本文の文で探した回答の発言（結果カード・図を含む） */
+const answerBox = (text: string) => within(screen.getByText(text).closest<HTMLElement>('[data-entry="assistant"]')!);
 
 let nextAnswer = 0;
 /** 回答（拡大の単位）。結果は、その回答の道具の結果 */
@@ -229,23 +239,27 @@ describe('最初の画面と、回答が届いたとき（チャットの 1 列�
     expect(screen.getByRole('button', { name: '解析した地区を地図で見る' })).toBeInTheDocument();
   });
 
-  it('結果つきの回答（件数・地図の表示・検出画像）が届いても、拡大ビューは開かず、画面は替わらない。カードは会話の中に出て、詳細も取りに行かない', async () => {
+  it('結果つきの回答（件数・地図の表示・検出画像）が届いても、拡大ビューは開かず、画面は替わらない。カードと図は会話の中に出て、詳細も取りに行かない', async () => {
     await ask([count, mapFocus, detectionImage], '件数と地図と写真です。');
     expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: mapFocus.title })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: detectionImage.title })).toBeInTheDocument();
+    // 件数と地図の表示から、地図とグラフの図が 1 つずつ、回答の中に出る（地図は 1 つだけ。拡大ビューではない）
+    expect(figureRegion('map')).toBeInTheDocument();
+    expect(figureRegion('chart')).toBeInTheDocument();
+    expect(await screen.findAllByTestId('leaflet')).toHaveLength(1);
+    expect(screen.getAllByTestId('chart')).toHaveLength(1);
     expect(dialog()).toBeNull();
-    expect(screen.queryByTestId('leaflet')).toBeNull();
     expect(screen.queryByRole('tablist')).toBeNull();
-    expect(spy.map).toBeNull();
     expect(spy.drawer).toBeNull();
     expect(detailCalls()).toHaveLength(0);
-    // 続けて、別の結果つきの回答（表・地図の表示）が届いても、同じ
+    // 続けて、別の結果つきの回答（表・地図の表示）が届いても、拡大ビューは開かない（図は、その回答の中に増える）
     route();
     await userEvent.type(input(), '一覧も{Enter}');
     await screen.findByText('一覧です。');
     expect(dialog()).toBeNull();
-    expect(screen.queryByTestId('leaflet')).toBeNull();
+    await waitFor(() => expect(screen.getAllByTestId('leaflet')).toHaveLength(2));
+    expect(screen.getAllByRole('region', { name: '地図' })).toHaveLength(2);
   });
 
   it('比較の回答は、上位 5 地区までを会話に出し、6 地区以上のときは「全 N 地区中 5 地区を表示」と言う（全地区は、拡大ビューのグラフで読める）', async () => {
@@ -273,38 +287,49 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     return d;
   }
 
-  it('件数の「グラフで見る」: グラフの画面で開く。回答の条件（分類 = 新規出現）が、グラフに写る。押したボタンは、閉じるまで覚えている', async () => {
+  it('件数のグラフの「グラフを拡大」: グラフの画面で開く。回答の条件（分類 = 新規出現）が、グラフにも拡大ビューにも写る。押したボタンは、閉じるまで覚えている', async () => {
     await ask([count]);
-    const card = screen.getByRole('region', { name: count.title });
-    await userEvent.click(within(card).getByRole('button', { name: 'グラフで見る' }));
+    // 図のグラフは、はじめから回答の条件で出ている
+    await waitFor(() => expect(within(figureRegion('chart')).getByTestId('chart')).toHaveAttribute('data-classes', 'confirmed_new'));
+    expect(within(figureRegion('chart')).getByTestId('chart')).toHaveAttribute('data-area-id', '');
+    await userEvent.click(figureExpand('chart'));
     expectOpenDialog('グラフ');
     expect(tab('グラフ')).toHaveFocus();
     expect(chart()).toHaveAttribute('data-classes', 'confirmed_new');
     expect(chart()).toHaveAttribute('data-area-id', '');
   });
 
-  it('件数の「地図で見る」: 地図の画面で開く。回答の条件の分類だけを地図に出す', async () => {
+  it('件数の地図の「地図を拡大」: 地図の画面で開く。回答の条件の分類だけを、図の地図にも拡大ビューの地図にも出す', async () => {
     await ask([count]);
-    await userEvent.click(within(screen.getByRole('region', { name: count.title })).getByRole('button', { name: '地図で見る' }));
+    const inline = await within(figureRegion('map')).findByTestId('leaflet');
+    await waitFor(() => expect(inline).toHaveAttribute('data-count', '1'));
+    expect(inline).toHaveAttribute('data-classes', 'confirmed_new');
+    await userEvent.click(figureExpand('map'));
     expectOpenDialog('地図');
-    const map = await screen.findByTestId('leaflet');
+    const map = dialogMap();
     await waitFor(() => expect(map).toHaveAttribute('data-count', '1'));
     expect(map).toHaveAttribute('data-classes', 'confirmed_new');
   });
 
-  it('比較の「グラフで見る」: グラフの画面で開く。比較は 3 分類すべて、地区は全地区', async () => {
+  it('比較の回答は、グラフの図だけ（地図の図は無い）。「グラフを拡大」で、グラフの画面で開く。比較は 3 分類すべて、地区は全地区', async () => {
     await ask([compare]);
-    await userEvent.click(within(screen.getByRole('region', { name: compare.title })).getByRole('button', { name: 'グラフで見る' }));
+    expect(screen.queryByRole('region', { name: '地図' })).toBeNull();
+    expect(screen.queryByTestId('leaflet')).toBeNull();
+    await userEvent.click(figureExpand('chart'));
     expectOpenDialog('グラフ');
     expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
     expect(chart()).toHaveAttribute('data-area-id', '');
   });
 
-  it('地図の表示の「地図で見る」: 地図の画面で開き、その候補を目立たせ、範囲へ寄せる', async () => {
+  it('地図の表示の回答: 地図の図に、その候補が目立って出る。カードの「地図で見る」は、地図の画面で開き、その候補を目立たせ、範囲へ寄せる', async () => {
     await ask([mapFocus]);
+    const inline = await within(figureRegion('map')).findByTestId('leaflet');
+    expect(inline).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3');
+    expect(inline).toHaveAttribute('data-focus-bbox', mapFocus.bbox.join(','));
+    expect(screen.queryByRole('region', { name: 'グラフ' })).toBeNull();
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
     expectOpenDialog('地図');
-    const map = await screen.findByTestId('leaflet');
+    const map = dialogMap();
     expect(map).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3');
     expect(map).toHaveAttribute('data-focus-bbox', mapFocus.bbox.join(','));
   });
@@ -340,24 +365,32 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     expect(map).toHaveAttribute('data-focus-bbox', areas[0]!.bbox.join(','));
   });
 
-  it('開いているあいだだけマウントする。開く前は、地図も詳細も無く、閉じると全部外す', async () => {
+  it('拡大ビューは、開いているあいだだけマウントする（開く前は、タブも詳細も無く、閉じると外す）。回答の中の図は、拡大ビューとは別に、残る', async () => {
     await ask([table, mapFocus]);
-    expect(screen.queryByTestId('leaflet')).toBeNull();
-    expect(document.querySelector('.leaflet-host')).toBeNull();
+    // 開く前: 拡大ビューは無い。地図は、回答の中の図の 1 つだけ
+    expect(dialog()).toBeNull();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    const inline = await screen.findByTestId('leaflet');
+    expect(screen.getAllByTestId('leaflet')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
     await screen.findByRole('region', { name: '候補の詳細' });
-    expect(screen.getByTestId('leaflet')).toBeInTheDocument();
+    // 開いているあいだ: 地図は、拡大ビューの中と、回答の中（後ろ）に 1 つずつ。図は外さない
+    expect(screen.getAllByTestId('leaflet')).toHaveLength(2);
+    expect(within(screen.getByRole('dialog')).getAllByTestId('leaflet')).toHaveLength(1);
+    expect(inline.isConnected).toBe(true);
     await closeDialog();
     expect(dialog()).toBeNull();
-    expect(screen.queryByTestId('leaflet')).toBeNull();
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('region', { name: '候補の詳細' })).toBeNull();
     expect(screen.queryByTestId('chart')).toBeNull();
+    // 図の地図は、同じ要素のまま残る（外して作り直さない）
+    expect(screen.getByTestId('leaflet')).toBe(inline);
   });
 });
 
 describe('拡大ビューを閉じる（「閉じる」・Esc・後ろの暗い部分）。フォーカスは、開いたボタンへ戻る', () => {
-  const openButton = () => within(screen.getByRole('region', { name: count.title })).getByRole('button', { name: 'グラフで見る' });
+  /** 回答の中のグラフの図の「グラフを拡大」 */
+  const openButton = () => figureExpand('chart');
 
   it('「閉じる」: 閉じて、開いたボタンへフォーカスが戻る', async () => {
     await ask([count]);
@@ -509,7 +542,7 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
     await waitFor(() => expect(screen.getByTestId('leaflet')).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
   });
 
-  it('古い回答のカードの「グラフで見る」は、いまの回答（あとから届いた比較）の条件ではなく、その回答の条件で開く。手で替えたあとの開き直しは、替えたまま', async () => {
+  it('古い回答の図の「拡大」は、いまの回答（あとから届いた比較）の条件ではなく、その回答の条件で開く。手で替えたあとの開き直しは、替えたまま', async () => {
     const replies = [
       { ...count, title: '判定保留の件数', total: 18, filter: { area_id: null, cls: 'uncertain' as const } },
       { ...compare, title: '地区ごとの比較' },
@@ -519,28 +552,30 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
     render(<HomeClient />);
     await waitFor(() => expect(chat.actions).not.toBeNull());
     await userEvent.type(input(), '判定保留は？{Enter}');
-    const card = await screen.findByRole('region', { name: '判定保留の件数' });
+    await screen.findByRole('region', { name: '判定保留の件数' });
     await userEvent.type(input(), '比べて{Enter}');
     await screen.findByRole('region', { name: '地区ごとの比較' });
     expect(dialog()).toBeNull();
+    const first = answerBox('回答 1');
+    const second = answerBox('回答 2');
 
-    // 比較の回答のカードで開いて、閉じる
-    await userEvent.click(within(screen.getByRole('region', { name: '地区ごとの比較' })).getByRole('button', { name: 'グラフで見る' }));
+    // 比較の回答の図（グラフ）の「拡大」で開いて、閉じる
+    await userEvent.click(figureExpand('chart', second));
     expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
     await closeDialog();
 
-    // 古い件数のカードを押すと、その回答の条件（判定保留だけ）で開く
-    await userEvent.click(within(card).getByRole('button', { name: 'グラフで見る' }));
+    // 古い件数の図の「拡大」を押すと、その回答の条件（判定保留だけ）で開く
+    await userEvent.click(figureExpand('chart', first));
     expect(tab('グラフ')).toHaveAttribute('aria-selected', 'true');
     expect(chart()).toHaveAttribute('data-classes', 'uncertain');
 
-    // 手で凡例を替えて閉じ、「地図で見る」で開き直しても、替えたまま
+    // 手で凡例を替えて閉じ、地図の「拡大」で開き直しても、替えたまま
     await userEvent.click(tab('地図'));
-    await userEvent.click(screen.getByRole('checkbox', { name: /新規出現/ }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('checkbox', { name: /新規出現/ }));
     await closeDialog();
-    await userEvent.click(within(card).getByRole('button', { name: '地図で見る' }));
+    await userEvent.click(figureExpand('map', first));
     expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
-    await waitFor(() => expect(screen.getByTestId('leaflet')).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
+    await waitFor(() => expect(dialogMap()).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
   });
 
   it('最初の画面の「解析した地区を地図で見る」は、回答を持たない 1 つの状態。回答の状態と混ざらない', async () => {
@@ -571,20 +606,22 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
 });
 
 describe('「新しい会話」: 拡大ビューを閉じ、回答ごとの状態をすべて捨てる', () => {
-  it('チャット列の「新しい会話」: 閉じたあとの会話の状態（絞り込み・強調・選んだ候補）は、次の会話に残らない', async () => {
+  it('チャット列の「新しい会話」: 閉じたあとの会話の状態（絞り込み・強調・選んだ候補）は、次の会話に残らない。回答の中の図も消える', async () => {
     await ask([table, mapFocus], '一覧です。');
-    // 地図の表示のカードで開き、強調された候補・絞り込み・選択ができる
+    // 地図の表示のカードで開くと、候補が強調され、絞り込み・選択ができる
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
-    const map = await screen.findByTestId('leaflet');
+    const map = dialogMap();
     await waitFor(() => expect(map).toHaveAttribute('data-count', '2'));
     expect(map).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3');
-    await userEvent.click(screen.getByRole('checkbox', { name: /判定保留/ }));
-    await userEvent.click(screen.getByRole('button', { name: '地図の印（c-1-2-2）' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('checkbox', { name: /判定保留/ }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '地図の印（c-1-2-2）' }));
     await closeDialog();
+    expect(screen.getByRole('region', { name: '地図' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
     expect(dialog()).toBeNull();
     expect(screen.queryByTestId('leaflet')).toBeNull();
+    expect(screen.queryByRole('region', { name: '地図' })).toBeNull();
     expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
 
     const again = await openWelcomeMap();
@@ -682,7 +719,7 @@ describe('画面 `/`（地図・詳細の連携）', () => {
 
     // 地図の表示のカードで開くと、候補が強調され、地図が寄る
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
-    const map = await screen.findByTestId('leaflet');
+    const map = dialogMap();
     await waitFor(() => expect(map).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3'));
     expect(map).toHaveAttribute('data-focus', 'fit');
     await closeDialog();
@@ -691,18 +728,18 @@ describe('画面 `/`（地図・詳細の連携）', () => {
     await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
     const region = await screen.findByRole('region', { name: '候補の詳細' });
     expect(await within(region).findAllByRole('img')).toHaveLength(2);
-    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-selected', 'c-1-2-1');
+    expect(dialogMap()).toHaveAttribute('data-selected', 'c-1-2-1');
 
     // 閉じると選択も外れる
     await userEvent.click(within(region).getByRole('button', { name: '閉じる' }));
     expect(screen.queryByRole('region', { name: '候補の詳細' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-selected', '');
+    expect(dialogMap()).toHaveAttribute('data-selected', '');
 
     // 強調表示の解除（詳細を開いたあとは写真の比較なので、地図のタブへ戻ってから）。強調は、この回答の状態に残っている
     await userEvent.click(tab('地図'));
-    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3');
-    await userEvent.click(screen.getByRole('button', { name: '強調表示を解除' }));
-    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-highlight', '');
+    expect(dialogMap()).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3');
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '強調表示を解除' }));
+    expect(dialogMap()).toHaveAttribute('data-highlight', '');
   });
 
   it('地図の印を選ぶと、地図に留まる。「写真を比べる」を押したときだけ、その候補の詳細（写真の比較）が開く', async () => {
@@ -755,6 +792,419 @@ describe('画面 `/`（地図・詳細の連携）', () => {
     expect(await screen.findByRole('region', { name: '候補の詳細' })).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([u]) => String(u).startsWith('/api/candidates?'))!;
     expect(String(call[0])).toContain('sort=area_desc');
+  });
+});
+
+describe('回答の中の図（地図・グラフ）', () => {
+  /** 回答の中の図の地図・グラフ（拡大ビューの中ではないもの） */
+  const inlineMap = (root: Pick<typeof screen, 'getByRole'> = screen) => within(figureRegion('map', root)).findByTestId('leaflet');
+  const inlineChart = (root: Pick<typeof screen, 'getByRole'> = screen) => within(figureRegion('chart', root)).findByTestId('chart');
+
+  describe('出る条件（結果の種類で決まる）', () => {
+    it('件数: 地図とグラフ。比較: グラフだけ。地図の表示: 地図だけ', async () => {
+      await ask([count]);
+      expect(figureRegion('map')).toBeInTheDocument();
+      expect(figureRegion('chart')).toBeInTheDocument();
+      cleanup();
+      chat.actions = null;
+      await ask([compare]);
+      expect(screen.queryByRole('region', { name: '地図' })).toBeNull();
+      expect(figureRegion('chart')).toBeInTheDocument();
+      cleanup();
+      chat.actions = null;
+      await ask([mapFocus]);
+      expect(figureRegion('map')).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'グラフ' })).toBeNull();
+    });
+
+    it('表・検出画像・精度・お断りは、図を出さない（写真の比較は図に入れない）。拡大ビューも開かない', async () => {
+      await ask([table, detectionImage, accuracy, refusal]);
+      expect(screen.queryByRole('region', { name: '地図' })).toBeNull();
+      expect(screen.queryByRole('region', { name: 'グラフ' })).toBeNull();
+      expect(screen.queryByTestId('leaflet')).toBeNull();
+      expect(screen.queryByTestId('chart')).toBeNull();
+      expect(dialog()).toBeNull();
+      expect(document.querySelector('.answer-figure')).toBeNull();
+    });
+
+    it('壊れた結果・知らない型だけの回答にも、図は出ない', async () => {
+      await ask([{ ...count, filter: undefined } as unknown as ToolResult, { type: 'heatmap' } as unknown as ToolResult]);
+      expect(document.querySelector('.answer-figure')).toBeNull();
+    });
+  });
+
+  describe('見た目・読み上げ・キーボード', () => {
+    it('名前つきの region。チャットの記録（role="log"）の中の、結果カードの下。自分は aria-live="off" で、図の中身を、記録の読み上げに含めない', async () => {
+      await ask([count]);
+      const map = figureRegion('map');
+      const chartFigure = figureRegion('chart');
+      for (const f of [map, chartFigure]) {
+        expect(f.closest('[role="log"]')).not.toBeNull();
+        expect(f).toHaveAttribute('aria-live', 'off');
+        expect(within(f).queryByRole('log')).toBeNull();
+        // 結果カードと同じ枠（.result-card）で、同じ列の中にある
+        expect(f).toHaveClass('result-card');
+        expect(f.parentElement).toBe(screen.getByRole('region', { name: count.title }).parentElement);
+        expect(screen.getByRole('region', { name: count.title }).compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      }
+      // 図の頭の行は、名前と「拡大」ボタンだけ（ボタンの名前は「地図を拡大」「グラフを拡大」）
+      expect(within(map).getByRole('button', { name: '地図を拡大ビューで開く' })).toHaveTextContent('拡大');
+      expect(within(chartFigure).getByRole('button', { name: 'グラフを拡大ビューで開く' })).toHaveTextContent('拡大');
+    });
+
+    it('図の中の、自分で知らせる部品（地図の選択の知らせ）は、図の aria-live="off" の中でも、自分の aria-live="polite" のまま', async () => {
+      await ask([mapFocus]);
+      await inlineMap();
+      const announcer = figureRegion('map').querySelector('.map-stage [aria-live="polite"]');
+      expect(announcer).not.toBeNull();
+      expect(announcer!.closest('[aria-live="off"]')).toBe(figureRegion('map'));
+    });
+
+    it('図の中を Tab で巡って、そのまま抜けられる（フォーカストラップは無い）。印・一覧にも届き、Shift+Tab で戻れる', async () => {
+      await ask([mapFocus], '地図です。');
+      await inlineMap();
+      const region = figureRegion('map');
+      const expandButton = within(region).getByRole('button', { name: '地図を拡大ビューで開く' });
+      expandButton.focus();
+      const visited: Element[] = [expandButton];
+      for (let i = 0; i < 60 && region.contains(document.activeElement); i++) {
+        await userEvent.tab();
+        visited.push(document.activeElement!);
+      }
+      // 図の外へ出た（body に落ちていない）。印（地図の本体）・一覧の見出しにも届いた
+      const outside = document.activeElement!;
+      expect(region.contains(outside)).toBe(false);
+      expect(outside).not.toBe(document.body);
+      expect(visited.some((el) => el.textContent === '地図の印（c-1-2-2）')).toBe(true);
+      expect(visited.some((el) => el.textContent === '候補を一覧で見る（面積の大きい順）')).toBe(true);
+      // 戻る: Shift+Tab で、図の最後の部品へ入れる
+      await userEvent.tab({ shift: true });
+      expect(region.contains(document.activeElement)).toBe(true);
+    });
+
+    it('図の中に tabindex が正の値の要素は無い（Tab の順は DOM の順）', async () => {
+      await ask([count]);
+      await inlineMap();
+      await inlineChart();
+      for (const f of document.querySelectorAll('.answer-figure')) {
+        expect([...f.querySelectorAll('[tabindex]')].filter((el) => Number(el.getAttribute('tabindex')) > 0)).toEqual([]);
+      }
+    });
+  });
+
+  describe('状態は拡大ビューと共有する', () => {
+    it('はじめの状態は、回答の結果から決まる（件数の条件・地図の表示の強調と寄せ先）。図を出しただけでは、拡大ビューは開かない', async () => {
+      await ask([{ ...count, filter: { area_id: 'z18-1-2', cls: 'confirmed_new' } }, mapFocus]);
+      const map = await inlineMap();
+      const chartEl = await inlineChart();
+      await waitFor(() => expect(map).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3'));
+      // 強調する候補（判定保留の c-1-2-2）が隠れないよう、分類を広げる（拡大ビューをはじめて開くときと同じ規則）
+      expect(map).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
+      expect(map).toHaveAttribute('data-focus-bbox', mapFocus.bbox.join(','));
+      expect(chartEl).toHaveAttribute('data-area-id', 'z18-1-2');
+      expect(chartEl).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
+      expect(dialog()).toBeNull();
+    });
+
+    it('図で変えた絞り込みは、その回答の拡大ビューに引き継がれる。拡大ビューで変えたことも、図に戻る（地図とグラフの図も、互いに写る）', async () => {
+      await ask([count]); // 分類 = 新規出現
+      const map = await inlineMap();
+      const chartEl = await inlineChart();
+      await waitFor(() => expect(map).toHaveAttribute('data-classes', 'confirmed_new'));
+
+      // グラフの図で行（z18-1-2・判定保留）を選ぶ → 地図の図にも写る
+      await userEvent.click(within(figureRegion('chart')).getByRole('button', { name: /グラフの行/ }));
+      expect(chartEl).toHaveAttribute('data-classes', 'uncertain');
+      expect(chartEl).toHaveAttribute('data-area-id', 'z18-1-2');
+      await waitFor(() => expect(map).toHaveAttribute('data-classes', 'uncertain'));
+      expect(dialog()).toBeNull();
+
+      // 拡大: 図で変えた絞り込みのまま開く（地図もグラフも）
+      await userEvent.click(figureExpand('map'));
+      await waitFor(() => expect(dialogMap()).toHaveAttribute('data-classes', 'uncertain'));
+      await userEvent.click(tab('グラフ'));
+      expect(chart()).toHaveAttribute('data-classes', 'uncertain');
+      expect(chart()).toHaveAttribute('data-area-id', 'z18-1-2');
+
+      // 拡大ビューの地図で、分類を足す → 閉じると、図の地図・グラフに写っている
+      await userEvent.click(tab('地図'));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('checkbox', { name: /新規出現/ }));
+      await closeDialog();
+      await waitFor(() => expect(map).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
+      expect(chartEl).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
+    });
+
+    it('地図の図で印を選ぶと、地図に留まる（拡大ビューは開かず、詳細も取らない）。拡大ビューを開くと、その選択を引き継ぐ。強調の解除も共有する', async () => {
+      await ask([mapFocus]);
+      const map = await inlineMap();
+      await userEvent.click(within(figureRegion('map')).getByRole('button', { name: '地図の印（c-1-2-2）' }));
+      expect(map).toHaveAttribute('data-selected', 'c-1-2-2');
+      expect(dialog()).toBeNull();
+      expect(detailCalls()).toHaveLength(0);
+      // 強調表示の解除（地図の図の中の帯）
+      await userEvent.click(within(figureRegion('map')).getByRole('button', { name: '強調表示を解除' }));
+      expect(map).toHaveAttribute('data-highlight', '');
+      await userEvent.click(figureExpand('map'));
+      expect(dialogMap()).toHaveAttribute('data-selected', 'c-1-2-2');
+      expect(dialogMap()).toHaveAttribute('data-highlight', '');
+    });
+
+    it('鍵（回答）を渡して当てる: ある回答の図・拡大ビューでの操作は、別の回答の状態を壊さない（開いていない回答の図を操作しても、開いている回答の拡大ビューは変わらない）', async () => {
+      const replies = [
+        { ...count, title: '判定保留の件数', total: 18, filter: { area_id: null, cls: 'uncertain' as const } },
+        { ...compare, title: '地区ごとの比較' },
+      ];
+      let n = 0;
+      route({ '/api/chat': () => jsonResponse({ message: { role: 'assistant', content: `回答 ${n + 1}`, results: [replies[n++]!], tool_calls: [] } }) });
+      render(<HomeClient />);
+      await waitFor(() => expect(chat.actions).not.toBeNull());
+      await userEvent.type(input(), '判定保留は？{Enter}');
+      await screen.findByRole('region', { name: '判定保留の件数' });
+      await userEvent.type(input(), '比べて{Enter}');
+      await screen.findByRole('region', { name: '地区ごとの比較' });
+      const first = answerBox('回答 1');
+      const second = answerBox('回答 2');
+      const firstChart = await inlineChart(first);
+      const secondChart = await inlineChart(second);
+      expect(firstChart).toHaveAttribute('data-classes', 'uncertain');
+      expect(secondChart).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+
+      // 回答 1 の拡大ビューを開いたまま、回答 2 の図を操作する（後ろは inert だが、操作は鍵で、回答 2 の状態にだけ当たる）
+      await userEvent.click(figureExpand('chart', first));
+      fireEvent.click(within(figureRegion('chart', second)).getByRole('button', { name: /グラフの行/ }));
+      expect(secondChart).toHaveAttribute('data-area-id', 'z18-1-2');
+      expect(secondChart).toHaveAttribute('data-classes', 'uncertain');
+      expect(chart()).toHaveAttribute('data-area-id', ''); // 開いている回答 1 は、そのまま
+      expect(chart()).toHaveAttribute('data-classes', 'uncertain');
+      expect(firstChart).toHaveAttribute('data-area-id', '');
+      // 開いている回答 1 の中の操作は、回答 2 に写らない
+      await userEvent.click(tab('地図'));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('checkbox', { name: /新規出現/ }));
+      await waitFor(() => expect(firstChart).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
+      expect(secondChart).toHaveAttribute('data-classes', 'uncertain');
+      await closeDialog();
+
+      // 回答 2 を開くと、回答 2 の図で変えたとおり（回答 1 の変更ではない）
+      await userEvent.click(figureExpand('chart', second));
+      expect(chart()).toHaveAttribute('data-area-id', 'z18-1-2');
+      expect(chart()).toHaveAttribute('data-classes', 'uncertain');
+    });
+
+    it('「新しい会話」で、回答の中の図も、回答ごとの状態も捨てる（次の会話の図は、その回答の条件から始まる）', async () => {
+      await ask([count]);
+      await inlineMap();
+      await userEvent.click(within(figureRegion('chart')).getByRole('button', { name: /グラフの行/ }));
+      await waitFor(() => expect(within(figureRegion('chart')).getByTestId('chart')).toHaveAttribute('data-area-id', 'z18-1-2'));
+      await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+      expect(document.querySelector('.answer-figure')).toBeNull();
+      expect(screen.queryByTestId('leaflet')).toBeNull();
+      // 次の会話の回答（地図の表示）の図は、その回答の条件（強調する候補）から始まる
+      route();
+      await userEvent.type(input(), '一覧も{Enter}');
+      await screen.findByText('一覧です。');
+      const map = await inlineMap();
+      await waitFor(() => expect(map).toHaveAttribute('data-highlight', 'c-1-2-1,c-1-2-2,c-1-2-3'));
+      expect(screen.queryByRole('region', { name: 'グラフ' })).toBeNull();
+    });
+  });
+
+  describe('拡大', () => {
+    it('「地図を拡大」: その回答の拡大ビューを、地図の画面で開く。「グラフを拡大」: グラフの画面で開く。閉じると、フォーカスは、押した「拡大」ボタンへ戻る', async () => {
+      await ask([count]);
+      await inlineMap();
+      const mapButton = figureExpand('map');
+      await userEvent.click(mapButton);
+      expect(screen.getByRole('dialog', { name: '結果' })).toHaveAttribute('aria-modal', 'true');
+      expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
+      await userEvent.keyboard('{Escape}');
+      expect(dialog()).toBeNull();
+      expect(mapButton).toHaveFocus();
+
+      const chartButton = figureExpand('chart');
+      await userEvent.click(chartButton);
+      expect(tab('グラフ')).toHaveAttribute('aria-selected', 'true');
+      await closeDialog();
+      expect(chartButton).toHaveFocus();
+    });
+
+    it('図の地図の「写真を比べる」・一覧の項目: その回答の拡大ビューを、写真の比較で開く。閉じると、図の「地図を拡大」へフォーカスが戻る', async () => {
+      await ask([mapFocus]);
+      await inlineMap();
+      const opener = figureExpand('map');
+      // 図の地図が受け取った操作（拡大ビューの地図も、同じ spy に書くので、図のものを先に控える）
+      const inline = spy.map!;
+      // 図の地図で印を選び、地図の「写真を比べる」（MapPanel が渡された操作を呼ぶ）
+      await userEvent.click(within(figureRegion('map')).getByRole('button', { name: '地図の印（c-1-2-2）' }));
+      act(() => inline.onComparePhotos!('c-1-2-2'));
+      await screen.findByRole('region', { name: '候補の詳細' });
+      expect(tab('写真の比較')).toHaveAttribute('aria-selected', 'true');
+      expect(spy.drawer).toMatchObject({ candidateId: 'c-1-2-2', autoFocus: true });
+      expect(heading()).toHaveFocus();
+      // 地図は動かさない（回答の地図の表示の寄せ先のまま）
+      expect(dialogMap()).toHaveAttribute('data-focus-bbox', mapFocus.bbox.join(','));
+      await closeDialog();
+      expect(opener).toHaveFocus();
+
+      // 一覧の項目（「開く」）: 写真の比較で開き、地図もその候補へ寄せる
+      act(() => inline.onOpen('c-1-2-1'));
+      await screen.findByRole('region', { name: '候補の詳細' });
+      expect(spy.drawer).toMatchObject({ candidateId: 'c-1-2-1', autoFocus: true });
+      expect(dialogMap()).toHaveAttribute('data-selected', 'c-1-2-1');
+      await userEvent.keyboard('{Escape}'); // 詳細の中の Esc は、詳細だけを閉じる
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(dialog()).toBeNull());
+      expect(opener).toHaveFocus();
+    });
+
+    it('グラフの図の「地図で見る」: 地図の図が同じ回答に無いとき（比較）だけ出て、押すと、地図の画面で開く。件数（地図の図がすぐ近くにある）では出さない', async () => {
+      await ask([count]);
+      await inlineChart();
+      await userEvent.click(within(figureRegion('chart')).getByRole('button', { name: /グラフの行/ }));
+      expect(within(figureRegion('chart')).queryByRole('button', { name: 'グラフから地図へ' })).toBeNull();
+      cleanup();
+      chat.actions = null;
+      await ask([compare]);
+      await userEvent.click(await within(figureRegion('chart')).findByRole('button', { name: 'グラフから地図へ' }));
+      expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('拡大ビューを開いているあいだも、回答の中の図は外さない（同じ要素のまま。後ろのチャットの見た目と、地図の位置を変えない）。閉じても、同じ', async () => {
+      await ask([count]);
+      const map = await inlineMap();
+      const chartEl = await inlineChart();
+      await userEvent.click(figureExpand('chart'));
+      expect(map.isConnected).toBe(true);
+      expect(chartEl.isConnected).toBe(true);
+      expect(map.closest('[inert]')).not.toBeNull(); // 後ろは inert（操作も読み上げも届かない）
+      await closeDialog();
+      expect(within(figureRegion('map')).getByTestId('leaflet')).toBe(map);
+      expect(within(figureRegion('chart')).getByTestId('chart')).toBe(chartEl);
+    });
+  });
+
+  describe('マウントの遅らせ方（地図は、画面に近づくまで作らない）', () => {
+    class FakeIntersectionObserver {
+      static instances: FakeIntersectionObserver[] = [];
+      target: Element | null = null;
+      disconnected = false;
+      constructor(
+        private readonly callback: IntersectionObserverCallback,
+        readonly options?: IntersectionObserverInit,
+      ) {
+        FakeIntersectionObserver.instances.push(this);
+      }
+      observe(el: Element) {
+        this.target = el;
+      }
+      unobserve() {}
+      disconnect() {
+        this.disconnected = true;
+      }
+      takeRecords() {
+        return [];
+      }
+      fire(isIntersecting: boolean) {
+        this.callback([{ isIntersecting, target: this.target! } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+    }
+    const live = () => FakeIntersectionObserver.instances.filter((o) => !o.disconnected);
+
+    beforeEach(() => {
+      FakeIntersectionObserver.instances = [];
+    });
+
+    it('IntersectionObserver が無い環境（jsdom・古いブラウザー）では、すぐマウントする', async () => {
+      expect(typeof IntersectionObserver).toBe('undefined');
+      await ask([mapFocus]);
+      expect(await inlineMap()).toBeInTheDocument();
+    });
+
+    it('近づくまで、地図はマウントしない（枠と「拡大」は出る）。グラフは、すぐ出る。近づいたら、マウントして、そのまま保つ', async () => {
+      vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+      await ask([count]);
+      // 地図の枠: 大きさを持つ読み込み中の枠だけ。Leaflet は無い
+      await waitFor(() => expect(within(figureRegion('chart')).getByTestId('chart')).toBeInTheDocument());
+      expect(within(figureRegion('map')).getByText('地図を読み込んでいます…')).toBeInTheDocument();
+      expect(screen.queryByTestId('leaflet')).toBeNull();
+      expect(spy.map).toBeNull();
+      expect(within(figureRegion('map')).getByRole('button', { name: '地図を拡大ビューで開く' })).toBeInTheDocument();
+      // 見る枠は、チャットのスクロール領域。余白は 200px（親の枠で切られるので、窓ではなく、この枠を基準にする）
+      const observer = live().find((o) => o.target && figureRegion('map').contains(o.target))!;
+      expect(observer.options?.rootMargin).toBe('200px');
+      expect(observer.options?.root).toBe(document.querySelector('.chat__scroll'));
+      // 画面の外のあいだは、マウントしない
+      act(() => observer.fire(false));
+      expect(screen.queryByTestId('leaflet')).toBeNull();
+      // 近づいた: マウントする。観測は終わる
+      act(() => observer.fire(true));
+      expect(await within(figureRegion('map')).findByTestId('leaflet')).toBeInTheDocument();
+      expect(observer.disconnected).toBe(true);
+      // 別の回答が届いても、同じ要素のまま保つ
+      const map = screen.getByTestId('leaflet');
+      route();
+      await userEvent.type(input(), '一覧も{Enter}');
+      await screen.findByText('一覧です。');
+      expect(screen.getAllByTestId('leaflet')[0]).toBe(map);
+    });
+
+    it('拡大ビューは、近づく前でも開ける（図の地図は、まだ無いまま。拡大ビューの地図だけ）', async () => {
+      vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+      await ask([mapFocus]);
+      expect(screen.queryByTestId('leaflet')).toBeNull();
+      await userEvent.click(figureExpand('map'));
+      expect(await within(screen.getByRole('dialog')).findByTestId('leaflet')).toBeInTheDocument();
+      expect(screen.getAllByTestId('leaflet')).toHaveLength(1);
+    });
+  });
+
+  it('入力欄に打っても、回答の中の図は描き直さない（チャットは入力のたびに描き直すので、図の地図を重くしない）。状態が変わったときだけ、描き直す', async () => {
+    await ask([mapFocus]);
+    await inlineMap();
+    const before = spy.map;
+    expect(before).not.toBeNull();
+    await userEvent.type(input(), 'あいう');
+    expect(spy.map).toBe(before);
+    await userEvent.click(within(figureRegion('map')).getByRole('button', { name: '強調表示を解除' }));
+    expect(spy.map).not.toBe(before);
+  });
+
+  describe('データの読み込み', () => {
+    it('地区・候補の読み込みが終わるまで、図の中身は出さない（読み込み中の枠）。終わってから、そのデータで、はじめの状態（強調する候補を隠さない絞り込み）を決める', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      route({
+        '/api/candidates.geojson': async () => {
+          await gate;
+          return jsonResponse({ type: 'FeatureCollection', features });
+        },
+        '/api/chat': () => jsonResponse({ message: { role: 'assistant', content: '回答です。', results: [count, mapFocus], tool_calls: [] } }),
+      });
+      render(<HomeClient />);
+      await waitFor(() => expect(chat.actions).not.toBeNull());
+      await userEvent.type(input(), '質問です{Enter}');
+      await screen.findByText('回答です。');
+      expect(within(figureRegion('chart')).getByText('グラフを読み込んでいます…')).toBeInTheDocument();
+      expect(within(figureRegion('map')).getByText('地図を読み込んでいます…')).toBeInTheDocument();
+      expect(screen.queryByTestId('chart')).toBeNull();
+      expect(screen.queryByTestId('leaflet')).toBeNull();
+      release();
+      const map = await inlineMap();
+      // 候補が届いてから決めたので、強調する判定保留の候補（c-1-2-2）が、絞り込み（新規出現だけ）から隠れていない
+      await waitFor(() => expect(map).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
+      expect(await inlineChart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
+    });
+
+    it('候補の読み込みに失敗しても、図は出る（地図の中に、エラーと再試行）', async () => {
+      route({
+        '/api/candidates.geojson': () => jsonResponse({ error: { code: 'db_down', message: 'DB に接続できません。' } }, 503),
+        '/api/chat': () => jsonResponse({ message: { role: 'assistant', content: '回答です。', results: [count], tool_calls: [] } }),
+      });
+      render(<HomeClient />);
+      await waitFor(() => expect(chat.actions).not.toBeNull());
+      await userEvent.type(input(), '質問です{Enter}');
+      await screen.findByText('回答です。');
+      expect(await within(figureRegion('map')).findByRole('alert')).toHaveTextContent('候補を読み込めませんでした');
+    });
   });
 });
 
@@ -826,7 +1276,7 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
     expect(map).toHaveAttribute('data-count', '1');
   });
 
-  it('showView（画面だけを指定して開く）: 写真の比較で開くと、空の状態。フォーカスは、選んでいるタブへ移る', async () => {
+  it('画面だけを指定して開く（compare）: 写真の比較で開くと、空の状態。フォーカスは、選んでいるタブへ移る', async () => {
     await renderLoaded();
     await expand(answerOf(count), view('photos'));
     expect(tab('写真の比較')).toHaveAttribute('aria-selected', 'true');
@@ -1399,7 +1849,8 @@ describe('詳細を閉じたあとのフォーカス（body に落ちない）',
 });
 
 describe('見えていない詳細が外れる・同じ候補をもう一度開く（フォーカスの扱い）', () => {
-  const marker = () => screen.getByRole('button', { name: '地図の印（c-1-2-2）' });
+  /** 拡大ビューの中の印（チャットの表の回答には、地図の図が無いが、念のため、ダイアログの中に限る） */
+  const marker = () => within(screen.getByRole('dialog')).getByRole('button', { name: '地図の印（c-1-2-2）' });
 
   async function renderReady() {
     await renderLoaded();

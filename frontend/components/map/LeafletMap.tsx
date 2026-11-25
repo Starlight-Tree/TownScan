@@ -4,7 +4,7 @@
 // 選んだ理由: ラスタータイル（地理院）と GeoJSON の重ね描きだけで足り、WebGL を要さず軽い（MapLibre GL JS は不要）。
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { AreaSummary, CandidateClass, CandidateFeature } from '../../lib/api-types';
 import { CLASS_INFO, isCandidateClass } from '../../lib/classes';
 import {
@@ -48,6 +48,11 @@ export interface LeafletMapProps {
    * 寄せる・移すときの下の余白も、この部品の分だけ広げる。無い（要素が null）ときは、何もしない
    */
   coverRef?: RefObject<HTMLElement | null>;
+  /**
+   * 回答の中の図（チャットのスクロールの中）。ホイールを回しても、フォーカスが地図に無いあいだは、拡大・縮小しない（ページのスクロールを奪わない）。
+   * 地図を押す・Tab で地図へ入る（フォーカスが着く）と、ホイールでも拡大・縮小できる。地図を作るときの値で決まり、あとから替えない
+   */
+  guardWheel?: boolean;
 }
 
 interface Entry {
@@ -171,6 +176,8 @@ function markerIcon(cls: CandidateClass, mark: Mark): L.DivIcon {
 
 export default function LeafletMap(props: LeafletMapProps) {
   const { base, areas, features, showFrames, selectedId, highlightIds, focus } = props;
+  // 回答の中の図か。地図を作るときの値で決める（あとから替えない）
+  const [guardWheel] = useState(props.guardWheel === true);
   // テーマが変わるたびに増える。色は JS の値として Leaflet に渡しているので、増えたら線と塗りを描き直す（印・集計の帯の分類の印・ツールチップは CSS の変数なので、自然に追従する）
   const themeVersion = useThemeVersion();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -318,6 +325,17 @@ export default function LeafletMap(props: LeafletMapProps) {
       }
     };
     el.addEventListener('focusin', onFocusIn);
+    // 回答の中の図: フォーカスが地図に無いあいだは、ホイールで拡大・縮小しない（チャットをホイールで流すとき、地図の上を通っても止まらないように）。
+    // 地図を押す・Tab で入る（Leaflet は、押したとき地図へフォーカスを移す）と有効にし、フォーカスが地図の外へ出たら、また止める
+    const wheelOn = () => map.scrollWheelZoom.enable();
+    const wheelOff = (ev: FocusEvent) => {
+      if (!(ev.relatedTarget instanceof Node && el.contains(ev.relatedTarget))) map.scrollWheelZoom.disable();
+    };
+    if (guardWheel) {
+      map.scrollWheelZoom.disable();
+      el.addEventListener('focusin', wheelOn);
+      el.addEventListener('focusout', wheelOff);
+    }
     // 枠の大きさが変わったら地図に知らせる（Leaflet は window の大きさしか見ない）。拡大ビュー（ダイアログ）の枠は、窓の大きさに合わせて広がり縮むため。
     // invalidateSize は、中心と縮尺を変えずに、枠・タイルを描き直す。
     // タブで隠れても枠は 0×0 にならない（結果領域の CSS は display: none でなく visibility: hidden）ので、0 を避ける処理や、見えるまで待つ処理は要らない
@@ -326,6 +344,8 @@ export default function LeafletMap(props: LeafletMapProps) {
     return () => {
       ro?.disconnect();
       el.removeEventListener('focusin', onFocusIn);
+      el.removeEventListener('focusin', wheelOn);
+      el.removeEventListener('focusout', wheelOff);
       map.off('zoomend', onZoomEnd);
       map.off('click', onMapClick);
       map.off('dblclick', cancelClear);
@@ -333,7 +353,7 @@ export default function LeafletMap(props: LeafletMapProps) {
       map.remove();
       mapRef.current = null;
     };
-  }, [refreshKeys, revealAboveCover]);
+  }, [guardWheel, refreshKeys, revealAboveCover]);
 
   // ---- 下地（標準地図 / 年度別の写真）。写真は標準地図の上に重ね、タイルが無い範囲でも崩さない ----
   useEffect(() => {

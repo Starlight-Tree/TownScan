@@ -7,6 +7,7 @@ import {
   clearSelection,
   comparePhotos,
   detailLoaded,
+  figureKinds,
   initialAnswerView,
   NO_IDS,
   openCandidate,
@@ -17,6 +18,7 @@ import {
   type AnswerRef,
   type AnswerView,
   type ExpandRequest,
+  type FigureKind,
   type Selection,
 } from '../lib/answer-view';
 import { getAreas, getCandidatesGeoJson } from '../lib/api';
@@ -24,6 +26,7 @@ import type { AreaSummary, CandidateDetail, CandidateFeature } from '../lib/api-
 import { AreasProvider } from '../lib/areas-context';
 import type { MapFilter, ResultView } from '../lib/result-view';
 import { useAsync } from '../lib/use-api';
+import { AnswerFigure, type FigureActions, type FigureData } from './AnswerFigure';
 import { CandidateDrawer } from './CandidateDrawer';
 import { AreaChartView } from './chart/AreaChartView';
 import { ChatPanel } from './chat/ChatPanel';
@@ -89,10 +92,12 @@ function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLo
 }
 
 /**
- * `/`: チャットの 1 列。結果（地図・グラフ・写真の比較）は、結果カードのボタンと最初の画面の「解析した地区を地図で見る」を押したときだけ、
- * 拡大ビュー（ダイアログ）に開く。回答が届いただけでは、何も開かず、何も替えない。
- * 拡大の単位は回答 1 件: 回答ごとに、タブ・絞り込み・強調・選んだ候補・地図の寄せ先を持ち、会話のあいだ保つ（保存しない。地図の拡大・移動は保たない）。
- * 拡大ビューは同時に 1 つだけ。開いているあいだだけマウントする。「新しい会話」で閉じ、回答ごとの状態を捨てる
+ * `/`: チャットの 1 列。結果のうち、グラフ・地図は、回答の中に図として出る（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図。AnswerFigure）。
+ * 図の「拡大」、結果カードの「詳細」「詳細を開く」「地図で見る」（地図の表示）、最初の画面の「解析した地区を地図で見る」を押したときだけ、
+ * 拡大ビュー（ダイアログ。地図・グラフ・写真の比較）が開く。回答が届いただけでは、何も開かず、何も替えない。
+ * 状態の単位は回答 1 件: 回答ごとに、タブ・絞り込み・強調・選んだ候補・地図の寄せ先を持ち、会話のあいだ保つ（保存しない。地図の拡大・移動は保たない）。
+ * 回答の中の図と、その回答の拡大ビューは、同じ状態を読み書きする（図で変えた絞り込みは拡大ビューに引き継がれ、逆も同じ）。
+ * 拡大ビューは同時に 1 つだけ。開いているあいだだけマウントする（図は、回答の中に残る）。「新しい会話」で閉じ、回答ごとの状態を捨てる
  */
 export function HomeClient() {
   const areasQ = useAsync(loadAreas);
@@ -118,8 +123,8 @@ export function HomeClient() {
   });
 
   /**
-   * 拡大ビューを開く（結果カードのボタン・最初の画面のボタン）。その回答の状態が無ければ（はじめて開くとき）、回答の結果から作る。
-   * あれば（開き直すとき）、利用者が変えた状態を残し、押したボタンの画面を選ぶ
+   * 拡大ビューを開く（結果カードのボタン・図の「拡大」・最初の画面のボタン）。その回答の状態が無ければ（図を出す前に開くとき）、回答の結果から作る。
+   * あれば（図で変えたとき・開き直すとき）、利用者が変えた状態を残し、押したボタンの画面を選ぶ
    */
   const expand = useCallback((answer: AnswerRef | null, request: ExpandRequest, from: HTMLElement | null) => {
     const key = answerKey(answer);
@@ -132,7 +137,7 @@ export function HomeClient() {
       return new Map(prev).set(key, applyExpandRequest(base, request, ctx));
     });
     setOpenKey(key);
-    if (request.type === 'candidate') setFocusNonce((n) => n + 1);
+    if (request.type === 'candidate' || request.type === 'compare') setFocusNonce((n) => n + 1);
   }, []);
 
   const close = useCallback(() => {
@@ -147,9 +152,8 @@ export function HomeClient() {
     setStates(NO_STATES);
   }, [close]);
 
-  /** 開いている回答の状態へ、操作を当てる。変わらなければ、何もしない（無駄な再描画をしない） */
-  const update = useCallback((apply: (state: AnswerView, ctx: AnswerContext) => AnswerView) => {
-    const key = openKeyRef.current;
+  /** 鍵で選んだ回答の状態へ、操作を当てる（その回答の状態が無ければ、何もしない）。変わらなければ、何もしない（無駄な再描画をしない） */
+  const updateAt = useCallback((key: string | null, apply: (state: AnswerView, ctx: AnswerContext) => AnswerView) => {
     if (key === null) return;
     const ctx = contextRef.current;
     setStates((prev) => {
@@ -159,6 +163,9 @@ export function HomeClient() {
       return next === cur ? prev : new Map(prev).set(key, next);
     });
   }, []);
+
+  /** 開いている回答の状態へ、操作を当てる（拡大ビューの中の操作） */
+  const update = useCallback((apply: (state: AnswerView, ctx: AnswerContext) => AnswerView) => updateAt(openKeyRef.current, apply), [updateAt]);
 
   const chatActions = useMemo<ChatActions>(() => ({ expand }), [expand]);
   const returnFocusTo = useCallback(() => (resettingRef.current ? null : openerRef.current), []);
@@ -188,12 +195,43 @@ export function HomeClient() {
   const showOnMap = useCallback((detail: CandidateDetail) => update((s) => showDetailOnMap(s, detail)), [update]);
   const showMap = useCallback(() => update((s, ctx) => showMapForFilter(s, ctx)), [update]);
 
+  // ---- 回答の中の図（地図・グラフ）。拡大ビューと同じ回答ごとの状態を、鍵（回答の ID）で選んで読み書きする ----
+  const figureActions = useMemo<FigureActions>(
+    () => ({
+      /** はじめて図を出すとき、その回答の状態を作る（拡大ビューを先に開いて、もうあるときは、そのまま） */
+      ensure: (answer) => {
+        const key = answerKey(answer);
+        setStates((prev) => (prev.has(key) ? prev : new Map(prev).set(key, initialAnswerView(answer.results, contextRef.current))));
+      },
+      setFilter: (key, filter) => updateAt(key, (s) => ({ ...s, filter })),
+      clearHighlight: (key) => updateAt(key, (s) => ({ ...s, highlightIds: NO_IDS })),
+      selectOnMap: (key, id) => updateAt(key, (s, ctx) => selectFromMap(s, id, ctx)),
+      clearSelection: (key) => updateAt(key, clearSelection),
+      expand,
+    }),
+    [updateAt, expand],
+  );
+  const figureData = useMemo<FigureData>(
+    () => ({ areas, areasState: areasQ.state, candidatesState: candQ.state, reloadAreas: areasQ.reload, reloadCandidates: candQ.reload }),
+    [areas, areasQ.state, areasQ.reload, candQ.state, candQ.reload],
+  );
+  const renderFigure = (answer: AnswerRef, kind: FigureKind) => (
+    <AnswerFigure
+      kind={kind}
+      answer={answer}
+      state={states.get(answerKey(answer))}
+      withMap={figureKinds(answer.results).includes('map')}
+      data={figureData}
+      actions={figureActions}
+    />
+  );
+
   const current = openKey !== null ? states.get(openKey) : undefined;
 
   return (
     <AreasProvider areas={areas}>
       <div className="home">
-        <ChatPanel actions={chatActions} onNewConversation={resetAll} />
+        <ChatPanel actions={chatActions} renderFigure={renderFigure} onNewConversation={resetAll} />
       </div>
       {current && (
         // 開いているあいだだけマウントする（Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す

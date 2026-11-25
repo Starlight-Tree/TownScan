@@ -11,9 +11,9 @@ import {
 } from './result-view';
 
 /**
- * 拡大ビュー（`/` のダイアログ。地図・グラフ・写真の比較）の、回答 1 件ぶんの状態。
- * 拡大の単位は回答 1 件で、会話のあいだ HomeClient が回答ごとに持つ（保存はしない）。地図の拡大・移動は含めない（閉じると地図は外れる）。
- * ここの関数は、状態を受けて新しい状態を返すだけの純粋な関数（HomeClient が、いまの状態へ当てる）
+ * 回答 1 件ぶんの、地図・グラフ・写真の比較の状態。回答の中に出す図（地図・グラフ）と、拡大ビュー（`/` のダイアログ）が、同じ状態を読み書きする。
+ * 状態の単位は回答 1 件で、会話のあいだ HomeClient が回答ごとに持つ（保存はしない）。地図の拡大・移動は含めない。
+ * ここの関数は、状態を受けて新しい状態を返すだけの純粋な関数（HomeClient が、鍵で選んだ回答の状態へ当てる）
  */
 
 /** 詳細（写真の比較）で選んでいる候補。focus は、その詳細を開いたとき見出しへフォーカスを移すか（詳細をマウントする時点の値で決まる） */
@@ -45,12 +45,14 @@ export interface AnswerRef {
 
 /** 押したボタンが頼む、拡大ビューの開き方 */
 export type ExpandRequest =
-  /** 「グラフで見る」「地図で見る」（件数・比較）、最初の画面の「解析した地区を地図で見る」: その画面で開く */
+  /** 図の「地図を拡大」「グラフを拡大」、最初の画面の「解析した地区を地図で見る」: その画面で開く */
   | { type: 'view'; view: ResultView }
   /** 地図の表示（map_focus）の「地図で見る」: 候補を目立たせ、範囲へ寄せて、地図で開く */
   | { type: 'focus'; bbox: BBox; candidateIds: string[] }
-  /** 結果カードの「詳細」「詳細を開く」: その候補を選び、地図もその候補へ寄せて、写真の比較で開く */
-  | { type: 'candidate'; id: string };
+  /** 結果カードの「詳細」「詳細を開く」、図の地図の一覧: その候補を選び、地図もその候補へ寄せて、写真の比較で開く */
+  | { type: 'candidate'; id: string }
+  /** 図の地図の「写真を比べる」: 地図で選んだ候補を（すでに選んでいても）、写真の比較で開く。地図は動かさない */
+  | { type: 'compare'; id: string };
 
 /** 状態を決めるときに読む、いまの地区の一覧と地図の候補データ（まだ読み込まれていなければ空） */
 export interface AnswerContext {
@@ -162,6 +164,8 @@ export function applyExpandRequest(state: AnswerView, request: ExpandRequest, ct
       };
     case 'candidate':
       return { ...selectCandidate(calm, request.id, true, ctx), view: 'photos' };
+    case 'compare':
+      return comparePhotos(calm, request.id);
     default: {
       const unexpected: never = request;
       return unexpected;
@@ -169,7 +173,36 @@ export function applyExpandRequest(state: AnswerView, request: ExpandRequest, ct
   }
 }
 
-// ---- 拡大ビューの中の操作（開いているあいだ、いまの回答の状態へ当てる）----
+// ---- 回答の中に出す図 ----
+
+/** 回答の中に出す図の種類。地図は MapPanel（集計の帯・一覧を含む）、グラフは AreaChartView。写真の比較は図に入れない（「詳細」で拡大ビューが開く） */
+export type FigureKind = Extract<ResultView, 'map' | 'chart'>;
+
+/**
+ * 回答の結果から、回答の中に出す図の種類（並びは、拡大ビューのタブと同じ地図・グラフ）。結果カードにあった「グラフで見る」「地図で見る」の出し方を、そのまま写す:
+ * - 件数（count）: 地図とグラフ
+ * - 比較（compare）: グラフ（比べる地区が 1 つ以上あるときだけ）
+ * - 地図の表示（map_focus）: 地図
+ * - 表・検出画像・精度・お断り・知らない型・壊れた結果: 出さない
+ * 壊れた結果は、拡大ビューの絞り込みと同じ前処理（isWellFormedResult）で飛ばす（filter の無い count は、図の条件にならない）
+ */
+export function figureKinds(results: readonly ToolResult[]): FigureKind[] {
+  let map = false;
+  let chart = false;
+  for (const r of results.filter(isWellFormedResult)) {
+    if (r.type === 'count') {
+      map = true;
+      chart = true;
+    } else if (r.type === 'compare') {
+      if (Array.isArray(r.items) && r.items.length > 0) chart = true;
+    } else if (r.type === 'map_focus') {
+      if (Array.isArray(r.candidate_ids) && Array.isArray(r.bbox) && r.bbox.length === 4) map = true;
+    }
+  }
+  return [...(map ? (['map'] as const) : []), ...(chart ? (['chart'] as const) : [])];
+}
+
+// ---- 地図・グラフ・写真の比較の中の操作（回答の中の図でも、拡大ビューの中でも、その回答の状態へ当てる）----
 
 /** 地図の印・形を選んだ: 地図に留まり、その候補を選ぶ（フォーカスは地図に残す）。絞り込みの外なら広げる */
 export function selectFromMap(state: AnswerView, id: string, ctx: AnswerContext): AnswerView {

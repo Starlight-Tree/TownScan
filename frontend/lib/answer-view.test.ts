@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { AreaSummary, CandidateFeature, ToolResult } from './api-types';
-import { areas, compare, count, countWards, detail, detectionImage, mapFocus, table } from '../tests/fixtures';
+import { ALL_RESULTS, accuracy, areas, compare, count, countWards, detail, detectionImage, mapFocus, refusal, table } from '../tests/fixtures';
 import {
   answerKey,
   applyExpandRequest,
   clearSelection,
   comparePhotos,
   detailLoaded,
+  figureKinds,
   initialAnswerView,
   NO_IDS,
   openCandidate,
@@ -198,6 +199,16 @@ describe('applyExpandRequest（押したボタンの画面で開く）', () => {
     expect(after.pendingFocusId).toBeNull();
   });
 
+  it('compare（図の地図の「写真を比べる」）: 地図で選んだ候補を、写真の比較で開く（見出しへフォーカスを移す）。地図の寄せ先と絞り込みは動かさない', () => {
+    const focus = { bbox: BOX_ALL, ids: [], nonce: 4 };
+    const before = fresh({ mapFocus: focus, selected: { id: 'c-1-2-2', focus: false } });
+    const after = applyExpandRequest(before, { type: 'compare', id: 'c-1-2-2' }, ctx);
+    expect(after.view).toBe('photos');
+    expect(after.selected).toEqual({ id: 'c-1-2-2', focus: true });
+    expect(after.mapFocus).toBe(focus);
+    expect(after.filter).toBe(before.filter);
+  });
+
   it('candidate: 地図の候補データに形が無ければ、詳細が届いてから寄せる。分類・地区が絞り込みの外なら広げる（地区は全地区へ戻す）', () => {
     const lazy = applyExpandRequest(fresh(), { type: 'candidate', id: 'c-9-9-9' }, ctx);
     expect(lazy.pendingFocusId).toBe('c-9-9-9');
@@ -264,5 +275,44 @@ describe('拡大ビューの中の操作', () => {
     expect(after.mapFocus).toMatchObject({ bbox: BOX_1 });
     const kept = fresh({ mapFocus: { bbox: BOX_1, ids: [], nonce: 3 } });
     expect(showMapForFilter(kept, noData).mapFocus).toBe(kept.mapFocus);
+  });
+});
+
+describe('figureKinds（回答の中に出す図。結果カードにあった「グラフで見る」「地図で見る」の出し方を写す）', () => {
+  it('件数: 地図とグラフ（並びは、拡大ビューのタブと同じ地図・グラフ）。複数の地区の件数も同じ', () => {
+    expect(figureKinds([count])).toEqual(['map', 'chart']);
+    expect(figureKinds([countWards])).toEqual(['map', 'chart']);
+  });
+
+  it('比較: グラフだけ。比べる地区が 1 つも無いときは出さない', () => {
+    expect(figureKinds([compare])).toEqual(['chart']);
+    expect(figureKinds([{ ...compare, items: [] }])).toEqual([]);
+  });
+
+  it('地図の表示（map_focus）: 地図だけ。範囲（bbox）か候補の並びが壊れているときは出さない', () => {
+    expect(figureKinds([mapFocus])).toEqual(['map']);
+    expect(figureKinds([{ ...mapFocus, candidate_ids: [] }])).toEqual(['map']);
+    expect(figureKinds([{ ...mapFocus, bbox: undefined } as unknown as ToolResult])).toEqual([]);
+    expect(figureKinds([{ ...mapFocus, candidate_ids: undefined } as unknown as ToolResult])).toEqual([]);
+  });
+
+  it('表・検出画像・精度・お断りは、図を出さない（写真の比較は図に入れない）', () => {
+    for (const r of [table, detectionImage, accuracy, refusal]) expect(figureKinds([r]), r.type).toEqual([]);
+    expect(figureKinds([])).toEqual([]);
+  });
+
+  it('1 つの回答に複数の結果があるときは、種類ごとに 1 つだけ（地図・グラフの順）。比較と地図の表示が並んでも、重ならない', () => {
+    expect(figureKinds([mapFocus, compare])).toEqual(['map', 'chart']);
+    expect(figureKinds([count, compare, mapFocus])).toEqual(['map', 'chart']);
+    expect(figureKinds([table, mapFocus, detectionImage])).toEqual(['map']);
+    expect(figureKinds(ALL_RESULTS)).toEqual(['map', 'chart']);
+  });
+
+  it('壊れた結果（型が無い・null・filter の無い件数）は、図の元にしない。拡大ビューの絞り込みと同じ前処理で、飛ばす', () => {
+    const broken = [null, 3, {}, { type: 5 }, { ...count, filter: undefined }] as unknown as ToolResult[];
+    expect(figureKinds(broken)).toEqual([]);
+    expect(figureKinds([...broken, compare])).toEqual(['chart']);
+    // 知らない型（API の版がずれている）も、出さない
+    expect(figureKinds([{ type: 'heatmap' } as unknown as ToolResult])).toEqual([]);
   });
 });

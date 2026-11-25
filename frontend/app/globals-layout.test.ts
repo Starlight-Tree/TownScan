@@ -135,7 +135,8 @@ describe('拡大ビュー（.expanded-view。結果領域を入れるダイア�
     const stage = ruleIn(css, '.map-stage');
     expect(decl(stage, 'flex')).toBe('1 1 0');
     expect(decl(stage, 'min-height')).toBe('320px');
-    expect(css).not.toMatch(/\.map-stage\s*\{[^}]*clamp\(/);
+    // 回答の中の図（.answer-figure__map）の地図だけは、固定の高さ（clamp。components/chat/chat-layout.test.ts）。それを除いて、拡大ビューの地図の規則に clamp は無い
+    expect(css.replace(/\.answer-figure__map \.map-stage/g, '')).not.toMatch(/\.map-stage\s*\{[^}]*clamp\(/);
   });
 
   it('「閉じる」は、タブの帯の右端（タブと同じ高さ 44px）', () => {
