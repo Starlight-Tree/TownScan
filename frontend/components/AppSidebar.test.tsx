@@ -4,7 +4,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONVERSATION_ID_KEY, writeConversationId } from '../lib/conversation-session';
+import { clearAccessToken } from '../lib/auth-token';
+import { jsonResponse } from '../tests/fixtures';
+import { createFetchRouter, jwtExpiringIn } from '../tests/history-helpers';
 import { AppSidebar } from './AppSidebar';
+import { HistoryProvider } from './HistoryProvider';
 import { NewConversationProvider, useRegisterNewConversation } from './NewConversation';
 
 const nav = vi.hoisted(() => ({ pathname: '/', push: vi.fn() }));
@@ -337,14 +341,40 @@ describe('AppSidebar の会話の履歴の一覧（仕様 §7.1.1）', () => {
     expect(list()).not.toBeNull();
   });
 
-  it('1023px 以下の重ねて開くパネルには出さない（初版の決定）', async () => {
+  it('1023px 以下の重ねて開くパネルには、開いたときだけ出る（閉じている間は描かない）', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })));
     const { container } = setup('/');
     expect(list()).toBeNull();
     await userEvent.click(within(container.querySelector<HTMLElement>('.app-narrow-bar')!).getByRole('button', { name: 'サイドパネルを開く' }));
     expect(screen.getByRole('complementary')).toHaveAttribute('data-drawer', 'open');
+    expect(list()).not.toBeNull();
+    expect(screen.getByText('会話の履歴')).toBeInTheDocument();
+    await userEvent.click(inside().getByRole('button', { name: 'サイドパネルを閉じる' }));
     expect(list()).toBeNull();
-    expect(screen.queryByText('会話の履歴')).not.toBeInTheDocument();
+  });
+
+  it('1023px 以下: ログイン中に、重ねて開いたパネルの一覧から会話を選ぶと、その会話を開き、パネルを閉じて、フォーカスは開くボタンへ戻る', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })));
+    clearAccessToken();
+    const router = createFetchRouter();
+    router.on('GET /api/auth/token', () => jsonResponse({ token: jwtExpiringIn(900) }));
+    router.on('GET /api/conversations', () =>
+      jsonResponse({ conversations: [{ id: 'c9', title: '狭い幅で開く会話', updated_at: '2026-11-25T10:00:00Z' }] }),
+    );
+    vi.stubGlobal('fetch', router.fn);
+    nav.pathname = '/';
+    const { container } = render(
+      <HistoryProvider loggedIn loginAvailable>
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" />
+      </HistoryProvider>,
+    );
+    const opener = within(container.querySelector<HTMLElement>('.app-narrow-bar')!).getByRole('button', { name: 'サイドパネルを開く' });
+    await userEvent.click(opener);
+    await userEvent.click(await screen.findByRole('button', { name: /^狭い幅で開く会話/ }));
+    expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBe('c9');
+    expect(nav.push).toHaveBeenCalledWith('/');
+    expect(screen.getByRole('complementary')).toHaveAttribute('data-drawer', 'closed');
+    expect(opener).toHaveFocus();
   });
 
   it('ほかのページ（精度）の「新しい会話」は、覚えている会話 ID を消してから、ホームへ移る（移った先で、前の会話を開き直さない）', async () => {

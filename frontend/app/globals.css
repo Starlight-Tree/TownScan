@@ -2931,7 +2931,7 @@ p.banner {
    TownScan の色の変数を使う（DocuNavi の --danger-border・--danger-bg・--danger-text は、TownScan では --error-border・--error-bg・--error-text。--ws-err は --error）。
    次の 2 つの塊（.thread-*・.app-sidebar .thread-*）は、DocuNavi の宣言を、変数名とセレクターの接頭辞（.ws-sidebar → .app-sidebar）だけ替えて写した（テストで宣言を確かめる）。
    .btn は TownScan の（44px・margin-left つきの）.btn--small なので、この一覧の中だけ、DocuNavi の .btn-small（padding 0.25rem 0.6rem・0.8rem）にそろえる。
-   細い帯（閉じた表示）と、1023px 以下の重ねて開くパネルには出さない（初版の決定。AppSidebar が描かない）ので、DocuNavi の狭い画面の規則（@media (max-width: 700px)）は写さない。 */
+   細い帯（閉じた表示）には出さない（AppSidebar が描かない）。1023px 以下の重ねて開くパネルには出す（幅は最大 18rem。.app-sidebar .thread-sidebar が幅を親に任せる）。DocuNavi の狭い画面の規則（@media (max-width: 700px)）は写さない。 */
 .thread-sidebar {
   display: flex;
   flex: none;

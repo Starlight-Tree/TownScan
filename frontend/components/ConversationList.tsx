@@ -159,7 +159,7 @@ export function ConversationListView({ view, currentId, busy, onSelect, onDelete
  * 未ログイン・ログインを使えない設定・期限切れのときは、履歴の API を呼ばず、案内だけを出す（呼ばないのは HistoryProvider が保つ）。
  * 項目を押すと、チャットがその会話を開き直す。ホーム以外のページ（精度）では、会話 ID を書いてからホームへ移る（チャットが立ち上がるときに開き直す）。
  */
-export function ConversationList() {
+export function ConversationList({ onPick }: { /** 一覧の会話を選んだとき（重ねて開くパネルを閉じるために使う） */ onPick?: () => void } = {}) {
   const router = useRouter();
   const history = useHistory();
   const { currentId, busy } = useConversationStatus();
@@ -176,6 +176,7 @@ export function ConversationList() {
   }
 
   const select = (id: string) => {
+    onPick?.();
     if (open(id)) return;
     writeConversationId(id);
     router.push('/');

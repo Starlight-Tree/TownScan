@@ -79,16 +79,14 @@ describe('HistoryProvider（ログイン中か・期限切れ・一覧）', () =
     expect(router.count('GET /api/conversations')).toBe(1);
   });
 
-  it('1023px 以下（一覧を出さない幅）では、ログイン中でも、一覧を取りに行かない（保存は続く: active は真のまま）', async () => {
+  it('1023px 以下でも、ログイン中なら、一覧を取りに行く（重ねて開くパネルに出すため）', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })));
     render(
       <HistoryProvider loggedIn loginAvailable>
         <Probe />
       </HistoryProvider>,
     );
-    expect(screen.getByTestId('probe')).toHaveTextContent('in|active|valid|unavailable');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(router.count('GET /api/conversations')).toBe(0);
-    expect(router.count('GET /api/auth/token')).toBe(0);
+    await waitFor(() => expect(screen.getByTestId('probe')).toHaveTextContent('in|active|valid|ready'));
+    expect(router.count('GET /api/conversations')).toBe(1);
   });
 });

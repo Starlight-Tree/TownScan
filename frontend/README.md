@@ -52,7 +52,7 @@ JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、�
 | `lib/auth-token.ts` | `GET /api/auth/token` で JWT を取り、メモリにだけ置く。期限の 60 秒前に取り直す・同時の取得は 1 回・401 は 1 回だけ取り直して送り直す。localStorage・sessionStorage・URL・ログには出さない |
 | `lib/conversations-api.ts`・`lib/use-conversations.ts` | 履歴の 3 本（一覧・発言・削除）と、一覧の取得・状態・取り直し。失敗は 401・404・422・その他の型にする |
 | `lib/conversation-session.ts` | 開いている会話の ID（`sessionStorage` の `townscan:conversation_id`）。タブごと。ID は画面が `crypto.randomUUID()` で作る |
-| `components/ConversationList.tsx` | サイドパネルの一覧（「新しい会話」の下・アカウントの上）。DocuNavi の `ThreadSidebar` と同じ `thread-*` のクラス・CSS・文言。細い帯と 1023px 以下のパネルには出さない（初版の決定） |
+| `components/ConversationList.tsx` | サイドパネルの一覧（「新しい会話」の下・アカウントの上）。DocuNavi の `ThreadSidebar` と同じ `thread-*` のクラス・CSS・文言。細い帯には出さない。1023px 以下の重ねて開くパネルには、開いたときだけ出す |
 | `components/NewConversation.tsx` | サイドパネルとチャットのつなぎ（「新しい会話」「会話を開く」「いま開いている会話・生成中」） |
 | `components/chat/ChatPanel.tsx`・`components/chat/conversation.ts` | 保存（最初の回答が届いてから ID を書く）・開き直し（取得中の遅れた結果は捨てる）・ログインの確認が通らないときの「保存せずに送り直し」・別の解析結果の回答の扱い |
 
