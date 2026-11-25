@@ -174,7 +174,7 @@
 | `contract/test_chat_behavior.py` | 空の発言の例に、U+001C〜U+001F だけの発言を足す | 未反映（後の段） |
 | `scripts/test-contract.sh`・`contract/conftest.py`・`contract/pytest.ini`・`contract/support/fakes.py` | 構成 `history`・機能の印 `history` と `CONTRACT_FEATURES`・`auth_user` の INSERT（利用者 200 人）・`fresh_user()` | 未反映（後の段） |
 | `api/internal/store/schema.go`・`sql/` | `history.sql` を足し、`ApplySchema` の並びの `authSQL` のあとに入れる。`backend/db/auth.sql` と `api/internal/store/sql/auth.sql` の冒頭のコメント（「API は読まない」）を、同じ内容で直す（`TestSchemaMatchesBackend` が一致を見る） | 未反映（後の段。コード） |
-| `api/internal/httpx/middleware.go`（`AccessLog`）・`router.go`・`httpx_test.go` | 生のパスではなく、ルートのテンプレートで記録する。履歴の経路を足す前に直す | 未反映（後の段。コード） |
+| `api/internal/httpx/middleware.go`（`AccessLog`）・`router.go`・`httpx_test.go` | 生のパスではなく、ルートのテンプレートで記録する。履歴の経路を足す前に直す | **反映した**（2026-11-25。`AccessLog` が入れ物を文脈に入れ、`Router` が合ったテンプレートを書く。405 もテンプレート。404・307 は `?`） |
 
 ## 選ばなかった案
 

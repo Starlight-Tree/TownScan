@@ -268,11 +268,44 @@ func TestAccessLogRecordsOneSafeLine(t *testing.T) {
 		t.Fatalf("行数 = %d: %v", len(l.lines), l.lines)
 	}
 	line := l.lines[0]
-	if !strings.Contains(line, `GET "/api/a\nb" -> 404 (5B,`) {
+	// ルーターを通らない（テンプレートが無い）ので `?`。生のパス（%0A で混ぜた改行も）は出ない
+	if !strings.Contains(line, `GET "?" -> 404 (5B,`) {
 		t.Errorf("行 = %s", line)
 	}
-	if strings.Contains(line, "SECRET") || strings.Contains(line, "\n") {
-		t.Errorf("秘密・改行が入っている: %q", line)
+	if strings.Contains(line, "SECRET") || strings.Contains(line, "\n") || strings.Contains(line, "/api/a") {
+		t.Errorf("秘密・改行・生のパスが入っている: %q", line)
+	}
+}
+
+// 会話 ID・候補 ID はパスに入る。ログには、ルートのテンプレートだけを出す（仕様 §2.3.7・J2）。
+func TestAccessLogRecordsTheRouteTemplateNotTheRawPath(t *testing.T) {
+	var l logSink
+	rt := &Router{}
+	ok := func(w http.ResponseWriter, r *http.Request, p Params) { w.WriteHeader(200) }
+	rt.Handle("GET", "/api/candidates/{candidate_id}", ok)
+	rt.Handle("GET", "/api/conversations/{conversation_id}/messages", ok)
+	rt.Handle("DELETE", "/api/conversations/{conversation_id}", ok)
+	rt.Handle("GET", "/api/areas", ok)
+	h := Chain(rt, AccessLog(l.logf))
+	for _, c := range []struct{ method, target, want string }{
+		{"GET", "/api/candidates/c-226249-105769-1", `GET "/api/candidates/{candidate_id}" -> 200`},
+		{"GET", "/api/conversations/5b0c9f0e-1111-2222-3333-444455556666/messages", `GET "/api/conversations/{conversation_id}/messages" -> 200`},
+		{"DELETE", "/api/conversations/5b0c9f0e-1111-2222-3333-444455556666", `DELETE "/api/conversations/{conversation_id}" -> 200`},
+		{"GET", "/api/areas?area_id=SECRET", `GET "/api/areas" -> 200`},
+		// メソッド違いの 405 も、パスは合っているので、テンプレート（生の ID ではない）
+		{"POST", "/api/conversations/5b0c9f0e-1111-2222-3333-444455556666", `POST "/api/conversations/{conversation_id}" -> 405`},
+		// どのルートにも合わない（404）・末尾のスラッシュの 307 は `?`
+		{"GET", "/api/conversations/5b0c9f0e-1111-2222-3333-444455556666/other", `GET "?" -> 404`},
+		{"GET", "/api/areas/", `GET "?" -> 307`},
+	} {
+		l.lines = nil
+		do(h, c.method, c.target)
+		if len(l.lines) != 1 || !strings.Contains(l.lines[0], c.want) {
+			t.Errorf("%s %s: 行 = %v, 期待 %q を含む", c.method, c.target, l.lines, c.want)
+		}
+		if len(l.lines) == 1 && (strings.Contains(l.lines[0], "5b0c9f0e") || strings.Contains(l.lines[0], "c-226249") || strings.Contains(l.lines[0], "SECRET")) {
+			t.Errorf("%s %s: ID・クエリがログに出ている: %s", c.method, c.target, l.lines[0])
+		}
 	}
 }
 

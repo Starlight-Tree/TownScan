@@ -28,9 +28,10 @@ type Router struct {
 }
 
 type route struct {
-	method string
-	segs   []segment
-	h      HandlerFunc
+	method  string
+	pattern string // "/api/candidates/{candidate_id}"（AccessLog が記録するテンプレート）
+	segs    []segment
+	h       HandlerFunc
 }
 
 type segment struct {
@@ -48,7 +49,7 @@ func (rt *Router) Handle(method, pattern string, h HandlerFunc) {
 			segs = append(segs, segment{literal: s})
 		}
 	}
-	rt.routes = append(rt.routes, route{method: method, segs: segs, h: h})
+	rt.routes = append(rt.routes, route{method: method, pattern: pattern, segs: segs, h: h})
 }
 
 func (rte route) match(path string) (Params, bool) {
@@ -89,18 +90,24 @@ func (rt *Router) matchesAnyMethod(path string) bool {
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	var allowed []string
+	var firstPattern string
 	for _, rte := range rt.routes {
 		params, ok := rte.match(path)
 		if !ok {
 			continue
 		}
 		if rte.method == r.Method {
+			setRoutePattern(r, rte.pattern) // 動かすルートのテンプレートを、AccessLog へ渡す（生のパスは渡さない）
 			rte.h(w, r, params)
 			return
+		}
+		if len(allowed) == 0 {
+			firstPattern = rte.pattern
 		}
 		allowed = append(allowed, rte.method)
 	}
 	if len(allowed) > 0 {
+		setRoutePattern(r, firstPattern) // 405 も、パスは合っているので、そのテンプレートを記録する
 		e := apierr.MethodNotAllowed()
 		e.Headers = map[string]string{"Allow": joinUnique(allowed)}
 		apierr.Write(w, e)
@@ -117,6 +124,13 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	apierr.Write(w, apierr.NotFound())
+}
+
+// setRoutePattern は、AccessLog の入れ物（あれば）に、合ったルートのテンプレートを書く。
+func setRoutePattern(r *http.Request, pattern string) {
+	if h, ok := r.Context().Value(routeHolderKey{}).(*routeHolder); ok {
+		h.pattern = pattern
+	}
 }
 
 // joinUnique は、メソッドを重複なく、並べ替えて ", " でつなぐ（Allow の値）。

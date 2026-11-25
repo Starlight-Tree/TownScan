@@ -58,16 +58,29 @@ func (r *recorder) Flush() {
 
 func (r *recorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
+// routeHolder は、ルーターが合わせたルートのテンプレート（"/api/conversations/{conversation_id}"）を、AccessLog へ渡す入れ物。
+// AccessLog が要求の文脈に入れ、Router が書き、AccessLog が読む（どのルートにも合わなければ空のまま）。
+type routeHolder struct{ pattern string }
+
+type routeHolderKey struct{}
+
 // AccessLog は、リクエストを 1 行ずつ記録する（uvicorn のアクセスログと同じ位置づけ）。
-// 記録するのは、メソッド・パス・状態・バイト数・所要時間だけ。クエリ文字列・ヘッダー（Authorization）・本文は出さない。
-// パスは %q で書く（%0A などで改行を混ぜられても、ログが 1 行のまま読める）。
+// 記録するのは、メソッド・ルートのテンプレート・状態・バイト数・所要時間だけ。クエリ文字列・ヘッダー（Authorization）・本文は出さない。
+// **生のパスは出さない**: 会話 ID・候補 ID がパスに入るので、ルーターが合わせたテンプレート（/api/conversations/{conversation_id}）で記録する。
+// どのルートにも合わなかった要求（404・307 など）は、テンプレートが無いので `?`（DocuNavi の計測ログが route.path か ? を出すのと同じ。仕様 §2.3.7）。
+// テンプレートは %q で書く（コードの定数なので改行は入らないが、書き方をそろえる）。
 func AccessLog(logf Logf) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := &recorder{ResponseWriter: w, status: http.StatusOK}
-			next.ServeHTTP(rec, r)
-			logf("%s %q -> %d (%dB, %s)", r.Method, r.URL.Path, rec.status, rec.bytes, time.Since(start).Round(10*time.Microsecond))
+			holder := &routeHolder{}
+			next.ServeHTTP(rec, r.WithContext(context.WithValue(r.Context(), routeHolderKey{}, holder)))
+			pattern := holder.pattern
+			if pattern == "" {
+				pattern = "?"
+			}
+			logf("%s %q -> %d (%dB, %s)", r.Method, pattern, rec.status, rec.bytes, time.Since(start).Round(10*time.Microsecond))
 		})
 	}
 }
