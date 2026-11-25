@@ -49,13 +49,34 @@ type Store struct {
 	acquire time.Duration
 }
 
+// Option は、Open の設定。
+type Option func(*pgxpool.Config)
+
+// WithStatementTimeout は、DB の statement_timeout（1 つの文の実行時間の上限）を、接続ごとに設定する。0 以下なら設定しない。
+// 超えた文は、DB が取り消す（SQLSTATE 57014。ErrUnavailable に当たる → API は 503 db_unavailable）。
+// 接続文字列（DATABASE_URL）に statement_timeout があれば、そちらを優先する。
+func WithStatementTimeout(d time.Duration) Option {
+	return func(cfg *pgxpool.Config) {
+		if d <= 0 || cfg.ConnConfig.RuntimeParams["statement_timeout"] != "" {
+			return
+		}
+		if cfg.ConnConfig.RuntimeParams == nil {
+			cfg.ConnConfig.RuntimeParams = map[string]string{}
+		}
+		cfg.ConnConfig.RuntimeParams["statement_timeout"] = strconv.FormatInt(d.Milliseconds(), 10) // 単位は、ミリ秒
+	}
+}
+
 // Open は、接続プールを作る。接続はすぐには張らない（DB が起きていなくても返る。最初の問い合わせ・スキーマの適用で張る）。
 // 接続文字列に誤りがあれば、エラー。エラーの文に接続文字列（パスワード）は入れない。
-func Open(ctx context.Context, databaseURL string) (*Store, error) {
+func Open(ctx context.Context, databaseURL string, opts ...Option) (*Store, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		// pgx の文には接続文字列の一部が入りうるので、使わない
 		return nil, errors.New("DATABASE_URL の形が正しくありません（postgresql://ユーザー:パスワード@ホスト:5432/DB 名 の形で書いてください）")
+	}
+	for _, o := range opts {
+		o(cfg)
 	}
 	cfg.MinConns = poolMinConns
 	cfg.MaxConns = poolMaxConns

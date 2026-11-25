@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
@@ -26,7 +27,7 @@ var _ Chatter = (*chat.Service)(nil)
 // 返答に使うのは末尾の chat.ContextMessages 件だけ
 const (
 	maxChatMessages = 500
-	maxChatContent  = 2000 // 1 件の本文の上限（文字数）
+	maxChatContent  = chat.MaxMessageChars // 1 件の本文の上限（文字数。正規化の前と後の、両方で数える）
 )
 
 // 最後のメッセージの規則（形は合っているが、規則に合わない）。detail は付かず、message はこの固定の文
@@ -73,6 +74,15 @@ func (a *api) chat(w http.ResponseWriter, r *http.Request, _ httpx.Params) {
 	}
 	reply, err := a.d.Chat.Answer(r.Context(), messages)
 	if err != nil {
+		var llm *chat.LLMError
+		if errors.As(err, &llm) {
+			// 実 LLM が使えないとき。模擬には切り替えない。ログと応答に出すのは、失敗の種類・HTTP の状態・Google の理由の定数だけ
+			// （キー・URL・質問や返答の本文・Google のエラーの本文は入れない）。frontend は {error:{code,message}} の message を「送信できませんでした」に出して、再送を出す
+			kind, status, reason := llm.LogFields()
+			a.logf("LLM が応答できませんでした: 種別=%s HTTP=%s 理由=%s", kind, status, reason)
+			httpx.WriteError(w, apierr.LLMUnavailable())
+			return
+		}
 		a.fail(w, err)
 		return
 	}
@@ -135,7 +145,9 @@ func parseChatRequest(b httpx.Body) ([]chat.Message, []apierr.Detail) {
 			switch {
 			case !isStr:
 				details = append(details, detail(pdNotString, "messages", idx, "content"))
-			case utf8.RuneCountInString(s) > maxChatContent:
+			case utf8.RuneCountInString(s) > maxChatContent, chat.NormalizedLen(s) > maxChatContent:
+				// 正規化（NFKC）の前に数えるだけでは足りない: NFKC は 1 文字を最大 18 文字に伸ばす（「ﷺ」）。伸びたあとの長さも、同じ上限で数える
+				// （Python は、正規化の前だけ。Go だけが落とす意図した違い）。メッセージは、同じ
 				details = append(details, detail(pdContentTooBig, "messages", idx, "content"))
 			default:
 				msg.Content = s

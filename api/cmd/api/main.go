@@ -2,8 +2,8 @@
 //
 // 決定: docs/decisions/0005-api-in-go.md（API は Go、解析は Python）。振る舞いの正本は backend/app/ と docs/spec-prototype.md §4.4。
 // いまあるのは読み取りのエンドポイント（/api/health・/api/areas・/api/candidates・/api/candidates.geojson・/api/candidates/{id}・/api/metrics）と、
-// 検出画像（/api/candidates/{id}/image。internal/imaging）、認証（/api/me。internal/auth）、チャット（POST /api/chat。模擬モデルだけ。internal/chat）。
-// 実 LLM（Gemini）は、あとの段で足す。
+// 検出画像（/api/candidates/{id}/image。internal/imaging）、認証（/api/me。internal/auth）、チャット（POST /api/chat。模擬モデルと、
+// LLM_PROVIDER=gemini のときの実 LLM。internal/chat）。
 //
 // 使い方:
 //
@@ -41,6 +41,10 @@ const (
 	// 上限を大きくしないのは、JSON を復号するとメモリーが本文の約 50 倍になるため（[{},{},…] のような本文は、要素 1 つ 3 バイトで map 1 つ・約 150 バイトになる）。
 	// 8 MiB だと 1 本の要求で約 400 MB、4 MiB なら約 200 MB。それでも要求を重ねられれば足りなくなるので、コンテナのメモリー上限は 1 GiB 以上にする（README の「チャット」）。
 	maxBodyBytes = 4 << 20
+	// 1 回の要求の全体の期限と、DB の statement_timeout。どちらも、チャットの Gemini の期限（chat.RequestDeadline = 27 秒）に合わせる。
+	// frontend の Next.js が /api/* を転送するときの待ちの既定は 30 秒なので、それより前に、API が（502・503 などで）応答できる。
+	// 要求の期限は、DB の問い合わせと Gemini への通信を、期限で打ち切る。DB の文は、期限を超えて走り続けない
+	requestDeadline = chat.RequestDeadline
 	// 停止の合図から、処理中の応答を待つ時間
 	shutdownGrace = 10 * time.Second
 	// スキーマの適用のやり直し（backend/app/db.py の wait_and_apply_schema と同じ）
@@ -90,14 +94,18 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return 2
 	}
 
-	st, err := store.Open(ctx, cfg.DatabaseURL.Reveal())
+	st, err := store.Open(ctx, cfg.DatabaseURL.Reveal(), store.WithStatementTimeout(requestDeadline))
 	if err != nil {
 		logger.Printf("起動できません: %v", err)
 		return 2
 	}
 	defer st.Close()
-	// チャット（模擬モデル）。LLM_PROVIDER=gemini は、まだ使えない（黙って模擬に落とさず、DB を待つ前に止まる）
-	chatSvc, err := chat.New(st, cfg.LLMProvider, logger.Printf)
+	// チャット。LLM_PROVIDER=gemini のときだけ、Gemini のキー・モデルを渡す。キーが無ければ、黙って模擬に落とさず、DB を待つ前に止まる
+	chatCfg := chat.Config{Provider: cfg.LLMProvider}
+	if cfg.LLMProvider == "gemini" {
+		chatCfg.Gemini = chat.GeminiConfig{APIKey: cfg.GeminiAPIKey, Model: cfg.GeminiModel, Deadline: requestDeadline}
+	}
+	chatSvc, err := chat.New(st, chatCfg, logger.Printf)
 	if err != nil {
 		logger.Printf("設定の誤り: %v", err)
 		return 2
@@ -129,7 +137,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	return 0
 }
 
-// buildHandler は、ルーターをミドルウェアで包む。外側から: アクセスログ → panic の回復 → セキュリティヘッダー → 本文の上限 → ルーター。
+// buildHandler は、ルーターをミドルウェアで包む。外側から: アクセスログ → panic の回復 → セキュリティヘッダー → 本文の上限 → 要求全体の期限 → ルーター。
 // アクセスログが外側なのは、panic を 500 にしたあとの状態を記録するため。
 func buildHandler(cfg config.Config, st handlers.Reader, chatSvc handlers.Chatter, logf func(string, ...any)) http.Handler {
 	router := handlers.New(handlers.Deps{
@@ -146,6 +154,7 @@ func buildHandler(cfg config.Config, st handlers.Reader, chatSvc handlers.Chatte
 		httpx.Recover(logf),
 		httpx.SecurityHeaders(),
 		httpx.LimitBody(maxBodyBytes),
+		httpx.Timeout(requestDeadline),
 	)
 }
 

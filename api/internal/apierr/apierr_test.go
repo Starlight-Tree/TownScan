@@ -20,6 +20,7 @@ func TestWriteShapeMatchesPython(t *testing.T) {
 		{"評価なし", MetricsNotFound(), 404, `{"error":{"code":"not_found","message":"評価の結果がありません"}}`},
 		{"データなし", NoData(), 503, `{"error":{"code":"no_data","message":"データが読み込まれていません。python -m app.load で pipeline の出力を読み込んでください"}}`},
 		{"DB 不通", DBUnavailable(), 503, `{"error":{"code":"db_unavailable","message":"データベースに接続できません。しばらくしてから再試行してください"}}`},
+		{"LLM 不通", LLMUnavailable(), 502, `{"error":{"code":"llm_unavailable","message":"いまは LLM が応答できません。少し待ってからもう一度お試しください"}}`},
 		{"内部", Internal(), 500, `{"error":{"code":"internal_error","message":"サーバー内部のエラーです"}}`},
 		{
 			"検証", Validation([]Detail{{Loc: []string{"query", "limit"}, Msg: "Input should be greater than or equal to 1"}}), 422,

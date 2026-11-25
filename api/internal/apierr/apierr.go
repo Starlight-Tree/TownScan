@@ -97,6 +97,12 @@ func DBUnavailable() *Error {
 	return New(http.StatusServiceUnavailable, "db_unavailable", "データベースに接続できません。しばらくしてから再試行してください")
 }
 
+// LLMUnavailable は、実 LLM（Gemini）が使えないときの 502（キーが無効・429・5xx・タイムアウト・壊れた応答・往復の上限超過。模擬には切り替えない）。
+// メッセージは固定で、失敗の詳細（種類・HTTP の状態・URL・キー）は載せない。
+func LLMUnavailable() *Error {
+	return New(http.StatusBadGateway, "llm_unavailable", "いまは LLM が応答できません。少し待ってからもう一度お試しください")
+}
+
 // Internal は、想定外のエラーの 500。原因は載せない。
 func Internal() *Error {
 	return New(http.StatusInternalServerError, "internal_error", "サーバー内部のエラーです")

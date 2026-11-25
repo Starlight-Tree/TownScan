@@ -14,21 +14,63 @@ import (
 
 // チャット（POST /api/chat）の、起動から応答までの通しの検査。
 
-// LLM_PROVIDER=gemini（実 LLM）は、次の段で作る。いまは、黙って模擬に落とさず、起動時に明確なエラーで止まる（DB を待つ前。キー・接続文字列は出さない）。
-func TestRunStopsAtStartupWhenGeminiIsRequestedButNotBuiltYet(t *testing.T) {
-	const dbSecret, keySecret = "pw-secret-marker", "AIza-key-secret-marker"
+// LLM_PROVIDER=gemini は、キーがあれば起動できる（/api/health が、llm と llm_model を返す。キーは出さない）。キーが無ければ、黙って模擬に落とさず、
+// DB を待つ前に、設定の誤りで止まる（キー・接続文字列は出さない）。実 Gemini には、つながない（チャットを 1 回も呼ばない）。
+func TestRunStartsWithGeminiWhenAKeyIsGiven(t *testing.T) {
+	const keySecret = "AIza-key-secret-marker"
+	url := testdb.URL(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var out syncBuffer
-	env := map[string]string{"DATABASE_URL": "postgresql://u:" + dbSecret + "@127.0.0.1:1/x", "LLM_PROVIDER": "gemini", "GEMINI_API_KEY": keySecret}
+	addrc := make(chan net.Addr, 1)
+	done := make(chan int, 1)
+	env := map[string]string{"DATABASE_URL": url, "LLM_PROVIDER": "gemini", "GEMINI_API_KEY": keySecret, "GEMINI_MODEL": "gemini-test-model"}
+	go func() {
+		done <- run(ctx, []string{"-listen", "127.0.0.1:0"}, envOf(env), &out, func(a net.Addr) { addrc <- a })
+	}()
+	var base string
+	select {
+	case a := <-addrc:
+		base = "http://" + a.String()
+	case code := <-done:
+		t.Fatalf("起動できなかった（終了コード %d）: %s", code, out.String())
+	case <-time.After(20 * time.Second):
+		t.Fatal("起動が終わらない")
+	}
+	resp, err := http.Get(base + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if body := string(b); !strings.Contains(body, `"llm":"gemini"`) || !strings.Contains(body, `"llm_model":"gemini-test-model"`) || strings.Contains(body, keySecret) {
+		t.Errorf("health = %s", body)
+	}
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Errorf("終了コード = %d: %s", code, out.String())
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("停止しない")
+	}
+	if logs := out.String(); !strings.Contains(logs, "LLM=gemini") || strings.Contains(logs, keySecret) || strings.Contains(logs, url) {
+		t.Errorf("ログ = %s", logs)
+	}
+}
+
+func TestRunStopsAtStartupWhenGeminiHasNoKey(t *testing.T) {
+	const dbSecret = "pw-secret-marker"
+	var out syncBuffer
+	env := map[string]string{"DATABASE_URL": "postgresql://u:" + dbSecret + "@127.0.0.1:1/x", "LLM_PROVIDER": "gemini"}
 	start := time.Now()
 	code := run(context.Background(), nil, envOf(env), &out, nil)
 	if code != 2 {
 		t.Errorf("終了コード = %d, 期待 2（設定の誤り）", code)
 	}
-	if !strings.Contains(out.String(), "LLM_PROVIDER=gemini") || !strings.Contains(out.String(), "まだ使えません") {
+	if !strings.Contains(out.String(), "GEMINI_API_KEY が要ります") || strings.Contains(out.String(), dbSecret) {
 		t.Errorf("出力 = %s", out.String())
-	}
-	if strings.Contains(out.String(), dbSecret) || strings.Contains(out.String(), keySecret) {
-		t.Errorf("秘密が出力に入っている: %s", out.String())
 	}
 	if time.Since(start) > 5*time.Second {
 		t.Errorf("DB を待ってから止まった（%v）", time.Since(start))

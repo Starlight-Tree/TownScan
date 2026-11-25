@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -196,10 +197,12 @@ func TestGoldenKanjiMatchesPython(t *testing.T) {
 	}
 }
 
-// 数字の検査（結果から出せない数字・漢数字+助数詞）が、Python と同じ。
+// 数字の検査が、Python と同じ。Python が見逃す書き方（助数詞の無い漢数字・英語の数詞・空白で区切った数。guard.go の numberScan.extra）は、
+// Go だけが落とす意図した違いなので、その分は照合から外す。外すのは extra だけで、数字の連なり（digits）と漢数字+助数詞（kanji）は、
+// すべての入力で Python と完全に同じ（順も同じ）。extra がある入力が、実際に、その 3 つの書き方のどれかを含むことも確かめる。
 func TestGoldenGuardMatchesPython(t *testing.T) {
 	g := loadGolden(t)
-	failures := 0
+	failures, withExtra := 0, 0
 	for i, c := range g.Guard {
 		dec := json.NewDecoder(bytes.NewReader(c.R))
 		dec.UseNumber()
@@ -207,15 +210,34 @@ func TestGoldenGuardMatchesPython(t *testing.T) {
 		if err := dec.Decode(&results); err != nil {
 			t.Fatal(err)
 		}
-		got := findUnsupportedNumbers(c.C, results)
+		scan := scanNumbers(c.C, allowedNumbers(results), nil)
+		got := slices.Concat(scan.digits, scan.kanji)
 		if !slices.Equal(got, c.Bad) && !(len(got) == 0 && len(c.Bad) == 0) {
 			failures++
 			if failures <= 15 {
 				t.Errorf("#%d findUnsupportedNumbers(%+q, %s) = %q, Python は %q", i, c.C, c.R, got, c.Bad)
 			}
 		}
+		if len(scan.extra) > 0 {
+			withExtra++
+			if !hasLoopholeShape(c.C) {
+				t.Errorf("#%d %+q: Python が見逃す書き方が無いのに、extra = %q", i, c.C, scan.extra)
+			}
+		}
 	}
 	if failures > 0 {
 		t.Errorf("Python と違う入力: %d / %d 件", failures, len(g.Guard))
 	}
+	if withExtra == 0 {
+		t.Error("Python が見逃す書き方を含む入力が、期待値に 1 件も無い。この検査の前提が崩れている")
+	}
+}
+
+var spacedDigitsRE = regexp.MustCompile(`\p{Nd}` + pySpaceClass + `+\p{Nd}`)
+
+// hasLoopholeShape は、文が、Python の検査が見逃す 3 つの書き方（漢数字・英語の数詞・空白で区切った数字）のどれかを含むこと。
+// guard.go とは別に、文字の並びだけで調べる。
+func hasLoopholeShape(content string) bool {
+	text := visibleText(content)
+	return strings.ContainsFunc(text, isNumeralKanji) || englishNumberRE.MatchString(text) || spacedDigitsRE.MatchString(text)
 }

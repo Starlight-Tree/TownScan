@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -132,6 +133,20 @@ func LimitBody(limit int64) Middleware {
 				r.Body = http.MaxBytesReader(w, r.Body, limit)
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// Timeout は、1 回の要求の全体に、期限を付ける（r.Context() の期限）。DB の問い合わせ・外部（Gemini など）への通信は、この期限で打ち切られる。
+// 打ち切った処理は、ハンドラーが、状態に直す（DB は 503 db_unavailable、実 LLM は 502 llm_unavailable）。期限の前にハンドラーが返れば、何も起きない。
+// frontend の Next.js が /api/* を転送するときの待ち（既定 30 秒）より前に、API が応答できるようにするための期限（cmd/api は、チャットの 27 秒の期限に合わせる）。
+// 期限は、ハンドラーを強制的に止めはしない（context を見ない処理は、そのまま続く）。
+func Timeout(d time.Duration) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), d)
+			defer cancel()
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

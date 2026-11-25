@@ -108,7 +108,7 @@ HTTP から見えない・実装の言語に依存する検査は、`backend/tes
 | `test_auth_schema.py` | `auth.sql` の列・型・冪等・既存の行を消さないこと | DB の表の検査（HTTP から見えない） |
 | `test_config.py`・`test_gemini.py`・`test_mock_model.py`・`test_guard.py`・`test_loader.py`・`test_dev_up.py`・`test_login_secrets.py` | 設定の読み取り・Gemini の窓口（再試行・27 秒の期限・502）・模擬モデルの規則の単体・数字の検査の単体・ローダー・スクリプト | 内部の関数・偽の外部サーバーが要る・Python（解析側）に残る |
 
-Go の `api/` ができたら、Gemini の窓口（再試行・期限・502）は、偽の Gemini サーバーを使う検査を契約に足すか、Go のテストに持つか、そのとき決める（いまの契約は実 API を呼ばない・`LLM_PROVIDER=mock` だけ）。
+Go の `api/` に Gemini の窓口ができた（2026-11-25）。その検査（再試行・期限・502・キーが出ない）は、契約に足さず、Go のテストに持つ（`api/internal/chat/gemini_test.go`・`api/cmd/api/gemini_test.go`。偽の Gemini は `net/http/httptest`）。契約は、実 API を呼ばない・`LLM_PROVIDER=mock` だけのまま。
 
 ## ファイル
 

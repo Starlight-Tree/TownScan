@@ -3,6 +3,7 @@ package chat
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
 )
@@ -78,3 +79,9 @@ func isCaseIgnorable(r rune) bool {
 	}
 	return strings.ContainsRune("'.:·‘’․‧︓﹒﹕＇．：", r)
 }
+
+// MaxMessageChars は、会話の 1 件の本文の上限（文字数）。handlers が、正規化の前と後の両方で数える。
+const MaxMessageChars = 2000
+
+// NormalizedLen は、NFKC で揃えたあとの文字数。NFKC は、1 文字を最大 18 文字に伸ばす（「ﷺ」）ので、正規化の前の数え方だけでは、上限を守れない。
+func NormalizedLen(s string) int { return utf8.RuneCountInString(norm.NFKC.String(s)) }

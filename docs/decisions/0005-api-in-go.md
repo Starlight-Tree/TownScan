@@ -1,6 +1,6 @@
 # 0005 API は Go、解析は Python（契約を先に決め、Python の API を置き換えて消す）
 
-状態: **承認済み**（ユーザー、2026-11-25「Go でやれ」「このプロジェクトに限らず、今後全て API は Go にする」）。**実装はこれから。この文書の時点では、Go のコードは無い。**
+状態: **承認済み**（ユーザー、2026-11-25「Go でやれ」「このプロジェクトに限らず、今後全て API は Go にする」）。**実装: 結果の 1〜5 は済み**（契約・Go の土台と読み取り API・認証・検出画像・チャット〔模擬モデルと Gemini〕。2026-11-25）。**6（切り替え）は、compose の api を Go に替えるところまで済み。Python の API を消す段が残る。** 7 は未着手。
 
 ## 決めたこと
 
@@ -11,6 +11,7 @@
 - **配置**: Go の API は `api/`（モジュール `townscan/api`、`cmd/api/main.go`、`internal/…`）。`backend/` は、Python の API を消したあと、解析側の読み込みだけが残る（その時点で `pipeline/` へ移す）。
 - **流儀は DocuNavi の Go にそろえる**（逐語の同一。`cmp` で確かめる）: Go 1.26.x（`go.mod`・`.go-version`）、標準ライブラリを先に使う、静的ビルド（`CGO_ENABLED=0 -trimpath`）＋ distroless、`go vet`・`go test -race -count=1`、開発コンテナへは `install-go.sh`。
 - **依存は最小**: 標準ライブラリに加え、Postgres のドライバー（`pgx`）、JWT の検証、画像の縮小（`golang.org/x/image`）の見込み。**入れる前に、版・用途・代わりの案を示して承認を得る**（標準だけで足りるものは入れない）。
+  - 入れたもの（2026-11-25）: `pgx` v5.11.0（Postgres）、`golang-jwt/jwt/v5` v5.3.1（JWT の検証）、`golang.org/x/image` v0.46.0（検出画像の縮小）、`golang.org/x/text` v0.42.0（NFKC の正規化。Python の `unicodedata` と同じ結果にするため）。`golang.org/x/sync` は v0.17.0 から v0.23.0 へ、pgx の推移依存として上がった。Gemini の窓口は標準ライブラリだけ（依存を足していない）。
 
 ## 理由（背景）
 
@@ -25,9 +26,9 @@
 2. **Go の土台と読み取り API**: 設定・エラー形式・DB・ヘルス・地区・候補・GeoJSON・詳細・メトリクス。出口条件: 契約のうち該当部分が Go で合格。
 3. **認証**: JWT・JWKS の検証・`/api/me`。出口条件: 契約と、`jwt_tokens` の同等のテストが合格。
 4. **検出画像**: タイルの切り出し・縮小・出どころの表示。出口条件: 契約と、画像の検査（大きさ・形式・範囲外の拒否）が合格。
-5. **チャット**: ツール・`guard_numbers`・模擬モデル・Gemini（再試行・27 秒の期限・502）。出口条件: 契約のチャットの全件が合格（数字は結果の値と一致する）。
+5. **チャット**（**済み**）: ツール・`guard_numbers`・模擬モデル・Gemini（再試行・27 秒の期限・502）。出口条件: 契約のチャットの全件が合格（数字は結果の値と一致する）。Gemini の窓口は、偽サーバー（`net/http/httptest`）だけで検査した（実 API は未接続。`LLM_PROVIDER=gemini` の実機の確認は、キーを入れたあとに手で）。窓口の前に、数字の検査の抜け道・要求全体の期限と DB の `statement_timeout`・正規化後の長さの上限を直した（`api/README.md`）。
 6. **切り替え**: `compose.yaml` の api を Go のイメージに替え、Python の API を消す。出口条件: `scripts/verify.sh`（`go` を含む全段）と実機の `scripts/dev-up.sh` で、画面の操作が従来どおり。
-7. **その後**: チャットのストリーミング（DocuNavi の Go の SSE 中継を写す）、検出画像のキャッシュ、DB の索引とページ分け（PostGIS・索引の追加は別に承認）。
+7. **その後**: 会話の履歴（Go の API にだけ入れる。[ADR 0006](0006-conversation-history.md)。切り替えのあと）、チャットのストリーミング（DocuNavi の Go の SSE 中継を写す）、検出画像のキャッシュ、DB の索引とページ分け（PostGIS・索引の追加は別に承認）。
 
 ## 選ばなかった案
 

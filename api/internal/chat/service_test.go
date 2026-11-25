@@ -16,7 +16,7 @@ import (
 func newTestService(t *testing.T, d Data) (*Service, *[]string) {
 	t.Helper()
 	var logs []string
-	s, err := New(d, "mock", func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) })
+	s, err := New(d, Config{Provider: "mock"}, func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,18 +35,21 @@ func answer(t *testing.T, s *Service, msgs ...Message) Reply {
 	return r
 }
 
-func TestNewAcceptsOnlyTheMockModel(t *testing.T) {
+func TestNewAcceptsTheMockModelAndGeminiOnly(t *testing.T) {
 	f := newFakeData()
-	if s, err := New(f, "mock", nil); err != nil || s == nil {
+	if s, err := New(f, Config{Provider: "mock"}, nil); err != nil || s == nil || s.gemini != nil {
 		t.Fatalf("mock: %v", err)
 	}
-	// gemini は次の段。黙って模擬に落とさず、明確なエラーで止まる（キーは文に入れない）
-	_, err := New(f, "gemini", nil)
-	if err == nil || !strings.Contains(err.Error(), "LLM_PROVIDER=gemini") || !strings.Contains(err.Error(), "まだ使えません") {
+	// gemini は、キーがあれば作れる。無ければ、黙って模擬に落とさず、明確なエラーで止まる（キーは文に入れない）
+	if s, err := New(f, Config{Provider: "gemini", Gemini: GeminiConfig{APIKey: "k-secret-marker", Model: "m"}}, nil); err != nil || s.gemini == nil {
 		t.Errorf("gemini: %v", err)
 	}
-	for _, p := range []string{"", "openai", "Mock", "mock "} {
-		if _, err := New(f, p, nil); err == nil {
+	_, err := New(f, Config{Provider: "gemini", Gemini: GeminiConfig{Model: "m"}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "LLM_PROVIDER=gemini") || !strings.Contains(err.Error(), "GEMINI_API_KEY") {
+		t.Errorf("キー無しの gemini: %v", err)
+	}
+	for _, p := range []string{"", "openai", "Mock", "mock ", "GEMINI"} {
+		if _, err := New(f, Config{Provider: p, Gemini: GeminiConfig{APIKey: "k", Model: "m"}}, nil); err == nil {
 			t.Errorf("%q は受け付けないはず", p)
 		}
 	}
