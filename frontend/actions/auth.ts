@@ -1,10 +1,12 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getAuth } from '../lib/auth';
 import { AUTH_COOKIE_PREFIX } from '../lib/auth-config';
-import { logAuthError } from '../lib/auth-log';
+import { isUnauthorized, logAuthError } from '../lib/auth-log';
+import { validateDisplayName, type NameFormState } from '../lib/display-name';
 
 /** Google でログインする。Google の同意画面へ送り出す（戻りは /api/auth/callback/google。Better Auth が受けて Cookie を発行し、/ へ戻す）。 */
 export async function googleLoginAction(): Promise<void> {
@@ -48,4 +50,30 @@ export async function logoutAction(): Promise<void> {
     }
   }
   redirect('/');
+}
+
+const MSG_SAVE_FAILED = '表示名を保存できませんでした。しばらく待ってから、もう一度お試しください。';
+const MSG_EXPIRED = 'ログインの有効期限が切れました。もう一度ログインしてください。';
+
+/**
+ * 表示名を変える（アカウントのメニューの「表示名を変更」。DocuNavi と同じ）。保存の前に、サーバーで必ず検査する（lib/display-name.ts）。
+ * 書き換えるのは名前だけ（auth.api.updateUser の body に name だけを渡す）。HTTP の `/api/auth/update-user` は閉じたまま（lib/auth.ts の disabledPaths）で、ブラウザーから画像・メールなどを書き換えさせない。
+ * 利用者は、Cookie のセッションから決まる（本文の値では決めない）。保存できたら、画面の枠（サイドパネルの名前）を描き直す。
+ */
+export async function updateNameAction(_prev: NameFormState, data: FormData): Promise<NameFormState> {
+  const raw = data.get('display_name');
+  const value = typeof raw === 'string' ? raw : '';
+  const checked = validateDisplayName(value);
+  if (!checked.ok) return { error: checked.message, value };
+  const auth = getAuth();
+  if (!auth) return { error: MSG_SAVE_FAILED, value };
+  try {
+    await auth.api.updateUser({ body: { name: checked.name }, headers: await headers() });
+  } catch (error) {
+    if (isUnauthorized(error)) return { error: MSG_EXPIRED, value };
+    logAuthError('updateNameAction', error);
+    return { error: MSG_SAVE_FAILED, value };
+  }
+  revalidatePath('/', 'layout');
+  return { saved: true, value: checked.name };
 }

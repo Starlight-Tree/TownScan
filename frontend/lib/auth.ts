@@ -37,7 +37,8 @@ export function createAuth(env: AuthEnv, pool: pg.Pool) {
         clientSecret: (env.GOOGLE_CLIENT_SECRET ?? '').trim(),
       },
     },
-    // メール + パスワードは使わない（既定で無効）。TownScan は名前・画像を書き換えないので、この更新 API も閉じる
+    // メール + パスワードは使わない（既定で無効）。名前の変更は、サーバーアクション（actions/auth.ts の updateNameAction）が auth.api.updateUser で名前だけを書き換える。
+    // HTTP の入口（/api/auth/update-user）は閉じたままにする（ブラウザーから画像・メールなどを書き換えさせない。disabledPaths は HTTP の入口だけを止め、サーバー側の auth.api の呼び出しは止めない）
     disabledPaths: ['/update-user'],
     plugins: [
       jwt({

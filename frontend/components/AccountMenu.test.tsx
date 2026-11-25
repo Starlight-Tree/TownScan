@@ -5,6 +5,7 @@ import { THEME_KEY } from '../lib/theme';
 import { AccountMenu } from './AccountMenu';
 import { ThemeSwitch } from './ThemeSwitch';
 
+vi.mock('../actions/auth', () => ({ updateNameAction: vi.fn(async () => ({ saved: true })) }));
 const nav = vi.hoisted(() => ({ pathname: '/' }));
 vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
 
@@ -18,7 +19,7 @@ afterEach(() => {
 });
 
 describe('AccountMenu（ログイン中）', () => {
-  it('はじめは閉じていて、押すとメール・テーマ・このアプリの精度・ログアウトが出る（この順）', async () => {
+  it('はじめは閉じていて、押すとメール・テーマ・このアプリの精度・表示名を変更・ログアウトが出る（この順）', async () => {
     setup();
     const button = openButton();
     expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -35,12 +36,24 @@ describe('AccountMenu（ログイン中）', () => {
     expect(within(menu).getAllByRole('menuitemradio').map((n) => n.getAttribute('aria-label'))).toEqual(['ライト', 'ダーク', 'システム']);
     expect(within(menu).getByRole('menuitem', { name: 'ログアウト' })).toBeInTheDocument();
     const order = [...menu.querySelectorAll('.account-who, [role^="menuitem"]')].map((e) => (e.getAttribute('aria-label') ?? e.textContent ?? '').trim());
-    expect(order).toEqual(['hanako@example.com', 'ライト', 'ダーク', 'システム', 'このアプリの精度', 'ログアウト']);
+    expect(order).toEqual(['hanako@example.com', 'ライト', 'ダーク', 'システム', 'このアプリの精度', '表示名を変更', 'ログアウト']);
   });
 
-  it('JobNavi にある「表示名を変更」は出さない（TownScan は名前を持たない）', async () => {
+  it('「表示名を変更」を押すとメニューが閉じて、ダイアログが開く。いまの名前が入っている。閉じるとアカウントのボタンへフォーカスが戻る', async () => {
     setup();
     await userEvent.click(openButton());
+    await userEvent.click(screen.getByRole('menuitem', { name: '表示名を変更' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: '表示名を変更' });
+    expect(screen.getByLabelText('表示名')).toHaveValue('試験 花子');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(openButton()).toHaveFocus();
+  });
+
+  it('ログインしていない人のメニューには、「表示名を変更」を出さない', async () => {
+    render(<AccountMenu loginHref="/login" />);
+    await userEvent.click(screen.getByRole('button', { name: 'ログイン・テーマのメニュー' }));
     expect(screen.queryByRole('menuitem', { name: '表示名を変更' })).not.toBeInTheDocument();
   });
 

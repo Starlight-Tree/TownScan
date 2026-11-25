@@ -397,6 +397,21 @@ code {
 .account-item:hover, .account-item:focus-visible { background: var(--surface-muted); }
 .account-item[aria-current='page'] { color: var(--primary); font-weight: 700; }
 
+/* 表示名を変更するダイアログ（標準の <dialog>。DocuNavi の ws-name-* と同じ寸法。--accent は TownScan の --primary、--ws-err は --error） */
+.name-dialog { width: min(28rem, calc(100vw - 2rem)); padding: 0; border: 1px solid var(--border); border-radius: 0.9rem; background: var(--surface); color: var(--text); box-shadow: 0 12px 40px var(--shadow); }
+.name-dialog::backdrop { background: var(--scrim); }
+.name-dialog form { display: flex; flex-direction: column; gap: 0.9rem; padding: 1rem 1.25rem; }
+.name-dialog__title { margin: 0; font-size: 1.1rem; }
+.name-dialog__note { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.name-dialog__field { display: flex; flex-direction: column; gap: 0.4rem; }
+.name-dialog__label { font-size: 0.85rem; font-weight: 600; }
+.name-dialog__input { width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem; border: 1px solid var(--input-border); border-radius: 0.5rem; background: var(--input-bg); color: var(--text); font: inherit; }
+.name-dialog__input:focus-visible { border-color: var(--primary); outline: 2px solid var(--primary); outline-offset: 0; }
+.name-dialog__input[aria-invalid='true'] { border-color: var(--error); }
+.name-dialog__meta { display: flex; justify-content: space-between; gap: 0.5rem; color: var(--muted); font-size: 0.78rem; }
+.name-dialog__error { margin: 0; padding: 0.5rem 0.7rem; border-radius: 0.5rem; background: var(--error-bg); color: var(--error-text); font-size: 0.85rem; }
+.name-dialog__actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+
 /* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
    1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
    開いた表示だと、本文は窓より 16rem 狭い。チャット（`/`）は 1 列だけなので、サイドパネルの開閉で、本文の並びを切り替える規則は無い（チャットは、残りの幅の中央に、幅 46rem の列で収まる） */
