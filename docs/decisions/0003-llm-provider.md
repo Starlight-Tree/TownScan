@@ -84,6 +84,6 @@
 
 - ユーザー決定（「基本 LLM にしといた方良くない？」「ずっとモック鬱陶しかった　紛らわしいし」）。`compose.yaml` の `LLM_PROVIDER` の既定を `mock` から `gemini` にした。キー（`GEMINI_API_KEY`）は Infisical か `.env`（ユーザーが `scripts/login-secrets.sh` で登録する。私は値を読まない）。無料キーなので費用は出ない（本文のとおり）。
 - 本文の「既定は `mock`」は、**Go の API 自体の既定（環境変数が無いとき）**として残る。契約の検査（`contract/`・`scripts/test-contract.sh` は `LLM_PROVIDER=mock` を明示）と Go・ローダーのテストは、答えが決まっている模擬が要るので、変えない。
-- 模擬にするのは、開発中の検証のときだけ: `LLM_PROVIDER=mock scripts/dev-up.sh`。終わったら付けずに流して戻す。どちらで動いているかは `/api/health` の `llm`（`mock`／`gemini`）で見る。
+- 模擬は**利用者は使わない**（ユーザー決定 2026-11-25）。使うのは、Claude Code が内部で検証するときだけ: `LLM_PROVIDER=mock scripts/dev-up.sh`。終わったら必ず付けずに流して戻す。どちらで動いているかは `/api/health` の `llm`（`mock`／`gemini`）で見る。
 - キーが無いときは、api が起動時に止まる（黙って模擬に落とさない。本文の方針のまま）。`dev-up.sh` の unhealthy のヒントに、キーの登録か `LLM_PROVIDER=mock` を出す。
 - 根拠（今回の Web 検索。実務者のブログ中心で、公式の標準ではない）: テストはモック・再生、振る舞いの確認は実モデル、という層に分けるのが主流。

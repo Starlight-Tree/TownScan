@@ -50,7 +50,7 @@ services:
       DATABASE_URL: &database_url "postgresql://townscan:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD が未設定です}@db:5432/townscan"
       TILES_DIR: /data/townscan/tiles
       # 返答のモデル: gemini（この compose の既定。ユーザー決定 2026-11-25）か mock。gemini のときは GEMINI_API_KEY が要る（空なら起動時にエラー。黙って mock に落とさない）。
-      # mock にするのは、開発中の検証のときだけ: LLM_PROVIDER=mock scripts/dev-up.sh（終わったら、付けずにもう一度流して戻す）。Go の API 自体の既定（環境変数が無いとき）は mock のまま。契約の検査・テストは mock を明示する
+      # mock にするのは、Claude Code が内部で検証するときだけ（利用者は使わない）: LLM_PROVIDER=mock scripts/dev-up.sh（終わったら、付けずにもう一度流して戻す）。Go の API 自体の既定（環境変数が無いとき）は mock のまま。契約の検査・テストは mock を明示する
       # GEMINI_API_KEY は .env に自分で書く（値はここにも .env.example にも書かない。compose がホストの .env から渡す）。GEMINI_MODEL は空なら既定のモデル
       LLM_PROVIDER: "${LLM_PROVIDER:-gemini}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
