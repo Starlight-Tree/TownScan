@@ -1330,8 +1330,42 @@ p.banner {
   align-items: flex-start;
 }
 
+/* 最初の画面の質問の例（DocuNavi の .example-chips・.example-chip と同じ宣言。--accent は TownScan の --primary）: 幅いっぱいの角丸の長方形のボタンを、縦に並べる */
+.example-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.example-chip {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.example-chip:hover {
+  border-color: var(--primary);
+  background: var(--surface-muted);
+}
+
+/* DocuNavi との違いは 2 つ。幅は、DocuNavi の空の画面の幅（.empty-state の max-width 34rem）に合わせる（TownScan の最初の画面は、46rem の列の左から始まる）。
+   上の余白は、小さな見出し（.suggest-block__label）と .suggest-block の gap（8px）で足りるので 0 にする */
+.suggest-block .example-chips {
+  max-width: 34rem;
+  margin-top: 0;
+}
+
 /* 範囲外の質問の例は、答えられる質問の例と、色ではなく破線の枠でも区別する */
-.suggest-block--refuse .chip {
+.suggest-block--refuse .example-chip {
   border-style: dashed;
 }
 

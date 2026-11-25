@@ -339,15 +339,13 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
       </div>
       <div className="suggest-block">
         <span className="suggest-block__label">まず、こんな質問から</span>
-        <ul className="suggest-list">
+        <div className="example-chips" role="group" aria-label="質問の例">
           {IN_SCOPE_SUGGESTIONS.map((s) => (
-            <li key={s}>
-              <button type="button" className="chip" onClick={() => onPick(s)}>
-                {s}
-              </button>
-            </li>
+            <button key={s} type="button" className="example-chip" onClick={() => onPick(s)}>
+              {s}
+            </button>
           ))}
-        </ul>
+        </div>
       </div>
       <details className="welcome__more">
         <summary>くわしく（対象・分類・出典・範囲外の質問）</summary>
@@ -379,15 +377,13 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
         </div>
         <div className="suggest-block suggest-block--refuse">
           <span className="suggest-block__label">範囲外の質問は、断って理由を返します</span>
-          <ul className="suggest-list">
+          <div className="example-chips" role="group" aria-label="範囲外の質問の例">
             {OUT_OF_SCOPE_SUGGESTIONS.map((s) => (
-              <li key={s}>
-                <button type="button" className="chip" onClick={() => onPick(s)}>
-                  {s}
-                </button>
-              </li>
+              <button key={s} type="button" className="example-chip" onClick={() => onPick(s)}>
+                {s}
+              </button>
             ))}
-          </ul>
+          </div>
         </div>
       </details>
     </div>

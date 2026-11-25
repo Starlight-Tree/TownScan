@@ -141,6 +141,45 @@ describe('続けて聞く（.follow-ups・.follow-up。DocuNavi の同名の規�
   });
 });
 
+describe('最初の画面の質問の例（.example-chips・.example-chip。DocuNavi の同名の規則）: 幅いっぱいの角丸の長方形を縦に並べる', () => {
+  it('.example-chips: 縦の列・幅いっぱい（stretch）・間隔 0.5rem・上 1.25rem（宣言が DocuNavi と同じ）', () => {
+    expect(rule('.example-chips')).toEqual([
+      ['display', 'flex'],
+      ['flex-direction', 'column'],
+      ['align-items', 'stretch'],
+      ['gap', '0.5rem'],
+      ['margin-top', '1.25rem'],
+    ]);
+  });
+
+  it('.example-chip: 1px の枠・--radius・--surface・0.92rem・行間 1.5・左寄せ。触れると主色の縁（DocuNavi の --accent。TownScan の --primary）と --surface-muted', () => {
+    expect(rule('.example-chip')).toEqual([
+      ['padding', '0.6rem 0.9rem'],
+      ['border', '1px solid var(--border)'],
+      ['border-radius', 'var(--radius)'],
+      ['background', 'var(--surface)'],
+      ['color', 'var(--text)'],
+      ['font', 'inherit'],
+      ['font-size', '0.92rem'],
+      ['line-height', '1.5'],
+      ['text-align', 'left'],
+      ['cursor', 'pointer'],
+    ]);
+    expect(rule('.example-chip:hover')).toEqual([
+      ['border-color', 'var(--primary)'],
+      ['background', 'var(--surface-muted)'],
+    ]);
+  });
+
+  it('DocuNavi との違いは、幅（34rem）と、見出しとの間の余白（0）の 2 つだけ。範囲外の例は、破線の枠でも区別する', () => {
+    expect(rule('.suggest-block .example-chips')).toEqual([
+      ['max-width', '34rem'],
+      ['margin-top', '0'],
+    ]);
+    expect(rule('.suggest-block--refuse .example-chip')).toEqual([['border-style', 'dashed']]);
+  });
+});
+
 describe('質問の時刻（.chat__time。DocuNavi の .message-time）', () => {
   it('宣言が DocuNavi と同じ（中央・0.8rem・--text-muted・下に -0.75rem）', () => {
     expect(rule('.chat__time')).toEqual([
