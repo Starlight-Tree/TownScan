@@ -10,6 +10,7 @@
 改訂 2026-11-25（7）: `/` の最初の画面（§7）を、**チャットだけ**に変えた（旧: 会話の前から右に地図の結果領域が開いていた）。結果領域は、結果つきの回答か「地図で見る」などの操作で開き、「新しい会話」で閉じる。知らせの live region を結果領域の外へ出した。
 改訂 2026-11-25（8）: `/` の画面（§7）を、**チャットだけの 1 列と「拡大ビュー」**に変えた（ユーザー決定 2026-11-25「そもそも　チャットウィンドウの中に回答全部出して　最大化ボタンみたいなのでキャンバスにした方がいい？」→ 案 D・既定案どおり）。常設の右の結果領域をなくし、結果は回答カードの中に出す。カードのボタン（「グラフで見る」「地図で見る」「詳細」など）を押すと、その回答の地図・グラフ・写真の比較が、大きなダイアログ（狭い幅では全面のシート）で開く。回答が届いても、画面は自動で開かない・替わらない。回答の条件の反映・詳細・地図の中身は、拡大ビューの中で今までと同じ。比較のカードは上位 5 地区までにした。API の振る舞いは変えない。
 改訂 2026-11-25（9）: **`compose.yaml` の api を Go に切り替えた**（ユーザー承認 2026-11-25「y」）。api は `api/` の Go（mem_limit 1g・`GOMEMLIMIT`・`/api -healthcheck`）。FastAPI 版は `compose.python-api.yaml`（`scripts/dev-up.sh --api python`）として、Gemini の窓口が Go に入るまで残す。データの読み込み（`app.load`）は、常駐しない `loader`（Python）で行う（`docker compose run --rm loader python -m app.load …`）。Go の API は `LLM_PROVIDER=gemini` で起動を止める（黙って模擬に落とさない）。API の契約（§4）は変えない。
+改訂 2026-11-25（10）: **会話の履歴**（ログイン中だけ・サーバーに保存・一覧・開き直し・2 段階の削除。ユーザー依頼「履歴は DocuNavi と同じ型」）を、**仕様として**足した。§1（対象外の認証の注記）・§2.1（ログインの有無で変えない範囲の例外と、`auth_user.id` の存在だけを api が読むこと）・§2.3（新設）・§4.3（表 2 つ。DDL は仕様の案で、実行しない）・§4.4（`/api/conversations` 3 本、`POST /api/chat` の任意の `conversation_id`、履歴のエラーと `Cache-Control`、空白の集合、題名の規則）・§7・§7.1（新設。サイドパネルの会話の履歴・開き直し・解析結果が変わった回答の扱い）・§8（E9）。ログインしていない間と、`conversation_id` を付けない要求は、今までと同じ。**この改訂は仕様だけで、実装は Go への切り替え（[ADR 0005](decisions/0005-api-in-go.md)）のあと**（Go の API にだけ入れる。Python の API には入れない。コードも DDL も、まだ無い。実装したら、この注を消す）。決定・理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。
 位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）を、薄く一通り通す。GEE 層（P5）・パネル（P6）・公開（P7）は対象外。
 
 ## 1. 何ができれば「たたき台」か
@@ -20,7 +21,7 @@
 4. 数字・件数・座標は、ツールの結果だけから出る（LLM に書かせない。模擬モデルが既定で、任意で Gemini を選べる。LLM の役割はツールの選択と説明文だけ。§2.2・§4.5）。範囲外は断る。
 5. 合成データ（テスト用）と実データを取り違えない（§4 の `run.kind`、UI のバナー）。
 
-対象外（やらない・やったと書かない）: GEE 層、パネル、確認モード（人の確定）、認証（ただし、**任意のログインだけ** §2.1 に足した。機能の制限・権限の分けには使わない）、公開、地区の行政区画の厳密な境界、PostGIS。実 LLM は、**任意で選べる Gemini だけ**を §2.2・§4.5 に足した（既定は模擬。ほかの LLM は対象外）。
+対象外（やらない・やったと書かない）: GEE 層、パネル、確認モード（人の確定）、認証（ただし、**任意のログインだけ** §2.1 に足した。機能の制限・権限の分けには使わない。ログインの有無で変わるのは、**会話の履歴の保存と、その検査・開き直しだけ**: §2.3。仕様のみで、実装は Go への切り替えのあと）、公開、地区の行政区画の厳密な境界、PostGIS。実 LLM は、**任意で選べる Gemini だけ**を §2.2・§4.5 に足した（既定は模擬。ほかの LLM は対象外）。
 
 ## 2. 構成
 
@@ -39,7 +40,7 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 
 ### 2.1 認証（任意のログイン）
 
-位置づけ: **ログインは任意**。チャット・地図・詳細・精度は、ログインなしで今まどおり使える。ログインすると、サイドバーの下のアカウントに、プロフィール画像（または人型アイコン）・メール・ログアウトが出る（§7）。**それ以外の機能の制限は足さない**（ログインの有無で、API の応答・件数・機能を変えない）。
+位置づけ: **ログインは任意**。チャット・地図・詳細・精度は、ログインなしで今まどおり使える。ログインすると、サイドバーの下のアカウントに、プロフィール画像（または人型アイコン）・メール・ログアウトが出る（§7）。**それ以外の機能の制限は足さない**（ログインの有無で、API の応答・件数・機能を変えない。**ただし、会話の履歴の保存と、その検査（`conversation_id` つきの `POST /api/chat`・履歴の 3 本）を除く**。§2.3。仕様のみで、実装は Go への切り替えのあと）。
 
 - **方式**: Better Auth **1.7.18**（`frontend/package.json` に固定。JobNavi と同じ版）、**Google だけ**（メール・パスワードは使わない）。web（Next.js）のサーバーの中で動く。pg の接続プールで、TownScan の Postgres（`townscan`）の `auth_` の表に入れる。セッションは JobNavi と同じ（14 日・延長しない）。api はログインの通信も秘密も持たない。
 - **Cookie の接頭辞は `townscan`**（`townscan.session_token` など。https では先頭に `__Secure-` が付く）。Better Auth の既定（`better-auth`）のままだと、同じ `localhost` で動く JobNavi（接頭辞 `jobnavi`）・DocuNavi と Cookie を上書きし合う（Cookie はポートで分かれない）。
@@ -56,7 +57,7 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 | api | `AUTH_ISSUER` | JWT の `iss`。`compose.yaml` が web の `BETTER_AUTH_URL` と同じ値を渡す |
 | api | `AUTH_JWKS_URL` | api のコンテナから届く web の JWKS（compose の中では `http://web:3000/api/auth/jwks`。`iss` とは別の URL） |
 
-- **DB**: Better Auth の表は `auth_` 付きの 5 つ（`auth_user`・`auth_session`・`auth_account`・`auth_verification`・`auth_jwks`）。列名・型・外部キーは、JobNavi の `backend/app/migrations/0004_better_auth.sql`（Better Auth 1.7.18 が決めた camelCase の列名。引用符つき）の 5 つの表と同じ。`users` への列追加は TownScan には無い（アプリ側にプロフィールの表を持たない）。`auth_user.lastName`・`firstName` は JobNavi のプロフィール用の追加列で、TownScan のコードは読み書きしない（あっても無くてもよい。NULL 可）。置き場は `backend/db/auth.sql`（冪等: `CREATE TABLE IF NOT EXISTS`・`CREATE INDEX IF NOT EXISTS`。`DROP`・`TRUNCATE` は書かない）。すでにあるボリュームにも入る形で適用する（適用の方法は、`schema.sql` の適用の仕組みに合わせる。実装の側が決め、そこに書く）。`auth_` の表を読み書きするのは web だけで、api は読まない（JWT を検証して `sub`・`email`・`name`・`picture` を使うだけ）。
+- **DB**: Better Auth の表は `auth_` 付きの 5 つ（`auth_user`・`auth_session`・`auth_account`・`auth_verification`・`auth_jwks`）。列名・型・外部キーは、JobNavi の `backend/app/migrations/0004_better_auth.sql`（Better Auth 1.7.18 が決めた camelCase の列名。引用符つき）の 5 つの表と同じ。`users` への列追加は TownScan には無い（アプリ側にプロフィールの表を持たない）。`auth_user.lastName`・`firstName` は JobNavi のプロフィール用の追加列で、TownScan のコードは読み書きしない（あっても無くてもよい。NULL 可）。置き場は `backend/db/auth.sql`（冪等: `CREATE TABLE IF NOT EXISTS`・`CREATE INDEX IF NOT EXISTS`。`DROP`・`TRUNCATE` は書かない）。すでにあるボリュームにも入る形で適用する（適用の方法は、`schema.sql` の適用の仕組みに合わせる。実装の側が決め、そこに書く）。`auth_` の表を読み書きするのは web だけで、api は読まない（JWT を検証して `sub`・`email`・`name`・`picture` を使うだけ）。**ただし、会話の履歴のために、api は `auth_user.id` の存在だけを読む**（外部キーと、LLM を呼ぶ前の存在の確認。`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.3・§4.3。仕様のみで、実装は Go への切り替えのあと）。
 - **`BETTER_AUTH_SECRET` は、決めたら変えない。** DB の `auth_jwks` の署名鍵（暗号化して入れる）と、Google のトークン（`auth_account`）の暗号化に使う。変えると、保存済みの鍵が読めなくなり、全員がログアウトに見える（web のログに `Failed to decrypt private key`）。直すには `auth_jwks` の行を消す必要があり、承認が要る。`scripts/dev-up.sh` は、`.env` にあれば触らず、空の行があるときは重複を作らずに止まる。`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET` は、作らない・読まない・表示しない。
 - **未設定のときの動き**: `BETTER_AUTH_SECRET`・`BETTER_AUTH_URL`・`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`DATABASE_URL` のどれかが空（または `BETTER_AUTH_SECRET` が 32 文字未満・URL の形が違う）なら、`/login` は「まだ設定されていません」と出し（ボタンは出さない）、`/api/auth/*` は 503。api は `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無ければ `/api/me` が 503。**形が不正なとき**（http(s) の URL でない・ホストが無い・読めない形。例: `BETTER_AUTH_URL` を `localhost:3500` と書いた。`compose.yaml` はその値をそのまま `AUTH_ISSUER` へ渡す）も同じ扱い: api は**起動を止めず**、変数名だけ（値は入れない）を警告として 1 行ログに出し、検証を無効にして（`/api/me` は 503）、ほかの入口は動く（api が起動のたびに落ち続けると、web が api の healthy を待つため、チャット・地図まで使えなくなる）。`AUTH_AUDIENCE` は形の検査が無い文字列で、空なら `townscan`。**どの場合も、いまの機能（チャット・地図・詳細・精度・このアプリについて）は壊れない**（`compose.yaml` は、`GOOGLE_*` が空でも起動できる）。
 - **実際の Google ログイン**は、利用者が OAuth クライアントを作って `.env` に書いたあとに、手で確かめる（自動テストは Better Auth と Google をモックする。本物の Google との往復はテストしない）。
@@ -74,6 +75,163 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 - キーは、repr・ログ・例外・応答（`/api/health` を含む）に出さない。Google へは、URL でなくヘッダー `x-goog-api-key` で送る（URL は、例外・ログ・記録に残りやすい）。リダイレクトは追わない。
 - `compose.yaml` は、`${GEMINI_API_KEY:-}`・`${GEMINI_MODEL:-}` で、ホストの `.env` の値を api へ渡すだけ。`scripts/dev-up.sh` は Gemini のキーを作らず、`.env` に書かない。
 - 追加の依存は無い（HTTP は標準ライブラリの `urllib`）。
+
+### 2.3 会話の履歴（ログイン中だけ）
+
+位置づけ: **仕様のみ。実装は Go への切り替え（[ADR 0005](decisions/0005-api-in-go.md)）のあと、Go の API にだけ入れる**（Python の API には入れない。同じ業務ロジックを 2 つの言語に置かない）。コードも DDL も、まだ無い。決定の理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。表 2 つの追加は承認済み（ユーザー、2026-11-25）だが、**§4.3 の DDL は仕様の案で、実行しない**。土台のユーザー決定は「履歴は DocuNavi と同じ型（ログイン中だけ・サーバーに保存・サイドバーに一覧・削除は 2 段階）。ログインは任意で、ログインしていないときは今までどおり画面の中だけの会話」。画面は §7.1、API の形は §4.4、表は §4.3。本文の〔J1〕〜〔J7〕の印は、**ユーザー決定ではなく、起草者の判断**（異議があれば直す。一覧は ADR 0006）。印の無い項目のうち、ユーザーが決めたものは ADR 0006 の U1〜U10 に載る。
+
+#### 2.3.1 目的と範囲
+
+**目的:** ログイン中の人が、過去の会話を開き直して続きを聞け、不要な会話を自分で消せる。
+
+**変えないこと（決定済み）:**
+
+- ログインは任意。ログインしていないときは今までどおり、会話は画面の中だけで、開き直すと消える。**`conversation_id` を付けない要求は、ログインの有無に関わらず、今までと同じ**（API の応答・件数・機能。`Authorization` も見ない）。履歴を足して変わるのは、`conversation_id` つきの要求で保存するかどうかと、保存に伴う検査（ログイン・`auth_user` の存在・NUL・発言数の上限）だけ。
+- ログイン前に画面の中でした会話は、ログインしても引き継がない（Google への往復で画面が作り直されるため。保存もしない）。
+- 保存した会話を見られるのは、本人だけ。
+
+**やること:** 保存・一覧・開き直し（続きを送れる）・本人による削除・1 人 50 件を超えた分の自動削除・保存期間を過ぎた会話の削除（運用者のコマンド）。
+
+**やらないこと**（DocuNavi に無いので足さない）:
+
+- 共有・公開の URL・検索・ピン留め・題名の編集・並べ替え・フォルダー・エクスポート・全部消すボタン・発言 1 件ずつの編集や削除。
+- 一覧のページ分け（DocuNavi も最大 50 件の 1 ページ。TownScan は保存を 50 件に収めるので、一覧に出ない会話は無い）。
+- LLM による題名づくり。
+- 未ログインの会話の保存（サーバーにも、ブラウザーの `localStorage` にも置かない）。
+- 複数の端末・タブへの即時の反映（別のタブで消した会話は、画面を読み直すまで一覧に残る）。
+- 1023px 以下（上の横帯）の履歴の入口（初版。保存は続く。§7.1.1）。
+
+**TownScan 固有でやらないこと:** 拡大ビュー（§7。地図・グラフ・写真の比較）の回答ごとの「画面の状態」（選んだタブ・絞り込み・選んだ候補・強調・寄せ先）の保存。会話の中身（回答の `results`）から導けるものだけ、開き直したあと、その回答の拡大ビューをはじめて開くときに決める（§7.1.5）。
+
+**用語:** DocuNavi の `thread` は、LangGraph の用語（`thread_id`）に由来する。TownScan は LangGraph を使わず、画面・仕様書が「会話」なので、API・表は **`conversation`** と呼ぶ。対応は `thread_id` ↔ `conversation_id`、`/threads` ↔ `/api/conversations`。
+
+**数字・件数・座標:** 保存する `results` は、サーバーが作った値だけ（画面から送らせない。§2.3.4）。開き直すとき、画面は値を作り直さず、保存された値を描く。画面に出す固定の文（案内・注意書き）は、LLM が書くものではない。
+
+#### 2.3.2 表の設計
+
+DDL は §4.3（仕様の案。実行しない）。置き場は `api/internal/store/sql/history.sql`（新設の予定。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。
+
+- **主キーは `(user_id, id)`。** `id` は画面が作る（§2.3.4）ので、別の人が同じ `id` を使っても、別の会話になる（衝突も、他人の会話の存在の確認もできない）。DocuNavi の `<利用者 ID>:<thread_id>` と同じ効果を、連結した文字列ではなく列で持つ。
+- **外部キーは `auth_user.id`（制約名 `conversations_user_fk`。`ON DELETE CASCADE`）。** 利用者の行が消えれば、会話も発言も消える（§2.3.7）。`auth_` の表は、これまでどおり web だけが書く。API は、履歴のために **`auth_user.id` の存在だけ**を読む（`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.1）。JWT は有効でも `auth_user` に行が無いとき（消された直後の 15 分間など）の**書き込み**（`conversation_id` つきの chat）は、**LLM を呼ぶ前**の存在の確認で **401** にする（§2.3.3・§2.3.4）。保存の段で外部キー違反（SQLSTATE 23503）になるのは、その確認の直後に行が消える競合だけで、**制約名が `conversations_user_fk` のときだけ 401**。読み取り（一覧・発言の取得・削除）は、行を確かめず、空・404 のままでよい（`auth_user` を余計に読まない）。
+- **`title` は作るとき 1 回だけ書く**（作るときの要求の最後のユーザー発言から。ふつうは最初の質問。§2.3.4）。DocuNavi は表に列が無く、一覧のたびに最新のチェックポイントを読み出して題名を作る。TownScan は自前の表なので、発言を読まずに一覧を引ける。規則は §4.4 の「履歴の題名」（空白をまとめ、40 文字まで、超えたら 39 文字＋「…」）。`CHECK` の 1〜40 は、その結果。**題名が空になったら**（§4.4 の空白の集合をそろえれば起きない。防御として）「（題名なし）」にする（DocuNavi と同じ）。
+- **`results`・`tool_calls` は jsonb で、回答が作ったものをそのまま持つ。** TownScan の回答の本体は `results`（件数・表・地図・写真）で、画面はこれを描く。DocuNavi のように本文から再構成せず、保存する。数字・件数・座標は、サーバーが作った `results` の値だけが残る（画面から送らせない。§2.3.4）。jsonb は、キーの順・空白・数値の書き方を正規化するので、読み戻した値は「JSON として等しい」（値は同じで、キーの順は保証しない）。
+- **`run_created_at` は、回答を作るときに読んだ run の `runs.created_at`**〔J4〕（回答を作った run をそのまま写す。保存の直前に読み直さない）。開き直した会話で、「その回答が、いまの解析結果に基づくか」を見分けるために使う（§7.1.5）。`results` の `provenance.run_id` だけでは、同じ `run_id` を後処理し直して読み込み直したとき（ローダーは同じ `run_id` の行を消して入れ直す）に見分けられない。
+- **索引は `conversations_user_updated_idx` だけ**（一覧と、1 人 50 件の整理の用）。発言は主キーで足りる。保存期間の掃除（`updated_at` の古い順）には索引を足さない（件数が小さい間は不要。大きくなったら足す）。
+- **`content` の長さに `CHECK` は付けない。** ユーザーの発言は API が 2000 文字までに検査する。回答の文は、LLM を使うと 1000 文字までに切る（§4.5）が、模擬モデルの文の最大は確かめていない。
+- **NUL（U+0000）は保存できない**（`text` は SQLSTATE 22021、`jsonb` は 22P05 で失敗する。一般知識。この環境で DB を触って確かめてはいない）。`conversation_id` つきの chat は、NUL を含む `content` を **LLM を呼ぶ前に 422** で断る（§2.3.4）。
+- 時刻の更新（`updated_at`）は `clock_timestamp()` で書く（`now()` はトランザクションの開始時刻で、同じ会話への同時の書き込みが後から来ると、時刻が逆戻りしうるため）。
+
+#### 2.3.3 書き込み・掃除の SQL の形（実装の目安）
+
+**LLM を呼ぶ前**（読み取りだけ。ロックを持たない）: 1 つの `SELECT`（副問い合わせ 2 つ）で、`EXISTS (SELECT 1 FROM auth_user WHERE id = $1)` と `count(*)`（`conversation_messages` の `user_id = $1 AND conversation_id = $2`）を読む。行が無ければ 401、保存済みが 499 件以上（もう 1 往復＝2 件を足すと 500 件を超える）なら 422 `conversation_full`（§2.3.4）。
+
+**保存**（回答を作り終えてから、**1 つのトランザクション**。LLM を待つあいだ、ロックを持たない）:
+
+1. `SELECT pg_advisory_xact_lock(704218002, hashtext($1))`〔J3〕（`$1` は `user_id`。同じ人の保存を順に並べる。1 人 50 件の整理が、同じ人の別の保存と鍵を取り合って、行のロックの待ち合い（デッドロック）にならないようにする。`schemaLockKey`（704218001。`api/internal/store/schema.go`）とは別の値）。
+2. `INSERT INTO conversations (user_id, id, title, created_at, updated_at) VALUES ($1, $2, $3, clock_timestamp(), clock_timestamp()) ON CONFLICT (user_id, id) DO UPDATE SET updated_at = clock_timestamp()`（**行の作成と、既存の行のロックと更新を、1 文で原子的に行う**。`title` は、作るときだけ入り、既存の行では変えない。新しい行も `clock_timestamp()` で書くので、`created_at` ≤ `updated_at` が常に成り立つ）。「無ければ作る（`DO NOTHING`）→ 別の文でロック」にしない: その間に別の `DELETE` が入ると、次の発言の挿入が `conversation_messages_conversation_fk` の外部キー違反（同じ SQLSTATE 23503）になり、「利用者の行が無い」と取り違えて 401 にしてしまう。
+3. 次の `seq` を決める（`SELECT count(*), coalesce(max(seq), -1) + 1 …`。行がロック済みなので、同時の書き込みと重ならない）。件数が 499 以上なら、ここで巻き戻して 422 `conversation_full`（LLM を呼ぶ前の確認をすり抜けた競合。発言は 2 件ずつ入るので、ふつうの件数は偶数で、上限は 500）。
+4. ユーザーの発言と回答の 2 行を入れる（`seq` は 0 から。2 行で `n`・`n+1`。回答に `run_created_at`）。
+5. **1 人 50 件の整理:** `DELETE FROM conversations WHERE user_id = $1 AND id <> $2 AND id IN (SELECT id FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC, id ASC OFFSET 50)`（発言は `CASCADE`。いま保存した会話は先頭で、`id <> $2` でも守るので、消えない。50 は一覧の上限と同じ定数）。
+6. コミット。
+
+**エラーの分け方**〔J1〕（Go の `store.classify`。`api/internal/store/errors.go` に合わせる）: DB に届かない類（SQLSTATE のクラス 08・40・53・54・57・58・F0、接続・タイムアウト）は 503 `db_unavailable`。それ以外（表が無い 42P01・`CHECK` 違反 23514・値の不正 22xxx・上で言う `conversations_user_fk` 以外の 23503 など）は、コードか環境の誤りなので **500 `internal_error`**（`handlers` の `fail` と同じ。原因は載せない）。401 にするのは、`PgError` の `Code == "23503"` かつ `ConstraintName == "conversations_user_fk"` のときだけ（決定）。
+
+**保存期間の掃除:** `DELETE FROM conversations WHERE updated_at < now() - make_interval(days => $1)`（発言は `CASCADE`）。先に同じ条件で件数だけ数える（既定）。値はすべて、パラメータで渡す（文字列を連結して SQL を作らない）。
+
+#### 2.3.4 保存の動き（`POST /api/chat` の `conversation_id`）と、検査の順
+
+**決定: DocuNavi と同じく、サーバーが回答と一緒に保存する。** 要求に、任意の `conversation_id`（`^[A-Za-z0-9_-]{1,128}$`）を足す。
+
+```json
+{"messages": [{"role": "user", "content": "…"}], "conversation_id": "5b0c…"}
+```
+
+| 要求 | 動き |
+|---|---|
+| `conversation_id` が無い（または `null`） | **今までと同じ。** `Authorization` を見ない。保存しない。応答も同じ（既存の契約・`contract/test_auth_independence.py` は変わらない） |
+| `conversation_id` がある | 下の順に検査する（本文・NUL → ログイン → `auth_user` の存在 → 発言数の上限）。通れば、今までと同じ回答を作り、**その回答と、要求の最後のユーザー発言（`messages` の末尾）を、本人の会話 `conversation_id` に追記する**（無ければ作る。題名は、作るときの最後のユーザー発言から。**保存するのは、この 1 往復だけ**で、`messages` の前の発言は保存しない）。応答の形は変えない（`{message}` のまま） |
+| `conversation_id` が `""`・形が違う | 422（`["body","conversation_id"]`）。DocuNavi は空文字を「無し」と読むが、それは古い呼び出しとの互換のためで、TownScan には無い |
+
+**検査の順:**
+
+- 一覧・発言の取得・削除: ログイン（401・503）→ `conversation_id` の形（422）→ 会話の有無（404）。ログインしていない人には、形が正しいかも分からせない。
+- `POST /api/chat`（`conversation_id` つき）: **本文**（形・空でない最後の user・`conversation_id` の形・NUL。422）→ **ログイン**（401・503）→ **`auth_user` の存在**（401）→ **発言数の上限**（422）→ 回答の作成 → 保存。**これらはすべて LLM を呼ぶ前に済ませる**（拒否された要求で課金しない）。本文が先なので、本文が不正なら、未ログインでも 422。
+- `POST /api/chat`（`conversation_id` なし）: 今までと同じ（本文の 422 → 回答）。
+- 順序が、3 経路（ログインが先）と chat（本文が先）で逆なのは、chat が既存の契約（本文の 422 は、ログインの有無に依らない）を保つため。
+
+**そのほかの動き:**
+
+- 回答の中身は、`conversation_id` の有無で変わらない（同じ質問・同じ模擬モデルなら、同じ `message`）。**例外は、保存できない入力の NUL だけ**（`conversation_id` つきは 422、無しは今までどおり通る）。
+- **NUL:** `conversation_id` つきの chat は、`messages` のどの `content` にも NUL（U+0000）を許さず、LLM を呼ぶ前に 422 にする（保存が SQLSTATE 22021・22P05 で失敗して 500 になり、LLM の費用だけが掛かるのを避ける）。取り除いて保存する案は採らない（保存する値を作り替えない）。回答の側（LLM の出力）の NUL は ADR 0006 の未確認。
+- **文脈は、これまでどおり要求の `messages`（末尾 20 件だけ使う）から作る。** 保存した発言から文脈を組み直さない（未ログイン〔`messages` から作る〕とログイン中〔保存から作る〕で、文脈の作り方が 2 つになるのを避ける。保存は副作用だけにする）。画面が全履歴を送る現行の作りは、そのまま（画面側の上限は 40 件で、API は 500 件まで受ける）。
+- **保存しないとき:** 回答が失敗した往復（LLM の 502・検証の 422・認証の 401/503）は、何も保存しない。画面も、失敗した発言を次の質問の履歴に含めない（`frontend/components/chat/history.ts`）ので、そろう。
+- **保存に失敗したとき**（DB の書き込みの失敗）は、**回答を返さず**、DB に届かない類は `503 db_unavailable`、それ以外の想定外は `500 internal_error`（§2.3.3）〔J1〕。回答だけ見えて履歴に無い食い違いを作らない。TownScan の `POST /api/chat` は、もともと DB から結果を作るので、DB が使えなければ同じく 503 になる。決定（ユーザー）は「DocuNavi と同じく、回答を返さず 503」。DocuNavi は保存先の例外をすべて 503 にする。すべて 503 にそろえたいなら、保存の段で包む規則 1 つに直す。
+- **保存を飛ばした会話の整合（画面の規則。§7.1.7）:** 401・503（ログインの確認）で、`conversation_id` を外して送り直した往復は、保存されない。その会話で、次の質問に `conversation_id` を付け直すと、保存済みの会話に**欠けた往復**ができ、開き直すと画面で見た会話と食い違う。そこで、**保存を 1 度でも飛ばした会話では、それ以降の送信にも `conversation_id` を付けない**（決定。API の側で件数を比べる案は採らない: 画面の履歴は、失敗した発言・40 件の切り詰めで、保存済みの件数とずれるため）。
+- **同じ発言が 2 回並びうる:** 通信が切れて画面が失敗と見たが、サーバーは保存していた場合、「もう一度送る」で同じ質問が 2 回保存される。重複を弾く仕組み（冪等キー）は足さない（DocuNavi にも無い。未確認: DocuNavi が同じ場面でどうなるか）。
+- **`conversation_id` を画面が作る:** 保存するかを `conversation_id` の有無で決めるため、サーバーが「無ければ作って返す」（DocuNavi の方式）にすると、ログイン中の要求の既定が変わり、「`Authorization` を見ない」既存の契約と衝突する。画面が、ログイン中の新しい会話の最初の送信で `crypto.randomUUID()`（小文字 36 文字。上の規則に合う）を作る。他人の ID を知っても何もできない（主キーが `(user_id, id)`）ので、画面が決めてよい。
+
+#### 2.3.5 上限
+
+| 項目 | 値 | 備考 |
+|---|---|---|
+| 一覧の件数 | 50 | DocuNavi の値（`MAX_THREADS`）と同じ |
+| 題名 | 40 文字まで・超えたら 39 文字＋「…」（コードポイントで数える） | DocuNavi と同じ（`MAX_TITLE_LENGTH`） |
+| 質問 1 件 | 2000 文字 | 既存（`backend/app/routes.py` の `ChatMessage`）。DocuNavi も同じ |
+| 会話 ID | 128 文字・`^[A-Za-z0-9_-]+$` | DocuNavi と同じ（表の `CHECK` にも入れる） |
+| 要求に含める発言の数 | API は 500 件まで（`MAX_CHAT_MESSAGES`。既存）。画面は 40 件（`MAX_MESSAGES`。既存）。文脈に使うのは末尾 20 件（`CONTEXT_MESSAGES`。既存） | 既存のまま |
+| 1 会話の発言数 | **500 件（決定）。** 超えたら 422 `conversation_full`（LLM を呼ぶ前に数え、保存のトランザクションの中でも数え直す）。1 往復で 2 件増えるので、保存済みが 500 件の会話に、続きは送れない | **根拠は、既存の `MAX_CHAT_MESSAGES`（1 要求の入力の上限）の流用で、保存の大きさ・読み出しの大きさからは導いていない。** DocuNavi には上限が無いが足す。TownScan は `results` を丸ごと持つ。1 回の `map_focus` だけで候補 ID を最大 5000 件（`MAX_FOCUS_IDS`）含みうる。ID 1 件を約 20 バイトと見積もると、1 回で約 100 KB、回答 250 件がすべてそうだと 1 会話で約 25 MB（`GET …/messages` の応答の大きさ）になりうる（実測ではなく見積もり）。実データは候補が少なく（ADR 0005 の実測は 18 候補）、この大きさにはならない見込み。バイト数や `results` の上限は、初版では足さない（実測のあとに決める） |
+| 1 人あたりの会話の数 | **50 件（決定）。** 保存時に、50 件を超えた分を古い順（更新が古い順）に消す（§2.3.8） | 一覧の上限（50）と、保存の上限をそろえる。一覧に出ない会話を、本人が消せないまま溜めない。DocuNavi には上限が無い |
+| 保存期間 | 最後の動きから 7 日（決定） | §2.3.8 |
+
+#### 2.3.6 JWT をブラウザーからどう渡すか
+
+TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`frontend/proxy.ts` が API へ転送する（`/api/auth/*` だけ web 自身が受ける）。いま画面は、API へ JWT を渡していない（`frontend/lib/session.ts` の冒頭のコメント）。履歴の API は、`Authorization: Bearer` が要る。
+
+**決定: DocuNavi と同じく、ブラウザーが `GET /api/auth/token`（Better Auth の jwt プラグインの経路。Cookie のセッションがあれば `{token}` を返す）で JWT を取り、`Authorization: Bearer` で送る。**
+
+- 新しい依存は無い（`better-auth` は入っている。`fetch('/api/auth/token')` で足りる。DocuNavi は `better-auth/client` の `$fetch('/token')` を使う）。経路の追加も無い（`frontend/app/api/auth/[...all]/route.ts` がすべて Better Auth に渡す。`disabledPaths` は `/update-user` だけ）。
+- トークンは**メモリにだけ**置く（`localStorage`・`sessionStorage`・URL・ログに出さない）。期限（JWT は 15 分）の **60 秒前**になったら取り直す（DocuNavi の `REFRESH_MARGIN_SECONDS`）。同時に何本の要求があっても、取りに行くのは 1 回。
+- API が 401 を返したら、**1 回だけ**取り直して送り直す（DocuNavi の `createAuthedFetch`）。それでも 401 なら、ログインが切れたと見る（§7.1.7）。トークンを取れなかったのが通信の失敗・5xx のときは、ログアウトとは見ない（再試行を促す）。**chat の 401 も同じ。** 401 は LLM を呼ぶ前に返る（§2.3.4・§4.4。保存の段の 401 は、存在の確認の直後に行が消える競合だけ）ので、この再送で LLM が余分に呼ばれることは、ふつうは無い（§7.1.7）。
+- ログインの有無は、サーバーの layout が `currentUser()` で 1 回だけ決める（`frontend/app/(site)/layout.tsx`）。その真偽値を、画面のコンテキストへ渡す。ログインしていなければ、`/api/auth/token`・`/api/conversations` を**一度も呼ばない**。
+
+#### 2.3.7 認可と個人情報
+
+**本人だけ:**
+
+- 利用者は、**検証に通った JWT の `sub` だけ**から決める。`sub` は `[A-Za-z0-9_-]{8,64}`（`backend/app/jwt_auth.py` の `_USER_ID`）。要求の本文・クエリ・パスの値は使わない。
+- すべての問い合わせの条件に `user_id = $sub` を入れる。会話は `(user_id, id)` で引くので、他人の `id` を知っていても、別の（存在しない）会話として扱われる。**無い会話と他人の会話は、同じ 404 で、本文も同じ**（存在を確かめさせない。DocuNavi と同じ）。
+- 他人と同じ `conversation_id` で `POST /api/chat` しても、他人の会話には届かない（自分の会話が新しくできる）。
+- SQL は、パラメータで渡す。応答・ログに、例外の文字列・接続先・SQL を出さない。
+- 履歴の API は、Cookie を見ない（`Authorization: Bearer` だけ）。Cookie を使う認可ではないので、別のサイトからの要求で動かされる心配（CSRF）は無い。
+- 本人が消せる範囲と、保存される範囲は、一致する（保存は 1 人 50 件で、一覧もその全部。§2.3.8）。
+
+**ログ:**
+
+- **質問の本文・回答の本文・題名・`results` を、ログに出さない**（TownScan は、すでに Gemini の失敗でも、種類・ステータス・理由の定数だけを出す。§4.5）。履歴の処理の失敗は、種類（`store.Kind`。例外の型と SQLSTATE）だけを出す。
+- **生の利用者 ID・会話 ID を、ログに出さない**〔J2〕（緩める案は、会話 ID は秘密ではないので `AccessLog` を直さず、利用者 ID・ハッシュを会話 ID と同じ行に出さない、という規則にする）。Go の API には、すでにアクセスログ（`api/internal/httpx/middleware.go` の `AccessLog`）があり、**`r.URL.Path` を `%q` で生のまま記録する**。このままだと、`/api/conversations/{会話 ID}` の経路で会話 ID がそのままログに出る。**履歴の経路を足すときに、`AccessLog` を直す:** ルーターが合わせたルートのテンプレート（`/api/conversations/{conversation_id}`・`/api/candidates/{candidate_id}` など）で記録し、どのルートにも合わなかった要求は `?` にする（DocuNavi の `[計測] DB` ログが `scope["route"].path` か `?` を出すのと同じ）。ルーターが、合ったパターンを、`AccessLog` が読める所（外側のミドルウェアが `recorder` と同じように持つ入れ物）へ書く仕組みが要る。実装は、既存の `httpx` の検査（`api/internal/httpx/httpx_test.go`）と一緒に直す。
+  - 利用者を区別する必要があれば、ハッシュ（DocuNavi は `sha256("docunavi:" + ID)` の先頭 16 桁。TownScan は接頭辞を `townscan:` にする）。
+  - **DocuNavi との違い:** DocuNavi の `[計測] DB` ログは、ルートのテンプレートで ID を載せないが、チャットの計測ログ（`session_id`）と失敗・切断のログは、生の `thread_id` を出す（`thread_id` は検証済みの文字列で、秘密ではない扱い）。TownScan は、会話 ID が `(user_id, id)` の主キーの一部で、他人の ID を知っても何もできない（秘密ではない）が、本人の会話を特定する識別子なので、念のため、ログには出さない（DocuNavi より厳しい）。
+- **アクセスログ以外**に、会話 ID を出さない（履歴の失敗のログにも含めない）。Go のテストで、ログを捕まえて確かめる（§8 の E9）。
+
+**削除で本当に消える:**
+
+- 本人の削除は `DELETE`（物理削除）。会話・発言が、DB の現行のデータから消える。「消した印」だけを付ける作りにしない。保存時の 50 件の整理と、保存期間の掃除も、同じ物理削除。
+- 利用者の行（`auth_user`）が消えれば、`CASCADE` で会話・発言も消える。TownScan に、利用者を消す画面は無い（`/update-user` も閉じている）。運用者が消すときは、`auth_user` の行を消せば足りる。
+- 同じ ID でもう一度話しかけても、前の発言は戻らない（新しい会話として始まる）。
+- **残りうるもの（確かめていない）:** Postgres は、消した行の領域を、自動の掃除（autovacuum）が回収するまで、ディスク上に残しうる（一般知識。今回の調査ではない）。DB のバックアップ・ダンプからは消えない。TownScan の docs・scripts・`backend/app` には、DB のバックアップの手順が見当たらない（`git grep`。CLAUDE.md の `backups/` の中身は読んでいない）。バックアップを作るようになったら、保存期間と合わせて決める。
+- ログアウトしても、保存した会話は消えない。「全部消す」操作は作らない（上限と保存期間が消す）。
+
+#### 2.3.8 保存期間と件数の上限
+
+- **保存期間（決定）: 最後の動きから 7 日**（`updated_at` で決める。開いて見るだけでは更新しない。DocuNavi の方針と同じ値・同じ決め方）。
+- **掃除は、Go の保守コマンド**（新しい実行物。`api/cmd/history-cleanup`・新設の予定。DocuNavi の `app.history_admin` と同じ形）。`--older-than-days N`（N は 1 以上。既定 7）。**既定は件数の表示だけで、何も消さない。`--apply` を付けたときだけ消す。** 表示は件数だけで、利用者 ID・会話 ID は出さない。終了コードは 0（完了）・1（DB の失敗）・2（使い方の誤り・接続先が未設定）。Python ではなく Go にする理由: 履歴の表を読み書きするのは API の仕事で、同じ業務ロジック（表の定義・削除の規則）を 2 つの言語に置かない（ADR 0005）。新しい言語・依存・サービスは足さない（Go の標準ライブラリと、API が使う `pgx` と `internal/store` を使う）。
+- **件数の上限（決定）: 保存時に、1 人あたり 50 件を超えた分を古い順に消す**（§2.3.3 の 5。一覧の上限 50 と同じ定数）。
+  - **理由:** 一覧は新しい 50 件だけで、51 件目以降は画面に出ない。本人は、画面から ID を得る手段が無く、それらを消せない。掃除は手で流す（下）ので、「本人が消せる」「保存期間 7 日」だけでは保証にならない。保存を 50 件に収めれば、一覧に出る会話が保存の全部で、本人が消せる範囲と一致し、画面に出ない会話が溜まらない。
+  - **効き方:** 保存のたびに効く（定期実行に依らない）。いま保存した会話は先頭なので、消えない。別のタブで開いている古い会話は、次の保存で消えうる（開き直しの 404。§7.1.4 の 5）。
+- **保証できるのは、件数（50 件）のほう。** 7 日は目安: DocuNavi は Cloud Scheduler＋Cloud Run Job（週 1 回）だが、TownScan はローカルだけで、定期実行の仕組みが無い。当面は手で流す。**期限を過ぎた会話は、コマンドを流すまで残る**（API は、期限を理由に隠さない。DocuNavi も同じ）。公開（P7）の前に、実行の仕組みを決める（ADR 0006 の未確認）。
+- DocuNavi の保守コマンドにある `--thread-id`（1 件を運用者が消す）は、足さない（本人の削除は API で、利用者ごと消すなら `auth_user` の行を消す）。
+
+**承認の関門**（それぞれ別に承認を得る。前の承認は次に及ばない）: この仕様の main へのコミットと push・DDL の実行（`history.sql` を `go:embed` へ足すコミットを main へ入れると、次の API の起動で、すでにあるボリュームの DB に表が入る。マージの前に、適用先の DB と影響を示す）・`api/cmd/history-cleanup` を実際に `--apply` で流すこと・本番への配備。Python のローダー（`python -m app.load`）の `apply_schema` は、この表を作らない（使わない）。
 
 ## 3. ディレクトリと担当
 
@@ -126,6 +284,45 @@ reason: "new_absent_2018" | "present_2018" | "ambiguous" | "edge"
 
 `runs(run_id pk, kind, created_at, model, params jsonb, notes)`・`areas(id pk, run_id, z, x, y, west, south, east, north, centroid_lon, centroid_lat, name, ward, municipality, name_source)`・`buildings(id bigserial pk, run_id, area_id, year, area_m2, prob_mean, geom jsonb)`・`candidates(id text pk, run_id, area_id, class, area_m2, west, south, east, north, centroid_lon, centroid_lat, geom jsonb, evidence jsonb, reason)`・`metrics(run_id pk, body jsonb)`。`class` は CHECK 制約。ローダーは冪等（同じ run_id を入れ直すと置き換える。トランザクション）。表示する現在の run は「最新の created_at」。
 
+**会話の履歴の表 2 つ**（§2.3。**仕様の案で、実行しない。** 表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。実装は Go への切り替えのあと、Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（新設の予定。Go だけが使う表。`backend/db/` には置かない。`TestSchemaMatchesBackend` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴は、その SQL の並びの `authSQL` のあとに `historySQL` を足す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
+
+**承認の関門:** `historySQL` を `go:embed` へ足すコミットを main へ入れると、次の API の起動で、**すでにあるボリュームの DB に表が入る**。表の追加の承認は、この関門を通る承認として扱う（マージの前に、適用先の DB と影響を示す）。Python のローダー（`python -m app.load`）の `apply_schema` は、この表を作らない（使わない）。
+
+```sql
+-- 会話の履歴（ログイン中だけ）。auth.sql（auth_user）のあとに流す。仕様: spec-prototype §2.3（案）。
+CREATE TABLE IF NOT EXISTS conversations (
+    user_id     text        NOT NULL,
+    id          text        NOT NULL CHECK (id ~ '^[A-Za-z0-9_-]{1,128}$'),
+    title       text        NOT NULL CHECK (char_length(title) BETWEEN 1 AND 40),
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, id),
+    -- 名前を付ける（外部キー違反が、どの制約かを、Go が名前で見分ける。§2.3.3）
+    CONSTRAINT conversations_user_fk FOREIGN KEY (user_id) REFERENCES auth_user ("id") ON DELETE CASCADE
+);
+-- 一覧と、1 人 50 件の整理: 本人の会話を、更新が新しい順に（同時刻は id の昇順）。
+CREATE INDEX IF NOT EXISTS conversations_user_updated_idx ON conversations (user_id, updated_at DESC, id);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    user_id          text        NOT NULL,
+    conversation_id  text        NOT NULL,
+    seq              integer     NOT NULL CHECK (seq >= 0),
+    role             text        NOT NULL CHECK (role IN ('user', 'assistant')),
+    content          text        NOT NULL,
+    results          jsonb,
+    tool_calls       jsonb,
+    -- 回答を作ったときに読んだ run の runs.created_at（サーバーが付ける。§7.1.5。run が無かった回答は NULL）
+    run_created_at   timestamptz,
+    PRIMARY KEY (user_id, conversation_id, seq),
+    CONSTRAINT conversation_messages_conversation_fk
+        FOREIGN KEY (user_id, conversation_id) REFERENCES conversations (user_id, id) ON DELETE CASCADE,
+    -- ユーザーの発言は results・tool_calls・run_created_at を持たない。回答は、results・tool_calls を配列で持つ（空でもよい）
+    CHECK (role = 'assistant' OR (results IS NULL AND tool_calls IS NULL AND run_created_at IS NULL)),
+    CHECK (role = 'user' OR (results IS NOT NULL AND jsonb_typeof(results) = 'array'
+                              AND tool_calls IS NOT NULL AND jsonb_typeof(tool_calls) = 'array'))
+);
+```
+
 ### 4.4 API（JSON。接頭辞 `/api`）
 
 | メソッド・パス | 内容 |
@@ -137,18 +334,43 @@ reason: "new_absent_2018" | "present_2018" | "ambiguous" | "edge"
 | GET `/api/candidates/{id}` | `CandidateDetail`（summary + evidence + 説明文のキー + 画像 URL + provenance） |
 | GET `/api/candidates/{id}/image?year=2018\|2023&size=512` | PNG。候補の外接矩形に余白（約 20 m）を足した切り出しをタイルから作り、輪郭を描く。タイルの外へは出ない |
 | GET `/api/metrics` | `eval.json` の内容 + provenance |
-| POST `/api/chat` | 入力 `{messages:[{role,content}]}`、出力 `{message:{role:"assistant", content, results:ToolResult[], tool_calls:[{name,args}]}}` |
+| POST `/api/chat` | 入力 `{messages:[{role,content}], conversation_id?}`（`conversation_id` は任意。会話の履歴〔§2.3。仕様のみ〕を保存するときだけ付ける）、出力 `{message:{role:"assistant", content, results:ToolResult[], tool_calls:[{name,args}]}}`（`conversation_id` の有無で変わらない） |
 | GET `/api/me` | 任意のログイン（§2.1）の受け口。`Authorization: Bearer <JWT>` を検証し、`{sub, email, name, picture}` を返す |
+| GET `/api/conversations` | 会話の履歴（§2.3。**仕様のみ。実装は Go への切り替えのあと**）: 本人の会話の一覧。`Authorization: Bearer` が要る |
+| GET `/api/conversations/{conversation_id}/messages` | 同上: 会話の発言（古い順） |
+| DELETE `/api/conversations/{conversation_id}` | 同上: 会話を 1 件消す |
 
 エラーは `{error:{code,message}}` と適切な HTTP ステータス。存在しない id は 404、不正な引数は 422。`POST /api/chat` で実 LLM（§2.2）が使えないときは **502** `{error:{code:"llm_unavailable", message:"いまは LLM が応答できません。少し待ってからもう一度お試しください"}}`（模擬には切り替えない。§4.5）。
 
-`GET /api/me`（§2.1 の JWT。ほかの入口は `Authorization` を見ない・ログインを要さない。**いまの機能は、ログインなしで今まどおり使える**）:
+`GET /api/me`（§2.1 の JWT。ほかの入口は `Authorization` を見ない・ログインを要さない〔**例外: `conversation_id` つきの `POST /api/chat` と、履歴の 3 本。§2.3・下の「会話の履歴の API」**。`conversation_id` を付けない `POST /api/chat` は、今までどおり `Authorization` を見ない〕。**いまの機能は、ログインなしで今まどおり使える**）:
 
 - 成功 200: `{sub, email, name, picture}`。`sub` は JWT の `sub`（必須）。`email`・`name`・`picture` は、JWT に無い・空・文字列でない・下の整形の規則に合わないときは `null`。応答に `Cache-Control: no-store`。
   - 整形の規則（実装は `backend/app/jwt_auth.py` の `_identity`。`email`・`picture` は前後の空白を除いてから見る）: `picture` は、claim `picture`（無ければ `image`）が `https://` で始まる 2048 文字までのときだけ（それ以外は `null`）。`email` は、`@` を含む 254 文字までのときだけ（含まない・254 文字を超えるときは `null`）。`name` は、印字できない文字（制御文字のほか、全角空白・ゼロ幅の文字も）を除いて、100 文字までに切る（空になれば `null`）。JWT の `email_verified` は読まない。JWT の中身・`Authorization` の値は、ログにも応答にも出さない（ログに残すのは失敗の種類だけ）。
 - **401** `{error:{code:"unauthorized", message}}`（固定の文。理由は返さない。`WWW-Authenticate: Bearer` を付ける）: `Authorization` が無い・`Bearer` でない・JWT が壊れている・署名が合わない・`alg` が ES256 でない・`aud`／`iss`／`exp`／`sub` が合わない（期限切れを含む）。
 - **503** `{error:{code:"unavailable", message}}`: `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無い、または URL の形が不正（ログインの設定が無い扱い。起動は止まらない。§2.1。JWT の有無を見る前に返す）、または JWKS を取りに行けず前に取れた鍵も無い。ほかの入口には影響しない。
 - 使うのはアカウントのロジック（ログインの確認・JWT と JWKS の疎通の確かめ）だけ。チャット・地図・詳細・精度などの入口は、これを呼ばず、これに依存しない。
+
+**会話の履歴の API**（§2.3。**仕様のみ。実装は Go への切り替えのあと。Python の API には入れない**。保存の動き・検査の順・上限は §2.3.4・§2.3.5）:
+
+- **共通**: ログインは `Authorization: Bearer <JWT>`（§2.1。ES256・`iss`・`aud`・`exp`・`sub` を検査。`GET /api/me` と同じ検証）。**利用者は、検証に通った JWT の `sub` だけから決める**（本文・クエリ・ヘッダーの別の値は使わない）。エラーは既存の形 `{error:{code,message}}`。422 は `details`（`loc`・`msg`）も付く。`details[].loc` は**文字列の配列**（例 `["path","conversation_id"]`・`["body","conversation_id"]`）で、`message` の側が先頭の `loc` を `.` でつないだ形（例「引数が不正です（path.conversation_id）」。`backend/app/errors.py`・`api/internal/apierr`）。入力値は応答に出さない。履歴の保存先が使えないときの文に、例外の内容・接続先・SQL を含めない。
+- **`Cache-Control: no-store`**: 3 本の API は、成功・失敗のどの応答にも（204・401・404・422・500・503 を含めて）付ける（人ごとに違う内容。`/api/me` と同じ）。ルーターが 3 経路に合わせたあとの応答だけが対象（経路もメソッドも合わない 404・405 は含めない）。`POST /api/chat` には付けない（既存のまま）。
+- **`GET /api/conversations`**: 200 `{"conversations": [{"id": "5b0c…", "title": "新規出現の候補は何件ありますか？", "created_at": "2026-11-25T01:02:03+00:00", "updated_at": "2026-11-25T01:05:09+00:00"}]}`。本人の会話だけ。**更新が新しい順、同時刻は `id` の昇順。最大 50 件。ページ分けは無い。** 保存を 1 人 50 件に収める（§2.3.8）ので、一覧に出ない会話は無い（上限は念のため）。`created_at`・`updated_at` は常に入る。表記（`+00:00` か `Z`）は固定しない（同じ時刻であればよい）。クエリは受けない。会話が 1 件も無ければ `{"conversations": []}`。
+- **`GET /api/conversations/{conversation_id}/messages`**: 200 `{"messages": [{"role": "user", "content": "新規出現の候補は何件ありますか？"}, {"role": "assistant", "content": "…", "results": [ … ], "tool_calls": [ … ], "run_created_at": "2026-11-24T03:00:00+00:00"}]}`。`seq` の昇順（古い順）。ユーザーの発言は `{role, content}` だけ。回答は、**その回答を返した `POST /api/chat` の `message` と、JSON として等しい値**（`content`・`results`・`tool_calls`。§4.5 の判別可能ユニオン。jsonb はキーの順・空白・数値の書き方を正規化するので、キーの順は保証しない）。保存のときに、値を作り替えない。**回答には、`run_created_at`（その回答を作ったときの run の `created_at`。run が無かった回答は null）が付く**（chat の `message` には無い、履歴だけの項目。§7.1.5）。DocuNavi の `sent_at`（質問の時刻）は足さない（TownScan の画面は、発言の時刻を出さない）。発言の数は、§2.3.5 の上限（500 件）まで。ページ分けは無い。開いて見る（`GET`）だけでは、`updated_at` を更新しない。
+- **`DELETE /api/conversations/{conversation_id}`**: 204（本文なし）。会話と、その発言を物理的に消す（`DELETE`。印を付けるだけの削除ではない）。無い・他人は 404。二度目は 404。画面は、削除の 404 を成功として扱う（DocuNavi の `deleteThread` と同じ。すでに目的の状態になっている）。
+- **履歴まわりのエラー**（上の共通の形）:
+
+| 状態 | `code` | いつ | 文 |
+|---|---|---|---|
+| 401 | `unauthorized` | `Authorization` が無い・`Bearer` でない・JWT が不正・期限切れ・`aud`/`iss` が違う。**加えて、`conversation_id` つきの chat だけ:** JWT は有効でも、`sub` の行が `auth_user` に無いとき（LLM を呼ぶ前の存在の確認。保存の段で `conversations_user_fk` の違反になった競合も同じ。回答も保存も無い） | 「ログインしてください」（`/api/me` と同じ固定の文。`WWW-Authenticate: Bearer`） |
+| 503 | `unavailable` | ログインの設定が無い・形が不正（検証より先に返す）。JWKS を取りに行けず、前に取れた鍵も無い | `/api/me` と同じ固定の文 |
+| 503 | `db_unavailable` | DB に届かない（既存の変換。SQLSTATE のクラス 08・40・53・54・57・58・F0 と接続系。保存の途中の失敗も含む） | 既存の固定の文 |
+| 500 | `internal_error` | 上以外の、想定外の DB のエラー（表が無い・`CHECK` 違反・`conversations_user_fk` 以外の外部キー違反など。§2.3.3）〔J1〕 | 既存の固定の文（原因は載せない） |
+| 404 | `not_found` | 会話が無い、または**他人の会話**（区別しない。本文も同じ） | 「会話が見つかりません」（TownScan の既存の文「候補が見つかりません」の書き方に合わせた） |
+| 422 | `validation_error` | `conversation_id` の形（`^[A-Za-z0-9_-]{1,128}$`）が違う。`conversation_id` つきの chat で、`messages` のどれかの `content` に NUL（U+0000）がある（`loc` は `["body","messages","<番号>","content"]`） | 既存の「引数が不正です（…）」 |
+| 422 | `conversation_full` | 1 会話の発言数の上限（§2.3.5）。回答の作成の前に断る | 「この会話は長くなりすぎました。新しい会話を始めてください」 |
+
+- **`POST /api/chat` の「空でない発言」の判定に使う空白の集合**（既存の 422。Go でも同じにする）: Python の `str.strip()`（`str.isspace()` と同じ集合）。この集合は、Go の `unicode.IsSpace` に、**U+001C〜U+001F を足したもの**（Python は真・Go は偽。両方の集合を全コードポイントで数えて確かめた: Python は 29 個、Go は 25 個で、差はちょうど U+001C〜U+001F の 4 個。Go は、ローカルの `docunavi-dev` イメージの Go 1.26.10 で、ネットワークなし・読み取り専用のマウントで流した）。Go の正規表現の `\s` は ASCII だけなので使わず、この関数で畳む。集合が食い違うと、「空でない」と判定された発言の題名が空になり、`CHECK` で DB のエラー（500）になる。
+- **履歴の題名の規則**: 題名は、会話を作るとき 1 回だけ、作るときの要求の最後のユーザー発言から作る（§2.3.2）。上の空白の集合の連続（空白・タブ・改行・全角空白〔U+3000〕・NBSP〔U+00A0〕を含む）を半角空白 1 つにまとめ、前後は除く。40 文字（コードポイントで数える）までで、超えたら先頭 39 文字＋「…」。**空になったら**（上の集合をそろえれば起きない。防御として）「（題名なし）」にする。
 
 ### 4.5 チャットのツール結果（判別可能ユニオン。`type` で分ける）
 
@@ -213,7 +435,7 @@ ToolResult =
 
 - **全体の枠（サイドバー）**: JobNavi・DocuNavi と同じ作り・見た目・規則。本文（以下の各ページ）は、その右（1023px 以下では、上の帯の下）に置く。
   - **幅 1024px 以上: 左のサイドパネル。** 開いた表示（上にロゴと名前・閉じるボタン、続いて**「新しい会話」**（DocuNavi と同じ位置のボタン。細い帯では「＋」のアイコン）、行き先（アイコン＋名前）、下にアカウント（アバター＋名前））と、アイコンだけの**細い帯**を、ボタンで切り替える。はじめは開いた状態で、保存はしない。細い帯では、ロゴの位置が「サイドパネルを開く」ボタンになり（ホバー・フォーカスでロゴが開閉の絵に変わる）、帯の空き部分をクリックしても開く。名前は、ホバーとキーボードのフォーカスで、アイコンの右に出る。開閉したら、フォーカスを、いま押せる側のボタンへ移す。開いているページの項目に `aria-current="page"` を付ける。
-  - **「新しい会話」**（サイドパネル。`frontend/components/NewConversation.tsx`・`AppSidebar.tsx`）: ホーム（`/`）が開いていれば、チャット列の「新しい会話」と同じ処理（返答待ちの通信を止め、発言を 0 件に戻し、入力欄へフォーカスを移す。指で触る端末では移さない）を呼ぶ。ほかのページ（精度・このアプリについて）では、ホームへ移る（移ればチャットは新しく始まる）。拡大ビュー（地図・グラフ・写真の比較）は、チャット列のボタンと同じく、閉じて、回答ごとの状態も捨てる（下の「「新しい会話」」）。1023px 以下は、サイドパネルが無いので、チャット列のボタンだけ。会話の履歴（一覧・保存）は、まだ無い（会話は画面の状態だけで、開き直すと消える）。
+  - **「新しい会話」**（サイドパネル。`frontend/components/NewConversation.tsx`・`AppSidebar.tsx`）: ホーム（`/`）が開いていれば、チャット列の「新しい会話」と同じ処理（返答待ちの通信を止め、発言を 0 件に戻し、入力欄へフォーカスを移す。指で触る端末では移さない）を呼ぶ。ほかのページ（精度・このアプリについて）では、ホームへ移る（移ればチャットは新しく始まる）。拡大ビュー（地図・グラフ・写真の比較）は、チャット列のボタンと同じく、閉じて、回答ごとの状態も捨てる（下の「「新しい会話」」）。1023px 以下は、サイドパネルが無いので、チャット列のボタンだけ。会話の履歴（一覧・保存・開き直し）は、**ログイン中だけ**の機能として、§7.1 に仕様を書いた（**仕様のみ。実装は Go への切り替えのあと**。いまは無く、会話は画面の状態だけで、開き直すと消える）。ログインしていないときは、今までどおり。
   - **幅 1023px 以下: 上の横の帯**（ブランド・行き先・状態の表示「模擬モデルで応答しています」・テーマ・アカウント）。開閉のボタンは出さず、名前を文字で見せる。
   - 行き先は 2 ページ（`/`・`/accuracy`。名前は今の AppHeader のとおり。「このアプリについて」のページは、2026-11-25 にやめた。さわればわかる作りにし、限界・出典と規約は精度ページへ移した）。合成データのバナーと API 不通のバナーは、どちらの幅でも本文の上に出す（内容・文言は変えない）。
 - **アカウントのメニュー**（サイドバー下のアバターのボタン。1023px 以下は上の帯の右端）: 押すとメニューが開く（細い帯では右へ、開いたパネルでは上へ）。パネルを開いているときは、ボタンにアバターと名前が並ぶ。
@@ -275,6 +497,103 @@ ToolResult =
 - ログインの依存: `better-auth` 1.7.18 と `pg`（版を固定し、ロックファイルに含める）。ほかの新しいサービス・言語・DB は足さない。
 - 技術: Next.js（最新の安定版を、版を固定して）、React、TypeScript strict、Node 24、`output: "standalone"`。地図は Leaflet か MapLibre GL JS（版を固定。選んだ理由を 1 行）。`npm ci` で入れる（ロックファイルをコミット対象に含める）。
 
+### 7.1 会話の履歴（ログイン中だけ）
+
+位置づけ: **仕様のみ。実装は Go への切り替えのあと**（API の形は §4.4、保存の動き・認可は §2.3）。サイドパネルの枠・アカウントのメニュー・拡大ビューは、§7 のとおり。本文の〔J5〕・〔J6〕は、ユーザー決定ではなく起草者の判断（§2.3 の冒頭。ADR 0006）。
+
+#### 7.1.1 置き場
+
+- **幅 1024px 以上の左サイドパネル（開いた表示）の中、「新しい会話」「行き先」の下・アカウントの上**に、「会話の履歴」の領域を足す（DocuNavi は「新しい会話」の下・アカウントの上）。残りの高さを使い、中だけをスクロールする。見た目は DocuNavi の `thread-*` に合わせ、TownScan の色の変数を使う。
+- 細い帯（閉じた表示）では、一覧を出さない（DocuNavi と同じ。履歴・文字は隠す）。「新しい会話」の「＋」は、いまのまま。
+- **1023px 以下は、サイドパネルが無く上の横帯だけなので、一覧の入口は無い（決定。初版は作らない）。** 保存は続く（同じ人が広い画面で開けば見える）。DocuNavi は、狭い画面でもサイドバーを開く作り（閉じると完全に隠す。`useWideScreen`・`ws-shell[data-side]`）で、狭い画面の一覧は、CSS のコメントで「崩れないことの確認だけで、モバイル向けの最適化はしない」とある（`styles.css`）。実際に狭い画面で一覧が使えるかは、確かめていない。TownScan は上の横帯の作りが違う。
+
+#### 7.1.2 一覧の状態
+
+見出しは「会話の履歴」、領域の名前（読み上げ）は「会話の一覧」（DocuNavi と同じ文言）。
+
+| 状態 | いつ | 表示 |
+|---|---|---|
+| ログインしていない（ログインを使える設定） | 未ログイン | 1〜2 行の案内「ログインすると、会話を保存して、ここから開き直せます。」と、`/login` への入口。何も無いのと区別がつくように、領域は出す（DocuNavi も、使えない理由を示すため、領域を出す） |
+| ログインを使えない設定 | `isAuthConfigured()` が偽 | 「ログインを設定していない環境では、会話は保存されません。」。入口は出さない |
+| 読み込み中 | 最初の取得 | 「読み込み中…」（`role="status"`） |
+| 失敗 | 取得の失敗 | 「会話の一覧を取得できませんでした。しばらく待ってから再試行してください。」（`role="alert"`）＋「再読み込み」（DocuNavi と同じ文言） |
+| 空 | 0 件 | 「まだ会話がありません。質問を送ると、ここに並びます。」（DocuNavi と同じ文言） |
+| 一覧 | 1 件以上 | 項目の並び（§7.1.3） |
+| ログインの期限切れ | 取り直しても 401（§7.1.7） | 「ログインの有効期限が切れました。ログインし直してください。」＋`/login` への入口 |
+
+- **未ログインのとき、履歴の API を呼ばない。** 画面の中の会話は、今までどおり。
+- 取り直している間も、前の一覧を出し続ける（ちらつかせない。DocuNavi と同じ）。
+- 文言は、未ログイン・設定なしの 2 つとも、この文書の案のとおりで決定（ユーザー決定。ADR 0006 の D12）。
+
+#### 7.1.3 項目と操作
+
+- 項目は、題名（`title`。長いときは「…」で省く。`title` 属性に全文）と、更新時刻（`ja-JP`・月日と時分。DocuNavi の `formatTime` と同じ）。開いている会話に `aria-current="true"`。
+- 項目を押す → その会話を開く（§7.1.4）。**生成中（`sending`）は、開いている会話を削除できず、別の会話にも移れない**（生成が止まってしまうため。DocuNavi と同じ）。
+- 一覧は、回答が最後まで届く（または止まる）たびと、削除のあとに取り直す（DocuNavi の `settledCount`）。
+- **「新しい会話」**（サイドパネルのボタンと、チャット列のボタン。どちらもいまの処理）: 返答待ちの通信を止め、発言を 0 件に戻し、**開いている会話 ID を忘れる**（`sessionStorage` の値を消す。「保存を飛ばした」印も戻す。§7.1.7）。次に送るとき、新しい `conversation_id` を作る。拡大ビューは、§7 の「新しい会話」のとおり（閉じて、回答ごとの状態を捨てる）。ほかのページ（精度）からは、ID を消してからホームへ移る。
+- **ほかのページ（`/accuracy`）で項目を押す** → 開く会話の ID を `sessionStorage` に書いてから、ホーム（`/`）へ移る。ホームのチャットは、立ち上がったときに保存された ID を見て、開き直す。
+- **ログイン中は、`/accuracy` から `/` へ（行き先のメニュー・ブラウザーの戻る）戻っても、`sessionStorage` に会話 ID があれば、最後に開いていた会話を開き直す**（決定。いまは、ほかのページへ移ると会話が消える。「新しい会話」は ID を消してから移るので、開き直さない）。
+
+#### 7.1.4 開き直し（再開）
+
+1. 押したら、返答待ちを止め、発言を空にし、**拡大ビューも「新しい会話」と同じに閉じて、回答ごとの状態を捨て**（前の会話の絞り込み・強調・選んだ候補・タブ・寄せ先が残らないように）、会話 ID を `sessionStorage`（キー案 `townscan:conversation_id`。タブごと）に書く。
+   - **新しい会話の ID を `sessionStorage` に書くのは、`conversation_id` つきで送った最初の回答が届いたとき**（保存されたとき）〔J6〕。最初の送信が失敗した・保存を飛ばして送り直した（§7.1.7）のに ID だけが残り、再読み込みで「見つかりません」になるのを避ける。
+2. `GET /api/conversations/{id}/messages` を取る。取っている間、チャット欄には説明（`Welcome`）ではなく「これまでのやり取りを読み込んでいます…」（`role="status"`）を出す（DocuNavi と同じ文言）。取得の間に別の会話へ移った・新しい会話にした・送信を始めたなら、遅れて届いた結果は捨てる（DocuNavi の `jobRef`）。
+3. 届いたら、`ChatEntry`（`role`・`content`・`results`・`tool_calls`）として並べる（形が合わない `results` は、今の画面と同じく、壊れずに飛ばす）。以後、続きを送れる（送る `messages` は、今と同じく画面の発言から作り、`conversation_id` を付ける）。並べた位置は、いまの「回答が届いたあと」の規則（長い回答は質問の先頭が見える位置）と同じ。**拡大ビューは開かず、画面は替えない**（回答が届いたときと同じ。§7）。解析結果が変わっていた回答の扱いは §7.1.5。
+4. **失敗:** 「過去のやり取りを読み込めませんでした。もう一度読み込むか、新しい会話を始めてください。」（`role="alert"`。DocuNavi と同じ文言）＋「再試行」＋「新しい会話」。失敗しても会話 ID は捨てない（再試行できるように）。
+5. **404（会話が無い）は、失敗と分ける:** 「この会話は見つかりませんでした。削除されたか、保存の上限（1 人 50 件・最後の動きから 7 日）で消えた可能性があります。」を出し、会話 ID を忘れる（`sessionStorage` を消す）。DocuNavi は 404 も同じ失敗の表示で、再試行しても直らない（保存期間を過ぎたタブで起きうる）。この差は、TownScan が上限を持つため。**文は「可能性」で書く:** 50 件の整理は保存のたびに効くが、7 日の掃除は手で流す（§2.3.8）ので、7 日を過ぎた会話が必ず消えているとは言えない。
+6. **再読み込み・ホームへの戻り:** ログイン中は、`sessionStorage` に会話 ID があれば、立ち上がりのときに自動で開き直す（DocuNavi の `restoredRef`）。DocuNavi の `docs/api.md` は「ページの再読み込みだけでは取得しない」と書くが、コード（`useChat.ts`）は取得する。コードに合わせた。ログインしていないときは、ID を見ない（残っていれば消す）。
+7. 読み上げ: 開き直しで並べる発言は、読み上げない（並べ終えるまで `aria-busy` を真にする。実際の読み上げでの挙動は未確認）。フォーカスは動かさない（押した一覧のボタンに残す）。
+
+#### 7.1.5 開き直した会話の、拡大ビューと解析結果の食い違い
+
+拡大ビュー（地図・グラフ・写真の比較）の回答ごとの状態（選んでいるタブ・絞り込み・選んだ候補・強調・寄せ先）は、保存しない。**保存した回答の `results` から、その回答の拡大ビューを、カードのボタンを押してはじめて開くときに決める**（§7「拡大の単位は、回答 1 件」。通すのは保存された値だけで、値を作り直さない）。
+
+規則:
+
+0. 開き直しの始めに、拡大ビューを「新しい会話」と同じ状態へ戻す（閉じて、回答ごとの状態を捨てる。§7.1.4 の 1）。
+1. 開き直した会話の回答を並べても、**拡大ビューは開かず、画面は替わらない**（回答が届いたときと同じ。§7）。そのため、読み上げ・スクロール・フォーカスの移動も無い。
+2. **待つ:** 規則 3 の比較は、`GET /api/health`（`HealthProvider`）の読み込みが終わってから（成功・失敗どちらでも）、1 回だけ行う（終わるまでの扱いは、実装のときに決める。未確認）。
+3. **解析結果（run）が変わっていたら、その回答は「別の解析結果に基づく回答」として扱う**（拡大ビューを開かせない。規則 4）。回答ごとに、作ったときの run といまの run を比べる:
+   - 作ったとき: 回答の `results` の `provenance.run_id`（`refusal` には無い）と、その回答の `run_created_at`（§2.3.2・§4.4）〔J4〕。
+   - いま: `GET /api/health` の `run.run_id` と `run.created_at`（`HealthProvider` が持つ）。
+   - **`run_id` が同じでも、`run_created_at` が違えば、別の解析結果。** 実データの `run_id` は run のフォルダ名（`pipeline/run_postprocess.py` の `default_run_id`）で、`created` の既定は現在時刻。ローダーは同じ `run_id` の行を消して入れ直す（`backend/app/load.py` の `write_run`）。同じ `run1` を後処理し直して読み込み直すと、候補 ID・件数が変わっても `run_id` は同じで、`created_at` だけが変わる。
+   - 時刻は、文字列ではなく時刻として（`Date.parse` のミリ秒）比べる（表記が違いうるため）。
+   - 回答に `provenance` があるのに `run_created_at` が null のときは、別の解析結果と見る（安全側）。`refusal` だけの回答は、run に依らないので、別の解析結果とは見ない。
+   - 現在の run が分からない（health の取得に失敗）ときも、別の解析結果と見る（食い違いを見せない側に倒す）。
+   - 残る穴: 後処理の `--created` で、同じ時刻を明示して入れ直した場合は見分けられない（ADR 0006 の未確認）。
+4. 別の解析結果の回答があるときは、会話の先頭に注意書き「この会話の一部は、いまとは別の解析結果に基づいています。件数や地図は、いまのデータと食い違うことがあります。」を 1 行出す。**その回答のカードの、拡大ビューへ進むボタンは、押せなくする**（件数・比較の「グラフで見る」「地図で見る」、地図の表示の「地図で見る」、表の行の「詳細」、検出画像の「詳細を開く」。押すと、いまのデータに無い地区・候補を開いてしまう。質問の例のボタン〔`ask`〕は、新しい質問を送るだけなので、そのまま使える）。カードの数字・文は、保存された値のまま読める。**検出画像のカードは、写真も読み込まない**〔J5〕（保存された画像の URL は、別の解析結果では、無い候補・別の建物を指しうるため。代わりに「別の解析結果の写真は表示しません」と出す。この 1 点は、ユーザー決定の「ボタンを無効にする」への、起草者の追加）。実装の目安: `ChatEntry` に印（例 `staleRun`）を足し、`ResultCard` へ渡して、ボタンの `disabled` と写真の抑止に使う（`frontend/components/chat/types.ts`・`ResultCard.tsx`・`cards.tsx`）。
+
+**理由:** 回答の `results` は、その時点の run（`kind` が `synthetic` か `real` かも含む）の値で、候補 ID（`c-x-y-n`）・地区の `filter` も run ごとに違う。解析結果は、読み込み直すと入れ替わる（`python -m app.load`。表示するのは最新の run）。合成データで話した会話を、実データになってから開くと、カードの件数と地図が食い違う。TownScan は、「古い run の画面を作らない」とする（DocuNavi は、保存した検索範囲がいま見えないとき〔`scope_unavailable`〕、範囲を主張せず、続きは保存された範囲で探す）。
+
+#### 7.1.6 削除（2 段階）
+
+DocuNavi の `ThreadSidebar` と同じ。
+
+1. 項目の右のゴミ箱（`aria-label`「「{題名}」を削除」・`title`「削除」）を押すと、その場でボタンが「削除する」「やめる」に替わる（同時に確認が出るのは 1 件だけ）。誤って押しても、まだ消えない。
+2. 「削除する」→ `DELETE`。成功したら一覧を取り直す。**開いていた会話を消したときは、画面も最初の状態に戻す**（会話 ID を忘れる）。404 は成功として扱う。
+3. 失敗したら、一覧の上に「会話を削除できませんでした。しばらく待ってから再試行してください。」（`role="alert"`。DocuNavi と同じ文言）。
+4. 開いている会話は、生成中は削除できない（ボタンを無効にする）。
+5. 取り消しの案内・ゴミ箱の一覧は作らない（削除は物理削除。§2.3.7）。
+
+#### 7.1.7 再読み込み・ログアウト・ログインの期限切れ
+
+- **ログアウト:** 既存のサーバーアクションで `/` へ戻る（画面が作り直される）。保存した会話は消えない（ログインし直せば見える）。`sessionStorage` の会話 ID は、未ログインで立ち上がったときに消す（次に同じタブで別の人がログインしても、前の人の ID を開こうとしない。開こうとしても、サーバーは 404 を返す）。
+- **ログインの期限切れ**（セッションは 14 日で、延長しない。`frontend/lib/auth.ts`）: 履歴の API が、取り直しても 401 のとき、画面は「ログインしていない」扱いにする。一覧は §7.1.2 の「期限切れ」の表示。チャットは**止めない**: 送るときの `conversation_id` を外して（保存せずに）送り直し、回答の下に注記を出す。「ログインしなくても全機能が使える」を、ログインの失敗で崩さない。
+  - **保存を飛ばしたあとの整合の規則:** 上の送り直しで保存を 1 度でも飛ばした会話では、**それ以降の送信にも `conversation_id` を付けない**（画面の会話の状態として、その会話の間だけ持つ。「新しい会話」・開き直しで戻る。理由は §2.3.4）。保存済みの部分は、そのまま残る（開き直すと、飛ばす前までが見える）。
+  - **注記**（飛ばした回答に 1 回だけ。以降の回答には繰り返さない）:「ログインを確認できなかったため、この回答から保存されません。続きを保存するには、新しい会話を始めてください。」
+  - **LLM の呼び出し回数:** 401 は、LLM を呼ぶ前に返る（トークンが不正・期限切れ、または `auth_user` に行が無い。§4.4・§2.3.3）。初回の 401 →（§2.3.6）トークンを取り直して再送 → 2 回目の 401 → 保存なしの送り直し、で、LLM を呼ぶのは**最後の 1 回だけ**。例外は、存在の確認の直後に利用者の行が消える競合だけで、保存の段の 401 になり、LLM を 1 回余分に呼ぶ（まれ。許容する）。
+- **ログインの確認だけが 503**（JWKS に届かない・設定が無い）のときも、同じく保存せずに送り直し、同じ注記と同じ規則（以降も `conversation_id` を付けない）。
+- **DB が使えない 503**（`db_unavailable`）は、送り直さない（チャット自体が DB を使うため）。既存の「送信できませんでした」＋「もう一度送る」。この失敗は、保存を飛ばしたことにならない（その往復は、回答も保存も無く、画面も失敗の印をつける。「もう一度送る」で再送すれば、同じ `conversation_id` で保存される）。
+- **`conversation_full`（422）**: 再送しても直らないので、「もう一度送る」を出さず、メッセージ（「この会話は長くなりすぎました。新しい会話を始めてください」）と「新しい会話」を示す。
+- **別のタブで消した会話に続きを送る:** 保存先が無いので、続きだけの新しい会話として保存される（DocuNavi も同じ。返答の生成中に同じ会話を削除したときの挙動は、DocuNavi も未確認と書く）。
+
+#### 7.1.8 そのほか
+
+- 狭い幅・細い帯・テーマ（ライト・ダーク）・キーボード操作（項目とゴミ箱が Tab の順に入る。確認の 2 つのボタンへフォーカスが移る）は、DocuNavi の `ThreadSidebar` に合わせて作り、実画面で確かめる（未確認）。
+- 画面の部品の置き場の案（新設の予定。いまは無い）: `frontend/lib/conversations-api.ts`（3 本の呼び出し）、`frontend/lib/auth-token.ts`（§2.3.6）、`frontend/lib/use-conversations.ts`（`frontend` に `hooks/` は無く、フックは `lib/use-api.ts` のように `lib/` に置く）、`frontend/components/ConversationList.tsx`（サイドパネルの中）。サイドパネルとチャットのつなぎは、既存の `NewConversation.tsx`（登録の仕組み）に、「開く」「いま開いている会話」「生成中」を足して広げる。
+- 画面に、件数の上限（50 件）を知らせる表示は、初版では作らない（古い会話が自動で消えることは、404 の文でだけ伝わる。ADR 0006 の未確認）。
+
 ## 8. 出口条件（実行して確かめる）
 
 | # | 検査 | 担当 |
@@ -287,5 +606,66 @@ ToolResult =
 | E6 | 実データを読み込み、DB の件数 = `candidates.geojson` の件数 = UI の件数 | メイン |
 | E7 | Chrome で、質問 → 結果カード → 拡大ビュー（地図・グラフ）→ 詳細（2018/2023 の写真）→ 精度の画面、の一連を操作して確認（スクリーンショット） | メイン |
 | E8 | `frontend` のテストが、拡大ビュー（§7）を確かめる: ①最初の画面はチャットだけで、結果つきの回答が届いても、拡大ビューは開かず、画面は替わらない ②カードのボタンで、その回答の画面（グラフ・地図・写真の比較）が `role="dialog"`・`aria-modal="true"` で開く ③「閉じる」・Esc で閉じ、開いたボタンへフォーカスが戻る（詳細の中の Esc は、詳細だけを閉じる） ④回答ごとにタブ・絞り込み・選んだ候補を保ち、別の回答を開いても混ざらない ⑤「新しい会話」で閉じて、状態を捨てる ⑥比較のカードは上位 5 地区までで、5 を超えるとき「全 N 地区中 5 地区を表示」と出る ⑦地図・グラフ・写真の比較・回答の条件の既存のテストが、拡大ビューの中で同じ振る舞いで通る | frontend |
+| E9 | 会話の履歴（§2.3・§4.3・§4.4・§7.1。**仕様のみ。実装は Go への切り替えのあと。まだ一度も流していない**）。次の 3 つが、すべて合格する（内訳は下の「E9 の内訳」）: ①`scripts/test-contract.sh go` が、構成 `history` の H-系（26 行）と、既存の構成へ足す H-A5〜A7（3 行）に加えて、既存の検査（H-A3 = `contract/test_auth_independence.py`。変更しない）まで、全件合格する。**Python の API には H-系を流さない**: `scripts/test-contract.sh python` では、H-系が deselect され、落ちない ②`api/` の `go vet` と `go test -race -count=1` が、下の「契約にしない」項目（並行・巻き戻し・LLM を呼ぶ前の拒否・ログ・保守コマンドなど）を含めて合格する ③`frontend` の型検査・lint・Vitest が、下の「画面（Vitest）」の項目を含めて合格する | api（Go）・contract・frontend |
+
+**E9 の内訳**（契約の検査 `contract/` に足すもの。**仕様のみ。いまの `contract/` に、これらの検査は無い**。DocuNavi の対応する検査は、`tests/test_threads.py` の関数名で示す）:
+
+**前提:** 契約の検査は、HTTP だけで叩く（アプリのコードを import しない）。履歴は、Python の API には入れない（ADR 0006 の D8）ので、新しい構成 **`history`**（環境は `main` と同じ。合成データ・偽の JWKS）を作り、`scripts/test-contract.sh` の既定の構成の並びには、**対象が `go` のときだけ**入れる。認証の設定が無い・JWKS に届かない・DB が止まる、の検査（H-A5〜A7）は、既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す。
+
+**Python の API に流さない仕組み**〔J7〕: H-系の検査はすべて、機能の印 `@pytest.mark.history` を付ける（構成の印 `variant` とは別）。`contract/conftest.py` は、環境変数 `CONTRACT_FEATURES` に `history` が無いとき、この印の検査を deselect する。`scripts/test-contract.sh` は、対象が `go` のときだけ `CONTRACT_FEATURES=history` を検査のコンテナへ渡す。これが無いと、既存の構成に足す H-A5〜A7 が、履歴の経路を持たない Python の API（404）に流れて落ちる。`contract/conftest.py` の `VARIANTS`・`DATA_VARIANTS` と、`scripts/test-contract.sh` の構成の表（`phase_env`。`history` は `main` と同じ設定）にも `history` を足す。
+
+**検査の数（構成ごとの内訳）:** 下の表は 30 行。`history` に新しく入るのが **26 行**（H-A1・A2・A4、L1〜L8、M1〜M5、D1〜D3、C1〜C7）、既存の構成に足すのが **3 行**（H-A5 は `noauth`・`badauth`、H-A6 は `jwksdown`、H-A7 は `dbdown`。H-A5 は 2 つの構成で流れる）、既存の検査（`main` の `test_auth_independence.py`。変更しない）が 1 行（H-A3）。
+
+**データの準備の追加（利用者の行）**〔J7〕: 偽の JWT の `sub` に対応する `auth_user` の行が要る（外部キー・LLM の前の存在の確認）。検査は互いの状態に依存してはならない（H-L1 の「一覧が空」や、H-L4・H-L5 の件数は、同じ利用者を別の検査が使うと順序で壊れる）ので、**検査ごとに別の利用者を使う**:
+
+- `scripts/test-contract.sh` の、データを読み込む段のあと（`auth_user` の表ができたあと）に、使い捨ての DB へ、**検査用の利用者を十分な人数（案: 200 人）**入れる（`docker exec` で `psql`。`INSERT INTO auth_user (id, name, email, "emailVerified") SELECT … FROM generate_series(1, 200) …`）。`id` は `ct_user_000001` の形（`sub` の規則 `[A-Za-z0-9_-]{8,64}` に合う）。契約の検査自身は DB に触れない。
+- 検査の側（`contract/support/fakes.py` と `contract/conftest.py`）に、`fresh_user()`（同じ実行の中で重ならない `sub` を返す。プールを使い切ったら、はっきり失敗する）を足す。`make_token(sub=…)` で別の利用者の JWT を作れる（`fakes.py` の `make_token(**overrides)` が `claims` の項目を上書きする）。**行の無い利用者**（H-A4）は、プールの外の固定の `sub`（例 `ct_nouser_000001`）。
+- 後始末はしない（DB は、実行ごとの使い捨て）。**`history` 構成は、使い捨ての DB 専用**（同じ DB に 2 回流すと、利用者が新しくならず、H-L1 などが落ちる）。`contract/README.md` の「データの準備」に、この制約と、手で用意するときの SQL を書く（`contract/README.md` の更新は、実装の段）。
+
+| # | 検査 | 構成 | 確かめること | DocuNavi の対応 |
+|---|---|---|---|---|
+| H-A1 | 未ログインは 3 経路とも 401 | history | 一覧・発言の取得・削除を、`Authorization` 無し・`Basic`・`Bearer` だけ・でたらめ・期限切れ・`aud` 違いで叩く → 401・`{error:{code:"unauthorized",message:"ログインしてください"}}`・`WWW-Authenticate: Bearer`・`Cache-Control: no-store`。どれも同じ応答。形が違う ID（422 になる ID）でも、ログインが先なので 401 | `test_list_needs_a_token_when_auth_is_required`・`test_messages_need_a_token…`・`test_delete_needs_a_token…` |
+| H-A2 | `conversation_id` つきの chat は、未ログインなら 401 で、保存も回答もしない。本文の不正は、ログインより先に 422 | history | `Authorization` 無し・不正・期限切れで `POST /api/chat`＋`conversation_id` → 401。そのあと有効な JWT の利用者で一覧が空のまま（保存されていない）。応答に回答（`message`）が無い。**さらに、未ログインでも、本文が不正（空の発言・最後が assistant・形が違う `conversation_id`）なら 422（本文が先）** | — |
+| H-A3 | `conversation_id` なしの chat は、ログインの有無に影響されない | main（既存） | 既存の `test_auth_independence.py` が、そのまま合格する（`Authorization` の有無・不正で応答が同じ）。変更しない | — |
+| H-A4 | `auth_user` に行が無い `sub` | history | 行の無い利用者の有効な JWT で、chat＋`conversation_id` → 401（保存は増えない）。一覧は 200・空、発言の取得・削除は 404（行は確かめない）。**LLM を呼ぶ前に確かめること**は、契約からは見えない（模擬モデルは決定的で、呼び出しが数えられない）ので、Go のテストで持つ（偽の LLM の呼び出しが 0 回） | — |
+| H-A5 | ログインの設定が無い構成は 503 | noauth・badauth | 3 経路と chat＋`conversation_id` が、JWT の有無・形を見る前に 503 `unavailable`。**3 経路の 503 は `Cache-Control: no-store`**。`conversation_id` なしの chat は 200（従来どおり） | `/api/me` の `test_me_unconfigured.py` に準じる |
+| H-A6 | JWKS に届かない構成 | jwksdown | `Authorization` 無し → 401。形は正しいトークン → 503 `unavailable`（鍵を取れないため。3 経路は `no-store`）。`conversation_id` なしの chat は 200 | 同上 |
+| H-A7 | DB が止まったとき | dbdown | 有効な JWT で 3 経路と chat＋`conversation_id` → 503 `db_unavailable`（3 経路は `no-store`）。chat は回答が無い。応答に接続先・例外の文字列を含まない | `test_store_failure_is_a_fixed_503` |
+| H-L1 | 一覧が空 | history | 新しい利用者の一覧 → 200・`{"conversations":[]}` | `test_list_is_empty_for_a_user_without_threads` |
+| H-L2 | 保存と一覧の形 | history | `conversation_id` つきの chat 1 回 → 一覧が 1 件。キーの集合は `{id,title,created_at,updated_at}` だけ。`id` は送った値。時刻は ISO 8601 で読め、`created_at` ≤ `updated_at` | `test_list_returns_only_the_users_own_threads_newest_first` |
+| H-L3 | 題名の規則 | history | 短い質問はそのまま。ちょうど 40 文字はそのまま。41 文字は先頭 39 文字＋「…」（コードポイントで数える。日本語で確かめる）。連続する空白・タブ・改行・全角空白（U+3000）・NBSP（U+00A0）は、半角空白 1 つにまとめ、前後は除く。2 回目以降の質問で題名は変わらない。**新しい会話で `messages` に過去の往復があるとき（別のタブで消した会話に続きを送った場合）、題名は最後のユーザー発言で、保存されるのもその往復だけ（発言の取得が 2 件）** | `test_title_is_the_first_user_message_even_after_more_turns`・`test_make_title_collapses_whitespace_and_truncates` |
+| H-L4 | 並び | history | 3 件作る → 新しい順。古い会話に続けると先頭に上がる（「同時刻は `id` の昇順」は、HTTP からは固定できないので、Go のテスト側） | `test_list_returns_only_the_users_own_threads_newest_first` |
+| H-L5 | 件数の上限と、保存時の整理 | history | 1 人で 51 件作る → 一覧は 50 件で、**最も古い 1 件は消えている**（その会話の発言の取得は 404）。残る 50 件の発言は取れる。古い方の会話に続けて保存すると、その会話は先頭に上がり、代わりに最も古い別の会話が消える（DocuNavi は上限を差し替えて確かめる。契約は HTTP だけなので、実際に 51 件作る） | `test_list_is_capped_to_the_newest_threads` |
+| H-L6 | 本人だけが見える | history | A の会話は B の一覧に出ない。B の一覧の応答の全文に、A の質問の文字列が無い | `test_list_returns_only_the_users_own_threads_newest_first` |
+| H-L7 | 保存されないもの | history | `conversation_id` なし、または **`conversation_id: null`**（「無し」と読む）の chat（有効な JWT つきでも）は、一覧を増やさない | — |
+| H-L8 | 保存は回答を変えない | history | 同じ質問を、`conversation_id` あり・なしで送って、`message` が同じ（模擬モデルは決定的） | — |
+| H-M1 | 発言の往復と、見るだけでは更新しない | history | 2 往復 → `messages` が user・assistant・user・assistant の順。ユーザーの発言は `{role,content}` だけ。回答は、その回答を返した chat の `message` と **JSON として等しい**（`content`・`results`・`tool_calls`。キーの順は問わない）。保存したものにも、返答の数字の検査（`contract/support/chat.py`）を流す。**2 つの会話を作り、古い方の発言を取っても、一覧の並びと `updated_at` は変わらない** | `test_messages_returns_the_conversation_in_order` |
+| H-M2 | 形が違う ID | history | `a:b`・空白・129 文字・`""` など → 422 `validation_error`（`details[].loc` は配列 `["path","conversation_id"]`／chat の本文は `["body","conversation_id"]`）。入力値は応答に出ない | `test_messages_reject_ids_that_could_carry_a_prefix`・`test_delete_rejects_ids_that_could_carry_a_prefix` |
+| H-M3 | 無い ID・他人の ID は同じ 404 | history | 存在しない ID → 404 `not_found`。他人（A の会話を B が）→ 同じ 404 で、本文も文字単位で同じ。B の操作のあと、A の会話は変わらない | `test_messages_of_an_unknown_thread_is_404`・`test_messages_of_another_users_thread_is_404` |
+| H-M4 | ヘッダー | history | 3 経路の 200・**204**・401・404・422 の応答がどれも `Cache-Control: no-store`（503 は H-A5・A6・A7）。`POST /api/chat` には付かない（既存のまま） | — |
+| H-M5 | 回答を作った run | history | 回答の発言の `run_created_at` が、`GET /api/health` の `run.created_at` と同じ時刻（時刻として比べる。表記は問わない）。ユーザーの発言には、このキーが無い | — |
+| H-D1 | 本人の削除 | history | 204・本文なし。一覧から消える。発言の取得は 404。二度目は 404。ほかの会話は残る | `test_user_can_delete_their_own_thread` |
+| H-D2 | 他人は消せない | history | B の DELETE → 404（本文は存在しない ID と同じ）。A の会話は残り、A の発言の取得は変わらない | `test_user_cannot_delete_another_users_thread` |
+| H-D3 | 本当に消える | history | 消した ID に同じ ID で chat → 新しい会話で、発言の取得が 2 件（古い発言が戻らない） | `test_user_can_delete_their_own_thread`（履歴そのものが消えている） |
+| H-C1 | 追記 | history | 同じ ID に 2 往復 → 同じ会話に追記（一覧は 1 件）。順は `seq` どおり | `test_title_is_the_first_user_message_even_after_more_turns` |
+| H-C2 | 同じ ID を別の人が使う | history | A と B が同じ `conversation_id` で chat → 別々の会話。互いの発言が見えない。B の送信で A の会話は変わらない | （`conversation_key` の効果） |
+| H-C3 | 失敗した往復は保存しない | history | 最後が assistant の `messages`（422）・空の発言（422）・**空白だけの発言（U+001F だけ・`　\n\t`。Python の `strip()` と同じ集合で空と判定する）**に `conversation_id` → 保存されない（一覧・発言の数が変わらない） | — |
+| H-C4 | 質問の上限 | history | 2000 文字は保存でき、発言の取得で同じ文字列。2001 文字は 422（既存）で保存されない | — |
+| H-C5 | 1 会話の発言数の上限（500 件） | history | 250 往復で 500 件に達した会話に続けると 422 `conversation_full`。回答は無く、保存は増えない。別の会話は影響を受けない（模擬モデルで 250 往復。実行は数秒の見込みで、実測はしていない） | — |
+| H-C6 | 結果の往復 | history | 件数・表・比較・地図・検出画像・精度・断りの結果を含む回答を保存し、発言の取得で値が一致（数値・配列の順・入れ子） | （出典が付く回答の検査: `test_thread_messages_endpoint_returns_sources_only_where_present`） |
+| H-C7 | NUL を含む発言 | history | `conversation_id` つきで、`messages` のどれかの `content` に NUL → 422 `validation_error`（`details[].loc` は `["body","messages","<番号>","content"]`）。保存されない。同じ本文を `conversation_id` なしで送ると 200（従来どおり） | — |
+
+**既存の検査へ足すもの（`main`。契約の追加）:** `contract/test_chat_behavior.py` の「空の発言」の例（`"   "`・`"　\n\t"`）に、U+001C〜U+001F だけの発言を足す（Python の `strip()` はこれらを空白と見て 422 にする。Go の `unicode.IsSpace` だけでは通ってしまう。§4.4 の空白の集合）。
+
+**契約にしない（Go のテスト `go test -race`・保守コマンドのテストに持つ）:**
+
+- 同じ会話への同時の書き込みで `seq` が重複・欠落しない（行のロックと、同じ人の鍵）。`updated_at` が逆戻りしない。**同時の `DELETE` が入っても、保存が 401 に取り違えられない**（`ON CONFLICT DO UPDATE`。`conversations_user_fk` 以外の 23503 は 500）。同じ人の同時の保存で、1 人 50 件の整理がデッドロックしない。
+- 一覧の「同時刻は `id` の昇順」（HTTP からは、同時刻を作れない）。
+- 題名の作り方の単体（空白の扱い: Go の正規表現 `\s` は ASCII だけなので使わず、`unicode.IsSpace` に U+001C〜U+001F を足した関数で畳む。U+001F の畳み込み・題名が空になったときの「（題名なし）」。コードポイントで数える）。
+- 保存のトランザクションの巻き戻し（上限の超過・外部キー違反）。**LLM を呼ぶ前に** `auth_user` の存在・NUL・発言数を断ること（偽の LLM の呼び出しが 0 回）。保存の失敗の分類（接続系は 503・それ以外は 500・`conversations_user_fk` の 23503 だけ 401）。
+- ログに、質問の本文・題名・`results`・生の利用者 ID・会話 ID が出ない（ログを捕まえて確かめる。**`AccessLog` がテンプレートで記録する**こと、どのルートにも合わない要求は `?` になること）。
+- 保守コマンド: 既定は削除しない・`--apply` で消す・境界（ちょうど N 日）・`--older-than-days 0` を断る・件数だけ表示。
+
+**画面（Vitest。`frontend` のテスト）**: 一覧の 6 つの状態・2 段階の削除・生成中の無効化・開き直し（取得中・失敗・404 の文）・**開き直した会話で、拡大ビューが開かない・画面が替わらない（読み上げ・スクロール・フォーカスの移動が無い）こと**・解析結果が違う回答の扱い（**`run_id` が同じで `run_created_at` が違う場合**・health が取れない場合・`refusal` だけの回答）・トークンの取り直し（60 秒前・401 で 1 回）・期限切れのときの保存なしの送り直し（**以降の送信に `conversation_id` を付けない**・注記は 1 回）・`conversation_full` で「もう一度送る」を出さない・**未ログインでは履歴の API も `/api/auth/token` も呼ばない**・`sessionStorage` の扱い（未ログインで消す・新しい会話で消す・最初の回答が届いてから書く）。DocuNavi の `Threads.test.tsx` の観点に合わせる。
 
 確認できていないことは「確認済み」と書かない。実データでの精度は、12 地区・初期値の閾値という限定つきの数字である。
