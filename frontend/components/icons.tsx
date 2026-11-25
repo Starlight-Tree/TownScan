@@ -69,34 +69,6 @@ export function PlusIcon() {
   );
 }
 
-/** 帯の行き先のアイコン。サーバーの layout からは、この名前（文字列）で渡す。 */
-export type NavIconName = 'chat' | 'accuracy';
-
-/** 「チャットと地図」（吹き出し。DocuNavi の「チャット」と同じ絵）。 */
-function ChatIcon() {
-  return (
-    <Line size={20}>
-      <path d="M4 4.5h12a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H9l-3.5 3v-3H4A1.5 1.5 0 0 1 2.5 12V6A1.5 1.5 0 0 1 4 4.5z" />
-    </Line>
-  );
-}
-
-/** 「このアプリの精度」（的。二重の円と中心の点）。 */
-function AccuracyIcon() {
-  return (
-    <Line size={20}>
-      <circle cx="10" cy="10" r="7" />
-      <circle cx="10" cy="10" r="3.4" />
-      <path d="M10 10h.01" />
-    </Line>
-  );
-}
-
-export function NavIcon({ name }: { name: NavIconName }) {
-  if (name === 'accuracy') return <AccuracyIcon />;
-  return <ChatIcon />;
-}
-
 /** 「模擬モデルで応答しています」の印のアイコン（フラスコ）。 */
 export function MockModelIcon() {
   return (

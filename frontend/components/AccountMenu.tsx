@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { PersonIcon } from './icons';
@@ -20,10 +21,10 @@ type Props = {
 
 /**
  * サイドパネル下部のアカウント（JobNavi・DocuNavi と同じ形）。アバターのボタンを押すと、メニューが開く（細い帯では右へ、開いたパネルでは上へ。1023px 以下の上の横帯では下へ）。パネルを開いているときは、ボタンにアバターと名前が並ぶ。
- * ログイン中は、メールアドレス（先頭）・テーマ（ライト / ダーク / システム）・ログアウト（名前は、パネルを開いているときのボタンに出る）。ログインしていなければ、テーマと、ログインの入口（入口があるときは、ボタンの名前が「ログイン」で、人型のアイコン。入口が無ければ、「メニュー」と ≡）。
+ * ログイン中は、メールアドレス（先頭）・テーマ（ライト / ダーク / システム）・「このアプリの精度」（精度の画面への入口。ページへの入口は、ここだけ）・ログアウト（名前は、パネルを開いているときのボタンに出る）。ログインしていなければ、テーマと、「このアプリの精度」と、ログインの入口（入口があるときは、ボタンの名前が「ログイン」で、人型のアイコン。入口が無ければ、「メニュー」と ≡）。
  * 開いたら先頭の項目にフォーカスを置く。↑↓ で移動、Esc で閉じてボタンへ戻る。メニューの外を押しても閉じる。
  * テーマを選ぶと localStorage に保存し、以後は OS より優先する（「システム」で OS に従う状態へ戻す）。保存値は、描画のあとに読む（theme-store.ts。サーバーの出力とずれないよう、描画の最初には読まない）。
- * JobNavi にある「表示名を変更」と「画面への入口（nav）」は、TownScan にはない（名前を持たない。行き先はサイドパネルの項目にある）。
+ * JobNavi にある「表示名を変更」は、TownScan にはない（名前を持たない）。「画面への入口（nav）」は、「このアプリの精度」の 1 つだけを、ここに置く（サイドパネルにも横帯にも、ページの入口は無い）。
  */
 export function AccountMenu({ name, email, logout, image, loginHref }: Props) {
   const signedIn = name !== undefined && email !== undefined && logout !== undefined;
@@ -35,6 +36,8 @@ export function AccountMenu({ name, email, logout, image, loginHref }: Props) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const pathname = usePathname();
+  const onAccuracy = pathname === '/accuracy' || (pathname?.startsWith('/accuracy/') ?? false);
   // ログインしていない人のボタンの名前。ログインの入口があるときは、「ログイン」と名乗る（「メニュー」だけでは、ログインの入口と分からない）。入口が無ければ（テーマだけ）、「メニュー」。
   // 見える文字（label）は、読み上げの名前（button）に含める
   const guest = loginHref
@@ -93,6 +96,9 @@ export function AccountMenu({ name, email, logout, image, loginHref }: Props) {
               ))}
             </span>
           </div>
+          <Link href="/accuracy" role="menuitem" className="account-item" aria-current={onAccuracy ? 'page' : undefined} onClick={() => setOpen(false)}>
+            このアプリの精度
+          </Link>
           {signedIn ? (
             <form action={logout}>
               <button type="submit" role="menuitem" className="account-item">

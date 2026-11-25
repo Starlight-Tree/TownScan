@@ -6,8 +6,6 @@ import { health, jsonResponse } from '../tests/fixtures';
 import { AppHeader } from './AppHeader';
 import { HealthProvider } from './HealthProvider';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/accuracy' }));
-
 const fetchMock = vi.fn<typeof fetch>();
 
 function renderHeader() {
@@ -70,11 +68,11 @@ describe('ヘッダーとバナー', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('現在のページに aria-current を付ける', async () => {
+  it('ページへの入口（nav）は無い。リンクはロゴだけ（精度の画面は、アカウントのメニューの中）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(health));
     renderHeader();
-    expect(screen.getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'チャットと地図' })).not.toHaveAttribute('aria-current');
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['TownScan']);
     await screen.findByText('模擬モデルで応答しています');
   });
 });

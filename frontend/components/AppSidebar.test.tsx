@@ -5,21 +5,16 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { health, jsonResponse } from '../tests/fixtures';
 import { AppSidebar } from './AppSidebar';
-import type { SidebarItem } from './AppSidebar';
 import { HealthProvider } from './HealthProvider';
 import { NewConversationProvider, useRegisterNewConversation } from './NewConversation';
 
 const nav = vi.hoisted(() => ({ pathname: '/', push: vi.fn() }));
 vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname, useRouter: () => ({ push: nav.push }) }));
 
-const items: SidebarItem[] = [
-  { href: '/', label: 'チャットと地図', icon: 'chat' },
-  { href: '/accuracy', label: 'このアプリの精度', icon: 'accuracy' },
-];
 const setup = (pathname: string, props: Partial<Parameters<typeof AppSidebar>[0]> = {}) => {
   nav.pathname = pathname;
   return render(
-    <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items} {...props}>
+    <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" {...props}>
       <p>下部の中身</p>
     </AppSidebar>,
   );
@@ -33,7 +28,7 @@ function HomeChat({ onNew }: { onNew: () => void }) {
 describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', () => {
   beforeEach(() => nav.push.mockReset());
 
-  it('ロゴの下、行き先の上に、ボタンとして出る（名前は画面に出さない文字で持ち、ツールチップにもなる）', () => {
+  it('ロゴの下に、ボタンとして出る（名前は画面に出さない文字で持ち、ツールチップにもなる）', () => {
     setup('/');
     const menu = screen.getByRole('navigation', { name: '主なページ' });
     const button = within(menu).getByRole('button', { name: '新しい会話' });
@@ -41,7 +36,6 @@ describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', ()
     expect(within(button).getByText('新しい会話')).toHaveClass('app-rail-label');
     const order = [...menu.querySelectorAll('a, button')].map((e) => e.textContent?.trim());
     expect(order.indexOf('新しい会話')).toBeGreaterThan(order.indexOf('TownScan'));
-    expect(order.indexOf('新しい会話')).toBeLessThan(order.indexOf('チャットと地図'));
   });
 
   it('ホームのチャットが開いていれば、そのチャットを新しくし、ページは移らない', async () => {
@@ -50,7 +44,7 @@ describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', ()
     render(
       <NewConversationProvider>
         <HomeChat onNew={onNew} />
-        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items} />
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" />
       </NewConversationProvider>,
     );
     await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
@@ -62,7 +56,7 @@ describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', ()
     nav.pathname = '/accuracy';
     render(
       <NewConversationProvider>
-        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items} />
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" />
       </NewConversationProvider>,
     );
     await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
@@ -77,56 +71,19 @@ describe('AppSidebar の「新しい会話」（DocuNavi と同じ位置）', ()
 });
 
 describe('AppSidebar', () => {
-  it('ロゴ・2 つの行き先・下部の中身を出す（名前は、画面に出さない文字で持つ）', () => {
+  it('ロゴと「新しい会話」と下部の中身を出す。ページへの入口（行き先の欄）は無い', () => {
     setup('/');
     const menu = screen.getByRole('navigation', { name: '主なページ' });
     expect(within(menu).getByRole('link', { name: 'TownScan' })).toHaveAttribute('href', '/');
-    expect(within(menu).getByRole('link', { name: 'チャットと地図' })).toHaveAttribute('href', '/');
-    expect(within(menu).getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('href', '/accuracy');
-    expect(within(menu).queryByRole('link', { name: 'このアプリについて' })).not.toBeInTheDocument();
+    expect(within(menu).getAllByRole('link')).toHaveLength(1);
+    expect(screen.queryByRole('link', { name: 'このアプリの精度' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'チャットと地図' })).not.toBeInTheDocument();
     expect(screen.getByText('下部の中身')).toBeInTheDocument();
-    // 名前は、ホバーで出るツールチップの文字にもなる
-    expect(screen.getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('data-tip', 'このアプリの精度');
-    // 項目の名前は、閉じた細い帯でも読み上げに残るよう、画面に出さない文字の要素で持つ
-    expect(screen.getByText('このアプリの精度')).toHaveClass('app-rail-label');
-  });
-
-  it('各項目に、アイコン（線画の SVG。読み上げの対象にしない）がある', () => {
-    setup('/');
-    for (const name of ['チャットと地図', 'このアプリの精度']) {
-      const svg = screen.getByRole('link', { name }).querySelector('svg');
-      expect(svg, name).not.toBeNull();
-      expect(svg).toHaveAttribute('aria-hidden', 'true');
-      expect(svg).toHaveAttribute('stroke-width', '1.6');
-      expect(svg).toHaveAttribute('width', '20');
-    }
   });
 
   it('テーマの切り替えは、サイドパネルには出さない（アカウントのメニューの中）', () => {
     setup('/');
     expect(screen.queryByRole('group', { name: 'テーマ' })).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ['/', 'チャットと地図'],
-    ['/accuracy', 'このアプリの精度'],
-  ])('%s では、「%s」だけに aria-current を付ける', (pathname, label) => {
-    setup(pathname);
-    const current = screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page');
-    expect(current.map((a) => a.textContent)).toEqual([label]);
-  });
-
-  it('配下のパスは、その項目の続き。頭だけ同じ別のパスは、続きとみなさない', () => {
-    const { unmount } = setup('/accuracy/detail');
-    expect(screen.getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
-    unmount();
-    setup('/accuracyx');
-    expect(screen.getByRole('link', { name: 'このアプリの精度' })).not.toHaveAttribute('aria-current');
-  });
-
-  it('「/」の項目は、無関係なパス（/login）では current にならない', () => {
-    setup('/login');
-    expect(screen.queryByRole('link', { current: 'page' })).not.toBeInTheDocument();
   });
 
   describe('開閉', () => {
@@ -137,7 +94,7 @@ describe('AppSidebar', () => {
       expect(screen.queryByRole('button', { name: 'サイドパネルを開く' })).not.toBeInTheDocument();
     });
 
-    it('閉じると、開くボタンに替わってフォーカスが移り、行き先と下部の中身は残る。開くと元に戻る', async () => {
+    it('閉じると、開くボタンに替わってフォーカスが移り、ロゴと下部の中身は残る。開くと元に戻る', async () => {
       setup('/');
       await userEvent.click(screen.getByRole('button', { name: 'サイドパネルを閉じる' }));
       expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'false');
@@ -145,9 +102,8 @@ describe('AppSidebar', () => {
       expect(open).toHaveAttribute('aria-expanded', 'false');
       expect(open).toHaveFocus();
       expect(screen.queryByRole('button', { name: 'サイドパネルを閉じる' })).not.toBeInTheDocument();
-      // 閉じても、ロゴと行き先のリンクと、下部の中身は DOM に残る（細い帯が使う）
+      // 閉じても、ロゴのリンクと、下部の中身は DOM に残る（細い帯が使う）
       expect(screen.getByRole('link', { name: 'TownScan' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'チャットと地図' })).toHaveAttribute('aria-current', 'page');
       expect(screen.getByText('下部の中身')).toBeInTheDocument();
 
       await userEvent.click(open);
@@ -197,12 +153,11 @@ describe('AppSidebar', () => {
       await userEvent.click(screen.getByRole('button', { name: 'サイドパネルを閉じる' }));
       nav.pathname = '/accuracy';
       rerender(
-        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items}>
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ">
           <p>下部の中身</p>
         </AppSidebar>,
       );
       expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'false');
-      expect(screen.getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
     });
   });
 });
@@ -219,7 +174,7 @@ describe('AppSidebar（API の状態の印）', () => {
     nav.pathname = pathname;
     return render(
       <HealthProvider>
-        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={items}>
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ">
           <p>下部の中身</p>
         </AppSidebar>
       </HealthProvider>,

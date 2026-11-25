@@ -3,16 +3,10 @@ import { logoutAction } from '../../actions/auth';
 import { AccountMenu } from '../../components/AccountMenu';
 import { AppHeader } from '../../components/AppHeader';
 import { AppSidebar } from '../../components/AppSidebar';
-import type { SidebarItem } from '../../components/AppSidebar';
 import { HealthProvider } from '../../components/HealthProvider';
 import { NewConversationProvider } from '../../components/NewConversation';
 import { isAuthConfigured } from '../../lib/auth-config';
 import { currentUser, displayName } from '../../lib/session';
-
-const ITEMS: readonly SidebarItem[] = [
-  { href: '/', label: 'チャットと地図', icon: 'chat' },
-  { href: '/accuracy', label: 'このアプリの精度', icon: 'accuracy' },
-];
 
 /**
  * 画面の枠。1024px 以上は、左のサイドパネル（AppSidebar）と本文の 2 列。1023px 以下は、上の横帯（AppHeader）と本文の縦積み（どちらを出すかは CSS）。
@@ -31,7 +25,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
     <HealthProvider>
       <NewConversationProvider>
         <div className="app">
-          <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" items={ITEMS}>
+          <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ">
             {account}
           </AppSidebar>
           <div className="app__column">

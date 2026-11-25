@@ -5,16 +5,20 @@ import { THEME_KEY } from '../lib/theme';
 import { AccountMenu } from './AccountMenu';
 import { ThemeSwitch } from './ThemeSwitch';
 
+const nav = vi.hoisted(() => ({ pathname: '/' }));
+vi.mock('next/navigation', () => ({ usePathname: () => nav.pathname }));
+
 const setup = () => render(<AccountMenu name="試験 花子" email="hanako@example.com" logout={vi.fn(async () => {})} />);
 const openButton = () => screen.getByRole('button', { name: '試験 花子のアカウントメニュー' });
 
 afterEach(() => {
+  nav.pathname = '/';
   delete document.documentElement.dataset.theme;
   window.localStorage.removeItem(THEME_KEY);
 });
 
 describe('AccountMenu（ログイン中）', () => {
-  it('はじめは閉じていて、押すとメール・テーマ・ログアウトが出る（この順）', async () => {
+  it('はじめは閉じていて、押すとメール・テーマ・このアプリの精度・ログアウトが出る（この順）', async () => {
     setup();
     const button = openButton();
     expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -31,14 +35,35 @@ describe('AccountMenu（ログイン中）', () => {
     expect(within(menu).getAllByRole('menuitemradio').map((n) => n.getAttribute('aria-label'))).toEqual(['ライト', 'ダーク', 'システム']);
     expect(within(menu).getByRole('menuitem', { name: 'ログアウト' })).toBeInTheDocument();
     const order = [...menu.querySelectorAll('.account-who, [role^="menuitem"]')].map((e) => (e.getAttribute('aria-label') ?? e.textContent ?? '').trim());
-    expect(order).toEqual(['hanako@example.com', 'ライト', 'ダーク', 'システム', 'ログアウト']);
+    expect(order).toEqual(['hanako@example.com', 'ライト', 'ダーク', 'システム', 'このアプリの精度', 'ログアウト']);
   });
 
-  it('JobNavi にある「表示名を変更」と画面への入口は出さない（TownScan は名前を持たない）', async () => {
+  it('JobNavi にある「表示名を変更」は出さない（TownScan は名前を持たない）', async () => {
     setup();
     await userEvent.click(openButton());
     expect(screen.queryByRole('menuitem', { name: '表示名を変更' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('「このアプリの精度」は /accuracy へのリンク。押すとメニューは閉じる。開いているページ（/accuracy 以下）だけ aria-current', async () => {
+    const { unmount } = setup();
+    await userEvent.click(openButton());
+    const item = screen.getByRole('menuitem', { name: 'このアプリの精度' });
+    expect(item).toHaveAttribute('href', '/accuracy');
+    expect(item).not.toHaveAttribute('aria-current');
+    await userEvent.click(item);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    unmount();
+
+    nav.pathname = '/accuracy/x';
+    const again = setup();
+    await userEvent.click(openButton());
+    expect(screen.getByRole('menuitem', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
+    again.unmount();
+
+    nav.pathname = '/accuracyx';
+    setup();
+    await userEvent.click(openButton());
+    expect(screen.getByRole('menuitem', { name: 'このアプリの精度' })).not.toHaveAttribute('aria-current');
   });
 
   it('ログアウトは、渡された関数を呼ぶフォームの送信', async () => {
@@ -218,7 +243,7 @@ describe('AccountMenu（ログインしていない）', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('行き先が無ければ（ログインを使えない設定）、「メニュー」と ≡ で、テーマだけを出す', async () => {
+  it('ログインの入口が無ければ（ログインを使えない設定）、「メニュー」と ≡ で、テーマと「このアプリの精度」だけを出す', async () => {
     render(<AccountMenu />);
     const button = screen.getByRole('button', { name: 'メニュー' });
     expect(button).toHaveAttribute('data-tip', 'メニュー');
@@ -227,7 +252,7 @@ describe('AccountMenu（ログインしていない）', () => {
     await userEvent.click(button);
     const menu = screen.getByRole('menu', { name: 'メニュー' });
     expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(3);
-    expect(within(menu).queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(within(menu).getAllByRole('menuitem').map((n) => n.textContent)).toEqual(['このアプリの精度']);
   });
 
   it('名前・メール・ログアウトの 3 つがそろわなければ、ログイン中とは扱わない', () => {

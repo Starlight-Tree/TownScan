@@ -151,21 +151,16 @@ describe('狭い画面（600px 以下）の上の横帯', () => {
     expect(block).toBeDefined();
   });
 
-  it('帯は 3 段の格子（ロゴ＋アカウント / ナビ / 状態）。390px で 281px あった高さを収める', () => {
+  it('帯は 2 段の格子（ロゴ＋アカウント / 状態）。390px で 281px あった高さを収める', () => {
     const header = ruleIn(block, '.app-header');
     expect(decl(header, 'display')).toBe('grid');
-    expect(header).toMatch(/grid-template-areas:\s*'brand account'\s*'nav nav'\s*'status status'/);
+    expect(header).toMatch(/grid-template-areas:\s*'brand account'\s*'status status'/);
     expect(decl(ruleIn(block, '.app-header__tools'), 'display')).toBe('contents');
   });
 
-  it('説明文は隠す。ナビは 1 行に収める大きさ（横スクロールにしない: フォーカスの輪が切れる）', () => {
+  it('説明文は隠す。ページの入口（nav）の規則は無い（横帯にページの入口は無い）', () => {
     expect(decl(ruleIn(block, '.app-header__tagline'), 'display')).toBe('none');
-    const nav = ruleIn(block, '.app-header__nav');
-    expect(decl(nav, 'overflow-x')).toBeNull();
-    expect(decl(nav, 'overflow')).toBeNull();
-    const link = ruleIn(block, '.app-header__nav .nav-link');
-    expect(decl(link, 'white-space')).toBe('nowrap');
-    expect(decl(link, 'font-size')).toBe('13px');
+    expect(block).not.toContain('.app-header__nav');
   });
 
   it('テーマの切り替えは、アカウントのメニューに同じものがあるときだけ、帯から隠す（アカウントが無ければ帯に残る）', () => {

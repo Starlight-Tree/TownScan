@@ -32,6 +32,29 @@ describe('/accuracy', () => {
     expect(sources).toHaveTextContent('機械学習などに大量に使うことの扱いは未確認');
   });
 
+
+  it('順は、要点（見出しの数字・閾値）→ 既知の限界 → 出典と規約 → 詳しい測定。詳しい測定は、はじめは畳み、表はその中だけにある', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(metrics));
+    render(<AccuracyView />);
+    const limits = await screen.findByRole('region', { name: '既知の限界' });
+    const sources = screen.getByRole('region', { name: '出典と規約' });
+    const more = screen.getByTestId('accuracy-more') as HTMLDetailsElement;
+    const recall = screen.getByText('新築の再現率');
+    const thresholds = screen.getByRole('heading', { name: '3 分類の閾値は、未検証の初期値です' });
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(recall, thresholds)).toBe(true);
+    expect(follows(thresholds, limits)).toBe(true);
+    expect(follows(limits, sources)).toBe(true);
+    expect(follows(sources, more)).toBe(true);
+    expect(more.open).toBe(false);
+    expect(more).not.toContainElement(thresholds);
+    for (const table of screen.getAllByRole('table')) expect(more).toContainElement(table);
+    const heading = screen.getByRole('heading', { name: /調整用と評価用/ });
+    expect(heading).not.toBeVisible();
+    await userEvent.click(screen.getByText('詳しい測定を見る（開発者向け）'));
+    expect(more.open).toBe(true);
+    expect(heading).toBeVisible();
+  });
   it('調整用と評価用を分けて出し、新築の再現率は「未測定」、閾値は未検証の初期値と書く', async () => {
     fetchMock.mockResolvedValue(jsonResponse(metrics));
     render(<AccuracyView />);
@@ -349,6 +372,7 @@ describe('/accuracy', () => {
       routeFetch([], { ...metricsReal, notes: devNotes });
       render(<AccuracyView />);
       await screen.findByText('新築の再現率');
+      await userEvent.click(screen.getByText('詳しい測定を見る（開発者向け）'));
       const panel = screen.getByRole('heading', { name: '評価の注記' }).closest('section')!;
       expect(within(panel).getByText(/開発者向けです/)).toBeVisible();
       const details = screen.getByTestId('eval-notes') as HTMLDetailsElement;

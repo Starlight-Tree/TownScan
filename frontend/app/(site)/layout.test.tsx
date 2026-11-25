@@ -55,14 +55,12 @@ describe('(site) の枠', () => {
     await screen.findAllByText('模擬モデルで応答しています');
   });
 
-  it('サイドパネルに、ブランド・2 つのページ・開閉のボタンがある。いまのページ（/accuracy）に aria-current', async () => {
+  it('サイドパネルに、ブランド・開閉のボタン・「新しい会話」がある。ページへの入口の欄は無い（精度は、アカウントのメニューの中）', async () => {
     await show();
     const side = screen.getByRole('complementary');
     expect(within(side).getByRole('link', { name: 'TownScan' })).toHaveAttribute('href', '/');
-    expect(within(side).getByRole('link', { name: 'チャットと地図' })).toHaveAttribute('href', '/');
-    expect(within(side).getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('href', '/accuracy');
-    expect(within(side).getByRole('link', { name: 'このアプリの精度' })).toHaveAttribute('aria-current', 'page');
-    expect(within(side).queryByRole('link', { name: 'このアプリについて' })).not.toBeInTheDocument();
+    expect(within(side).queryByRole('link', { name: 'チャットと地図' })).not.toBeInTheDocument();
+    expect(within(side).queryByRole('link', { name: 'このアプリの精度' })).not.toBeInTheDocument();
     expect(within(side).getByRole('button', { name: 'サイドパネルを閉じる' })).toBeInTheDocument();
     // DocuNavi と同じ位置の「新しい会話」（NewConversationProvider が枠に入っている）
     expect(within(side).getByRole('button', { name: '新しい会話' })).toBeInTheDocument();
@@ -77,6 +75,7 @@ describe('(site) の枠', () => {
     expect(buttons.map((b) => b.closest('aside, header')?.tagName)).toEqual(['ASIDE', 'HEADER']);
     await userEvent.click(buttons[1]!);
     expect(screen.getByRole('menuitem', { name: 'Google でログイン' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('menuitem', { name: 'このアプリの精度' })).toHaveAttribute('href', '/accuracy');
     await screen.findAllByText('模擬モデルで応答しています');
   });
 

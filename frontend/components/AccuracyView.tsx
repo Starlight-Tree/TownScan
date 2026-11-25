@@ -71,26 +71,22 @@ function AccuracyContent() {
           </button>
         </div>
       )}
-      {state.status === 'ready' && <MetricsBody m={state.data} />}
+      {state.status === 'ready' && <MetricsSummary m={state.data} />}
       <Limits m={state.status === 'ready' ? state.data : undefined} />
       <Sources />
+      {state.status === 'ready' && <MetricsDetails m={state.data} />}
     </div>
   );
 }
 
-function MetricsBody({ m }: { m: MetricsResponse }) {
-  const { nameOf } = useAreas();
+function MetricsSummary({ m }: { m: MetricsResponse }) {
   const holdoutObj = getBlock(m.holdout, 'object');
   const holdoutPix = getBlock(m.holdout, 'pixel');
   const recall = m.new_building_recall;
-  const groups = ['pixel', 'object'].filter((g) => getBlock(m.tune, g) || getBlock(m.holdout, g));
   const prov = m.provenance as Partial<Provenance> | undefined;
-  const fullProv = prov && prov.source && prov.model && prov.run_id && prov.run_kind && Array.isArray(prov.photo_years);
   const year = evalYearOf(m);
   const yc = getYearCompare(m);
   const basis = matchBasis(m.holdout);
-  const stability = chosenVsRunnerUp(m);
-  const tuneBasis = matchBasis(m.tune);
 
   return (
     <>
@@ -143,89 +139,10 @@ function MetricsBody({ m }: { m: MetricsResponse }) {
             手でラベルした「本当の新築」がまだ無いため、測れていません。「新規出現」の候補が実際に新築かどうかは、確かめていません。
           </span>
           <span className="metric-tile__note">
-            下の表の「建物の抽出の再現率」（基盤地図情報に対する値）とは別の値です。
+            「詳しい測定」の表の「建物の抽出の再現率」（基盤地図情報に対する値）とは別の値です。
           </span>
         </li>
       </ul>
-
-      {m.reference && <ReferenceNote reference={m.reference} edge={getEdgeExcluded(m)} />}
-
-      {groups.length > 0 && (
-        <section className="panel" aria-labelledby="h-split">
-          <h2 id="h-split" className="panel__title">調整用と評価用（地区を 2 つに分けて測っています）</h2>
-          <p className="page__small">
-            倍率と閾値は<b>調整用の地区だけ</b>で選び、評価用の地区には使っていません。評価用の値が、初めて見る地区での目安です。表の数字はすべて、{year} 年の写真での値です。
-          </p>
-          {m.split && (
-            <p className="page__small">
-              調整用: {(m.split.tune ?? []).map(nameOf).join('、') || '—'}
-              <br />
-              評価用: {(m.split.holdout ?? []).map(nameOf).join('、') || '—'}
-            </p>
-          )}
-          {groups.map((g) => {
-            const keys = [...new Set([...Object.keys(getBlock(m.tune, g) ?? {}), ...Object.keys(getBlock(m.holdout, g) ?? {})])];
-            return (
-              <div key={g} className="table-block">
-                <div className="table-scroll" role="region" aria-label={`${GROUP_LABEL[g] ?? g}（横にスクロールできます）`} tabIndex={0}>
-                  <table className="data-table">
-                    <caption>{GROUP_LABEL[g] ?? g}</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">指標</th>
-                        <th scope="col">調整用</th>
-                        <th scope="col">評価用</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {keys.map((k) => (
-                        <tr key={k}>
-                          <th scope="row">{metricLabel(k)}</th>
-                          <td>{cell(getBlock(m.tune, g)?.[k])}</td>
-                          <td>{cell(getBlock(m.holdout, g)?.[k])}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="page__small" data-testid={`note-${g}`}>
-                  {g === 'pixel'
-                    ? gridNote(m.chosen?.scale, formatNumber)
-                    : '参照・予測の物体数は、縁で外した物体を除いた数です。'}
-                </p>
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      {yc && <YearComparePanel yc={yc} />}
-
-      {(m.chosen || (m.sweep && m.sweep.length > 0)) && (
-        <section className="panel" aria-labelledby="h-chosen">
-          <h2 id="h-chosen" className="panel__title">選んだ設定</h2>
-          {m.chosen && (
-            <p className="page__p">
-              推論の倍率 <b>{cell(m.chosen.scale)}</b>・建物とみなす確率の閾値 <b>{cell(m.chosen.threshold)}</b>
-              （調整用の地区の物体単位 F1 がいちばん高かった組）。
-            </p>
-          )}
-          {(stability || tuneBasis) && (
-            <p className="page__small" data-testid="choice-stability">
-              {tuneBasis && <>調整用の地区で一致した棟は {formatNumber(tuneBasis.tp)} 棟（縁を除く参照 {formatNumber(tuneBasis.nRef)} 棟中）。</>}
-              {stability && (
-                <>
-                  選んだ組の F1 は {formatNumber(stability.chosen)}、次に高い組は {formatNumber(stability.runnerUp)}（差 {formatNumber(stability.chosen - stability.runnerUp)}）。
-                </>
-              )}
-              {tuneBasis && tuneBasis.tp < FEW_MATCHES && '一致が少ないので、この差で選んだ設定の優位は確かではありません。'}
-            </p>
-          )}
-          {m.sweep && m.sweep.length > 0 && <SweepTable sweep={m.sweep} chosen={m.chosen} year={year} />}
-        </section>
-      )}
-
-      {m.per_area && m.per_area.length > 0 && <PerAreaTable rows={m.per_area} year={year} />}
 
       <section className="panel" aria-labelledby="h-thresholds">
         <h2 id="h-thresholds" className="panel__title">3 分類の閾値は、未検証の初期値です</h2>
@@ -233,25 +150,123 @@ function MetricsBody({ m }: { m: MetricsResponse }) {
           「新規出現」「既存の描き漏れ」「判定保留」を分ける閾値（旧写真の抽出が覆う割合 0.5・0.10 など）は、手でラベルした正解が無いため、検証できていません。分類の当たり率は、まだ出せません。
         </p>
       </section>
-
-      {m.notes && m.notes.length > 0 && (
-        <section className="panel" aria-labelledby="h-notes">
-          <h2 id="h-notes" className="panel__title">評価の注記</h2>
-          {/* 評価の元データ（eval.json）に付いた注記は、項目名・ファイル名・条件式がそのまま書いてある開発者向けの文。ふだんは畳み、この画面の説明は、上の文と「既知の限界」に書く */}
-          <p className="page__small">評価の元データに付いている注記です。項目名やファイル名がそのまま書いてあるので、開発者向けです。この画面の説明は、上の文と「既知の限界」にあります。</p>
-          <details className="provenance" data-testid="eval-notes">
-            <summary>注記をすべて見る（開発者向け）</summary>
-            <ul className="plain-list">
-              {m.notes.map((n, i) => (
-                <li key={i}>{n}</li>
-              ))}
-            </ul>
-          </details>
-        </section>
-      )}
-
-      {fullProv && <ProvenanceBox provenance={prov as Provenance} />}
     </>
+  );
+}
+
+/** 詳しい測定（開発者向け）。畳んでおく。見出しの数字・限界・出典は、これより上に出す */
+function MetricsDetails({ m }: { m: MetricsResponse }) {
+  const { nameOf } = useAreas();
+  const groups = ['pixel', 'object'].filter((g) => getBlock(m.tune, g) || getBlock(m.holdout, g));
+  const prov = m.provenance as Partial<Provenance> | undefined;
+  const fullProv = prov && prov.source && prov.model && prov.run_id && prov.run_kind && Array.isArray(prov.photo_years);
+  const year = evalYearOf(m);
+  const yc = getYearCompare(m);
+  const stability = chosenVsRunnerUp(m);
+  const tuneBasis = matchBasis(m.tune);
+
+  return (
+    <details className="provenance accuracy-more" data-testid="accuracy-more">
+      <summary>詳しい測定を見る（開発者向け）</summary>
+      <div className="accuracy-more__body">
+          {m.reference && <ReferenceNote reference={m.reference} edge={getEdgeExcluded(m)} />}
+
+          {groups.length > 0 && (
+            <section className="panel" aria-labelledby="h-split">
+              <h2 id="h-split" className="panel__title">調整用と評価用（地区を 2 つに分けて測っています）</h2>
+              <p className="page__small">
+                倍率と閾値は<b>調整用の地区だけ</b>で選び、評価用の地区には使っていません。評価用の値が、初めて見る地区での目安です。表の数字はすべて、{year} 年の写真での値です。
+              </p>
+              {m.split && (
+                <p className="page__small">
+                  調整用: {(m.split.tune ?? []).map(nameOf).join('、') || '—'}
+                  <br />
+                  評価用: {(m.split.holdout ?? []).map(nameOf).join('、') || '—'}
+                </p>
+              )}
+              {groups.map((g) => {
+                const keys = [...new Set([...Object.keys(getBlock(m.tune, g) ?? {}), ...Object.keys(getBlock(m.holdout, g) ?? {})])];
+                return (
+                  <div key={g} className="table-block">
+                    <div className="table-scroll" role="region" aria-label={`${GROUP_LABEL[g] ?? g}（横にスクロールできます）`} tabIndex={0}>
+                      <table className="data-table">
+                        <caption>{GROUP_LABEL[g] ?? g}</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">指標</th>
+                            <th scope="col">調整用</th>
+                            <th scope="col">評価用</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {keys.map((k) => (
+                            <tr key={k}>
+                              <th scope="row">{metricLabel(k)}</th>
+                              <td>{cell(getBlock(m.tune, g)?.[k])}</td>
+                              <td>{cell(getBlock(m.holdout, g)?.[k])}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="page__small" data-testid={`note-${g}`}>
+                      {g === 'pixel'
+                        ? gridNote(m.chosen?.scale, formatNumber)
+                        : '参照・予測の物体数は、縁で外した物体を除いた数です。'}
+                    </p>
+                  </div>
+                );
+              })}
+            </section>
+          )}
+
+          {yc && <YearComparePanel yc={yc} />}
+
+          {(m.chosen || (m.sweep && m.sweep.length > 0)) && (
+            <section className="panel" aria-labelledby="h-chosen">
+              <h2 id="h-chosen" className="panel__title">選んだ設定</h2>
+              {m.chosen && (
+                <p className="page__p">
+                  推論の倍率 <b>{cell(m.chosen.scale)}</b>・建物とみなす確率の閾値 <b>{cell(m.chosen.threshold)}</b>
+                  （調整用の地区の物体単位 F1 がいちばん高かった組）。
+                </p>
+              )}
+              {(stability || tuneBasis) && (
+                <p className="page__small" data-testid="choice-stability">
+                  {tuneBasis && <>調整用の地区で一致した棟は {formatNumber(tuneBasis.tp)} 棟（縁を除く参照 {formatNumber(tuneBasis.nRef)} 棟中）。</>}
+                  {stability && (
+                    <>
+                      選んだ組の F1 は {formatNumber(stability.chosen)}、次に高い組は {formatNumber(stability.runnerUp)}（差 {formatNumber(stability.chosen - stability.runnerUp)}）。
+                    </>
+                  )}
+                  {tuneBasis && tuneBasis.tp < FEW_MATCHES && '一致が少ないので、この差で選んだ設定の優位は確かではありません。'}
+                </p>
+              )}
+              {m.sweep && m.sweep.length > 0 && <SweepTable sweep={m.sweep} chosen={m.chosen} year={year} />}
+            </section>
+          )}
+
+          {m.per_area && m.per_area.length > 0 && <PerAreaTable rows={m.per_area} year={year} />}
+
+          {m.notes && m.notes.length > 0 && (
+            <section className="panel" aria-labelledby="h-notes">
+              <h2 id="h-notes" className="panel__title">評価の注記</h2>
+              {/* 評価の元データ（eval.json）に付いた注記は、項目名・ファイル名・条件式がそのまま書いてある開発者向けの文。ふだんは畳み、この画面の説明は、上の文と「既知の限界」に書く */}
+              <p className="page__small">評価の元データに付いている注記です。項目名やファイル名がそのまま書いてあるので、開発者向けです。この画面の説明は、上の文と「既知の限界」にあります。</p>
+              <details className="provenance" data-testid="eval-notes">
+                <summary>注記をすべて見る（開発者向け）</summary>
+                <ul className="plain-list">
+                  {m.notes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              </details>
+            </section>
+          )}
+
+          {fullProv && <ProvenanceBox provenance={prov as Provenance} />}
+      </div>
+    </details>
   );
 }
 

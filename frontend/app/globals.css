@@ -322,12 +322,6 @@ code {
   color: var(--muted);
 }
 
-.app-header__nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
 .nav-link {
   display: inline-flex;
   align-items: center;
@@ -342,12 +336,6 @@ code {
 .nav-link:hover {
   background: var(--surface-muted);
   color: var(--text);
-}
-
-.nav-link[aria-current='page'] {
-  background: var(--tag-bg);
-  color: var(--tag-text);
-  font-weight: 700;
 }
 
 .app-header__status {
@@ -407,6 +395,7 @@ code {
 .account-theme-option:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .account-item { display: block; width: 100%; padding: 0.6rem 0.75rem; border: 0; border-radius: 0.6rem; background: transparent; color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
 .account-item:hover, .account-item:focus-visible { background: var(--surface-muted); }
+.account-item[aria-current='page'] { color: var(--primary); font-weight: 700; }
 
 /* ---- サイドパネル（1024px 以上だけ。JobNavi・DocuNavi と同じ、開いた表示（16rem）と、アイコンだけの細い帯（3.5rem）を、ボタンで切り替える）----
    1023px 以下は、サイドパネルを出さず、上の横帯（.app-header）を出す。境目の 1024px は、JobNavi・DocuNavi の PC 幅の境目と同じ。
@@ -427,7 +416,6 @@ code {
   .app-new { color: var(--text); }
   .app-sidebar[data-open='true'] .app-new { border: 1px solid var(--border); background: var(--surface); margin-bottom: 0.25rem; }
   .app-sidebar[data-open='true'] .app-new:hover, .app-sidebar[data-open='true'] .app-new:focus-visible { background: var(--surface-muted); }
-  .app-rail-btn[aria-current='page'] { background: var(--tag-bg); color: var(--primary); box-shadow: inset 3px 0 0 var(--primary); }
   .app-rail-logo { color: var(--text); }
   .app-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; }
   /* 畳む・開くボタン */
@@ -463,7 +451,6 @@ code {
   .app-sidebar[data-open='true'] .app-rail-btn { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 0.7rem; padding: 0 0.375rem; }
   .app-sidebar[data-open='true'] .app-brand-link { width: auto; min-width: 0; flex: 1; padding: 0 0.25rem; gap: 0.45rem; }
   .app-sidebar[data-open='true'] .app-rail-label { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; font-size: 14.72px; font-weight: 500; }
-  .app-sidebar[data-open='true'] .app-rail-btn[aria-current='page'] .app-rail-label { font-weight: 700; }
   .app-sidebar[data-open='true'] .app-brand-name { display: flex; flex-direction: column; font-size: 16.8px; font-weight: 800; line-height: 1.15; }
   .app-sidebar[data-open='true'] [data-tip]::after { display: none; }
   .app-sidebar[data-open='true'] .app-rail-foot { width: 100%; align-items: stretch; }
@@ -1790,6 +1777,24 @@ p.banner {
   font-weight: 500;
 }
 
+.accuracy-more {
+  margin-top: 4px;
+}
+
+.accuracy-more > summary {
+  font-size: 14px;
+}
+
+.accuracy-more[open] > summary {
+  margin-bottom: 8px;
+}
+
+.accuracy-more__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .provenance__list {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -2904,8 +2909,7 @@ p.banner {
 }
 
 /* 狭い画面（600px 以下）の上の横帯。390px で 281px（画面の約 36%）あった高さを、2〜3 段（約 100〜130px）に収め、チャットの入力欄を最初の画面に入れる。
-   1 段目: ロゴと、アカウントのボタン。2 段目: 3 つのページ（1 行に収まる大きさ。収まらない幅では折り返す。横スクロールにはしない: フォーカスの輪が切れる）。
-   3 段目: 状態の印（模擬モデルなど。あるときだけ）。説明文は隠す。テーマの切り替えは、アカウントのメニューの中に同じものがあるので、帯からは隠す（アカウントが無いときだけ、帯に残す）。
+   1 段目: ロゴと、アカウントのボタン。2 段目: 状態の印（模擬モデルなど。あるときだけ）。説明文は隠す。テーマの切り替えは、アカウントのメニューの中に同じものがあるので、帯からは隠す（アカウントが無いときだけ、帯に残す）。
    .app-header__tools は、中身（状態・テーマ・アカウント）を帯の格子に直接並べるため display: contents にする */
 @media (max-width: 600px) {
   .app-header {
@@ -2913,7 +2917,6 @@ p.banner {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       'brand account'
-      'nav nav'
       'status status';
     align-items: center;
     gap: 0 8px;
@@ -2931,17 +2934,6 @@ p.banner {
   }
   .app-header__account {
     grid-area: account;
-  }
-  .app-header__nav {
-    grid-area: nav;
-    gap: 2px;
-  }
-  .app-header__nav .nav-link {
-    flex: 1 0 auto;
-    justify-content: center;
-    padding: 0 6px;
-    font-size: 13px;
-    white-space: nowrap;
   }
   .app-header__status {
     grid-area: status;
