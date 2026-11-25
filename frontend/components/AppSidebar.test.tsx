@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CONVERSATION_ID_KEY, writeConversationId } from '../lib/conversation-session';
 import { AppSidebar } from './AppSidebar';
 import { NewConversationProvider, useRegisterNewConversation } from './NewConversation';
 
@@ -299,5 +300,78 @@ describe('globals.css のサイドパネルの境目', () => {
     expect(css).not.toContain('@media (min-width: 1024px) and (max-width: 1256px)');
     expect(css).not.toMatch(/\.app:has\(\.app-sidebar\[data-open='true'\]\)[^{]*\.home/);
     expect(css).not.toMatch(/\.app:has\(\.app-sidebar\[data-open='true'\]\)[^{]*\.result-area/);
+  });
+});
+
+describe('AppSidebar の会話の履歴の一覧（仕様 §7.1.1）', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    window.sessionStorage.clear();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const list = () => screen.queryByRole('region', { name: '会話の一覧' });
+
+  it('開いた表示（PC 幅）では、「新しい会話」の下・アカウント（下部の中身）の上に、会話の一覧の領域を出す（ログインしていなくても、領域は出す）', () => {
+    setup('/');
+    const region = list();
+    expect(region).not.toBeNull();
+    const nav = screen.getByRole('navigation', { name: '主なページ' });
+    const foot = screen.getByText('下部の中身');
+    // DOM の順: ロゴ・「新しい会話」（nav）→ 一覧 → 下部の中身
+    expect(nav.compareDocumentPosition(region!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(region!.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // サイドパネルの中に 1 つだけ（ランドマークは二重にならない）
+    expect(screen.getAllByRole('complementary')).toHaveLength(1);
+    expect(screen.getByRole('complementary')).toContainElement(region);
+  });
+
+  it('細い帯（閉じた表示）では出さない。開くと、また出る', async () => {
+    setup('/');
+    await userEvent.click(screen.getByRole('button', { name: 'サイドパネルを閉じる' }));
+    expect(screen.getByRole('complementary')).toHaveAttribute('data-open', 'false');
+    expect(list()).toBeNull();
+    // 「新しい会話」の「＋」は、いまのまま
+    expect(screen.getByRole('button', { name: '新しい会話' })).toBeInTheDocument();
+    await userEvent.click(inside().getByRole('button', { name: 'サイドパネルを開く' }));
+    expect(list()).not.toBeNull();
+  });
+
+  it('1023px 以下の重ねて開くパネルには出さない（初版の決定）', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} })));
+    const { container } = setup('/');
+    expect(list()).toBeNull();
+    await userEvent.click(within(container.querySelector<HTMLElement>('.app-narrow-bar')!).getByRole('button', { name: 'サイドパネルを開く' }));
+    expect(screen.getByRole('complementary')).toHaveAttribute('data-drawer', 'open');
+    expect(list()).toBeNull();
+    expect(screen.queryByText('会話の履歴')).not.toBeInTheDocument();
+  });
+
+  it('ほかのページ（精度）の「新しい会話」は、覚えている会話 ID を消してから、ホームへ移る（移った先で、前の会話を開き直さない）', async () => {
+    writeConversationId('c1');
+    nav.pathname = '/accuracy';
+    render(
+      <NewConversationProvider>
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" />
+      </NewConversationProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBeNull();
+    expect(nav.push).toHaveBeenCalledWith('/');
+  });
+
+  it('ホームのチャットが開いているときの「新しい会話」は、チャットの処理に任せ、ここでは会話 ID に触れない', async () => {
+    writeConversationId('c1');
+    nav.pathname = '/';
+    const onNew = vi.fn();
+    render(
+      <NewConversationProvider>
+        <HomeChat onNew={onNew} />
+        <AppSidebar brand="TownScan" brandHref="/" navLabel="主なページ" />
+      </NewConversationProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
+    expect(onNew).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBe('c1');
   });
 });

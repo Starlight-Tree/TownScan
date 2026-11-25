@@ -40,4 +40,11 @@ export interface ChatEntry {
   sentAt?: string;
   results?: ToolResult[];
   tool_calls?: ToolCall[];
+  /**
+   * 保存した会話を開き直して並べた回答だけが持つ（この画面で届いた回答は持たない）。runCreatedAt は、その回答を作ったときの run の created_at
+   * （run が無かった回答は null）。いまの解析結果と食い違うかを調べるのに使う（components/chat/conversation.ts の runCheck。仕様 §7.1.5）
+   */
+  restored?: { runCreatedAt: string | null };
+  /** 回答の下に 1 回だけ出す注記（保存を飛ばして送り直した回答。仕様 §7.1.7） */
+  notice?: string;
 }

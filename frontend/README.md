@@ -37,9 +37,28 @@ JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、�
 
 ブラウザーで開く URL は、`BETTER_AUTH_URL` と同じホスト（`http://localhost:3500`）にする。Cookie はホストごとなので、`127.0.0.1` で開くと、Google から戻ったあとのログインの印が見えない（未確認の一般論。実際の確認は、OAuth クライアントを作ったあと）。
 
-ブラウザーから API を呼ぶ（同じオリジンの `/api/*`）ので、API へ渡す JWT（JobNavi の `userToken`）は、今は使っていない。API の `GET /api/me` は、JWT を JWKS（`/api/auth/jwks`）で検証して `{sub, email, name, picture}` を返す入口で、アカウントのロジックの確認用。
+ブラウザーから API を呼ぶ（同じオリジンの `/api/*`）。API へ JWT を渡すのは、会話の履歴（下）だけ。API の `GET /api/me` は、JWT を JWKS（`/api/auth/jwks`）で検証して `{sub, email, name, picture}` を返す入口で、アカウントのロジックの確認用。
 
 テストは、Better Auth と Google をモックする（`lib/session.test.ts`・`actions/auth.test.ts`・`app/api/auth/[...all]/route.test.ts` ほか）。本物の Google との往復は、OAuth クライアントを作ったあとに、手で確かめる。
+
+## 会話の履歴（ログイン中だけ。仕様 `docs/spec-prototype.md` §2.3・§7.1）
+
+ログインしている人だけ、会話を API（Go）に保存し、サイドパネルの「会話の履歴」から開き直し・削除できる。ログインしていなければ、今までどおり（会話は画面の中だけ。`conversation_id` も JWT も付けず、`/api/auth/token`・`/api/conversations` を一度も呼ばない）。
+
+| 場所 | 役割 |
+|---|---|
+| `app/(site)/layout.tsx` | `currentUser()` の真偽値（ログイン中か）と `isAuthConfigured()`（ログインを使える設定か）を、`HistoryProvider` で画面の部品へ渡す。ログインの有無が変わったら、本文を作り直す |
+| `components/HistoryProvider.tsx` | ログイン中か・期限切れ（取り直しても 401）か・会話の一覧（`useConversations`）。一覧は、出す幅（1024px 以上）のときだけ取る |
+| `lib/auth-token.ts` | `GET /api/auth/token` で JWT を取り、メモリにだけ置く。期限の 60 秒前に取り直す・同時の取得は 1 回・401 は 1 回だけ取り直して送り直す。localStorage・sessionStorage・URL・ログには出さない |
+| `lib/conversations-api.ts`・`lib/use-conversations.ts` | 履歴の 3 本（一覧・発言・削除）と、一覧の取得・状態・取り直し。失敗は 401・404・422・その他の型にする |
+| `lib/conversation-session.ts` | 開いている会話の ID（`sessionStorage` の `townscan:conversation_id`）。タブごと。ID は画面が `crypto.randomUUID()` で作る |
+| `components/ConversationList.tsx` | サイドパネルの一覧（「新しい会話」の下・アカウントの上）。DocuNavi の `ThreadSidebar` と同じ `thread-*` のクラス・CSS・文言。細い帯と 1023px 以下のパネルには出さない（初版の決定） |
+| `components/NewConversation.tsx` | サイドパネルとチャットのつなぎ（「新しい会話」「会話を開く」「いま開いている会話・生成中」） |
+| `components/chat/ChatPanel.tsx`・`components/chat/conversation.ts` | 保存（最初の回答が届いてから ID を書く）・開き直し（取得中の遅れた結果は捨てる）・ログインの確認が通らないときの「保存せずに送り直し」・別の解析結果の回答の扱い |
+
+- ログインの確認が通らない（取り直しても 401、またはログインの確認だけが 503）ときは、`conversation_id` を外して送り直し、回答の下に注記を 1 回出す。その会話では、以降の送信にも付けない。
+- 開き直した会話の回答は、作ったときの run（`provenance.run_id` と `run_created_at`）が、いまの run（`/api/health`）と違えば、注意書きを出し、拡大ビューへ進むボタンを押せなくし、回答の中の図・写真を出さない。
+- テストは、`fetch` を差し替える（`tests/history-helpers.ts`）。実際の Google・Go の API との往復は、統合のあと、実画面で確かめる。
 
 ## 重い処理はホストの Node 24 で
 

@@ -19,6 +19,7 @@ import { ALL_FILTER, areaLabel, filterFromResults } from '../../lib/result-view'
 import { CandidateImage } from '../CandidateImage';
 import { ClassBadge } from '../ClassBadge';
 import { classOfCell } from './cell';
+import { MSG_STALE_BUTTON, MSG_STALE_PHOTO } from './conversation';
 import { ClassGuide } from './ClassGuide';
 import { ProvenanceBox } from './ProvenanceBox';
 import { ScrollHint } from './ScrollHint';
@@ -105,7 +106,7 @@ function renderCell(colKey: string, value: TableCell | undefined, nameOf: (id: s
   return value;
 }
 
-export function TableCard({ result, actions }: { result: TableResult; actions: ResultActions }) {
+export function TableCard({ result, actions, staleRun = false }: { result: TableResult; actions: ResultActions; staleRun?: boolean }) {
   const { nameOf } = useAreas();
   const hasDetail = result.rows.some((r) => typeof r.id === 'string' && CANDIDATE_ID.test(r.id));
   // 詳細のボタンがある表は、候補 ID の列を、最初の列の名前の下に小さく添える。チャットの幅（340px 前後）では、
@@ -156,7 +157,13 @@ export function TableCard({ result, actions }: { result: TableResult; actions: R
                   {hasDetail && (
                     <td>
                       {typeof row.id === 'string' && CANDIDATE_ID.test(row.id) && (
-                        <button type="button" className="btn btn--small" onClick={() => actions.openCandidate(row.id as string)}>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          disabled={staleRun}
+                          title={staleRun ? MSG_STALE_BUTTON : undefined}
+                          onClick={() => actions.openCandidate(row.id as string)}
+                        >
                           詳細<span className="visually-hidden">（{row.id}）</span>
                         </button>
                       )}
@@ -268,7 +275,7 @@ export function CompareCard({ result }: { result: CompareResult }) {
 
 // ---- 地図の表示 ----
 
-export function MapFocusCard({ result, actions }: { result: MapFocusResult; actions: ResultActions }) {
+export function MapFocusCard({ result, actions, staleRun = false }: { result: MapFocusResult; actions: ResultActions; staleRun?: boolean }) {
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -282,6 +289,8 @@ export function MapFocusCard({ result, actions }: { result: MapFocusResult; acti
         <button
           type="button"
           className="btn btn--primary"
+          disabled={staleRun}
+          title={staleRun ? MSG_STALE_BUTTON : undefined}
           onClick={() => actions.focusMap({ bbox: result.bbox, candidateIds: result.candidate_ids })}
         >
           地図で見る
@@ -298,11 +307,14 @@ export function DetectionImageCard({
   result,
   actions,
   answerText,
+  staleRun = false,
 }: {
   result: DetectionImageResult;
   actions: ResultActions;
   /** 回答の本文。写真の説明（caption）がすでに本文にあれば、カードでは出さない */
   answerText?: string;
+  /** 開き直した会話の、別の解析結果に基づく回答。保存された画像の URL は、いまのデータに無い候補・別の建物を指しうるので、写真を読み込まない（仕様 §7.1.5 の〔J5〕） */
+  staleRun?: boolean;
 }) {
   const cls = isCandidateClass(result.class) ? result.class : null;
   const images =
@@ -315,17 +327,27 @@ export function DetectionImageCard({
         <h3 className="result-card__title">{result.title}</h3>
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
-      <div className="image-pair">
-        {images.map((img) => (
-          <CandidateImage key={img.year} src={img.url} year={img.year} candidateId={result.candidate_id} />
-        ))}
-      </div>
+      {staleRun ? (
+        <p className="empty-note">{MSG_STALE_PHOTO}</p>
+      ) : (
+        <div className="image-pair">
+          {images.map((img) => (
+            <CandidateImage key={img.year} src={img.url} year={img.year} candidateId={result.candidate_id} />
+          ))}
+        </div>
+      )}
       <p className="chip-row">
         {cls && <ClassBadge cls={cls} short />}
         {!saidInAnswer(answerText, result.caption) && <span className="result-card__text">{result.caption}</span>}
       </p>
       <div className="button-row">
-        <button type="button" className="btn btn--primary" onClick={() => actions.openCandidate(result.candidate_id)}>
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={staleRun}
+          title={staleRun ? MSG_STALE_BUTTON : undefined}
+          onClick={() => actions.openCandidate(result.candidate_id)}
+        >
           詳細を開く
         </button>
       </div>

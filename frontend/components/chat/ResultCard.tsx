@@ -14,18 +14,18 @@ import {
 } from './cards';
 import type { ResultActions } from './types';
 
-function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined) {
+function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean) {
   switch (result.type) {
     case 'count':
       return <CountCard result={result} />;
     case 'table':
-      return <TableCard result={result} actions={actions} />;
+      return <TableCard result={result} actions={actions} staleRun={staleRun} />;
     case 'compare':
       return <CompareCard result={result} />;
     case 'map_focus':
-      return <MapFocusCard result={result} actions={actions} />;
+      return <MapFocusCard result={result} actions={actions} staleRun={staleRun} />;
     case 'detection_image':
-      return <DetectionImageCard result={result} actions={actions} answerText={answerText} />;
+      return <DetectionImageCard result={result} actions={actions} answerText={answerText} staleRun={staleRun} />;
     case 'accuracy':
       return <AccuracyCard result={result} />;
     case 'refusal':
@@ -41,9 +41,21 @@ function renderResult(result: ToolResult, actions: ResultActions, answerText: st
 
 /**
  * answerText は、このカードを含む回答の本文。カードの中の文（お断りの理由・写真の説明）が本文にすでにあれば、カードでは出さない
- * （同じ文が 2 回並ばないように）。渡さなければ、カードは自分の文をすべて出す
+ * （同じ文が 2 回並ばないように）。渡さなければ、カードは自分の文をすべて出す。
+ * staleRun は、開き直した会話の回答が、いまとは別の解析結果に基づくとき（仕様 §7.1.5）: 拡大ビューへ進むボタン（地図の表示の「地図で見る」・表の行の「詳細」・検出画像の「詳細を開く」）を押せなくし、
+ * 検出画像は写真も読み込まない。カードの数字・文は、保存された値のまま読める。質問の例のボタン（ask）は、新しい質問を送るだけなので、そのまま使える
  */
-export function ResultCard({ result, actions, answerText }: { result: ToolResult; actions: ResultActions; answerText?: string }) {
+export function ResultCard({
+  result,
+  actions,
+  answerText,
+  staleRun = false,
+}: {
+  result: ToolResult;
+  actions: ResultActions;
+  answerText?: string;
+  staleRun?: boolean;
+}) {
   if (!result || typeof result !== 'object' || typeof (result as { type?: unknown }).type !== 'string') {
     return <UnknownResultCard raw={result} reason="結果の形が正しくありません。" />;
   }
@@ -51,7 +63,7 @@ export function ResultCard({ result, actions, answerText }: { result: ToolResult
     <ErrorBoundary
       fallback={(error) => <UnknownResultCard raw={result} reason={`表示中にエラーが起きました（${error.message}）。`} />}
     >
-      {renderResult(result, actions, answerText)}
+      {renderResult(result, actions, answerText, staleRun)}
     </ErrorBoundary>
   );
 }

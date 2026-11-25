@@ -5,13 +5,37 @@ import { ApiError, postChat } from '../../lib/api';
 import { figureKinds, type AnswerRef, type ExpandRequest, type FigureKind } from '../../lib/answer-view';
 import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
+import { conversationErrorKind, getConversationMessages } from '../../lib/conversations-api';
+import {
+  clearConversationId,
+  isConversationId,
+  newConversationId,
+  readConversationId,
+  writeConversationId,
+} from '../../lib/conversation-session';
 import { formatSentAt } from '../../lib/sentAt';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { useRegisterNewConversation } from '../NewConversation';
+import { useHealth } from '../HealthProvider';
+import { useHistory } from '../HistoryProvider';
+import { usePublishConversationStatus, useRegisterConversationOpen, useRegisterNewConversation } from '../NewConversation';
 import { AnswerScope } from './AnswerScope';
 import { TILE_SIDE_TEXT } from './area-scale';
 import { ClassDefinitions } from './ClassGuide';
 import { Composer } from './Composer';
+import {
+  currentRunFrom,
+  entriesFromStored,
+  isLoginCheckFailure,
+  MSG_CONVERSATION_FULL,
+  MSG_NOT_SAVED,
+  MSG_NOT_SAVED_EXPIRED,
+  MSG_RESTORE_FAILED,
+  MSG_RESTORE_NOT_FOUND,
+  MSG_RESTORING,
+  MSG_STALE_RUN,
+  runCheck,
+  type CurrentRun,
+} from './conversation';
 import { ToolCallContext } from './tool-call-context';
 import { buildRequestMessages } from './history';
 import { ResultCard } from './ResultCard';
@@ -46,6 +70,25 @@ interface Failure {
   message: string;
   code: string;
 }
+
+/** 保存した会話を開き直しているときの状態（仕様 §7.1.4）。notfound は、失敗と分ける（会話が無い。会話 ID は忘れている） */
+type Restore = { status: 'idle' } | { status: 'loading' } | { status: 'error' } | { status: 'notfound' };
+const IDLE: Restore = { status: 'idle' };
+
+/**
+ * いまの会話の、保存の記録（画面の中だけ。ref で持つ）。
+ * - id: 保存する会話の ID。ログイン中の新しい会話の、最初の送信で作る（crypto.randomUUID）。開き直した会話は、その ID
+ * - saved: id を sessionStorage に書いたか。conversation_id つきで送った最初の回答が届いたときに書く（失敗・保存を飛ばした送信では書かない。仕様 §7.1.4 の 1〔J6〕）
+ * - skipped: 保存を 1 度でも飛ばしたか。飛ばした会話では、以降の送信にも conversation_id を付けない（仕様 §2.3.4・§7.1.7）。「新しい会話」・開き直しで戻る
+ * - pendingNotice: 保存を飛ばした回答に、1 回だけ出す注記。回答を並べたときに出して消す（飛ばした送り直しが失敗して「もう一度送る」になっても、成功した回答に出る）
+ */
+interface ConversationRecord {
+  id: string | null;
+  saved: boolean;
+  skipped: boolean;
+  pendingNotice?: string;
+}
+const NEW_RECORD = (): ConversationRecord => ({ id: null, saved: false, skipped: false });
 
 let nextId = 0;
 const newId = () => `m${++nextId}`;
@@ -87,6 +130,27 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  // 会話の履歴（ログイン中だけ。ログインしていなければ、ここの値は使わず、履歴の API も /api/auth/token も呼ばない）
+  const history = useHistory();
+  const historyRef = useRef(history);
+  useEffect(() => {
+    historyRef.current = history;
+  });
+  const [restore, setRestore] = useState<Restore>(IDLE);
+  // サイドパネルの一覧が「いま開いている会話」として見せる ID（保存された会話だけ。始めたばかりの会話は null）
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const conversationRef = useRef<ConversationRecord>(NEW_RECORD());
+  const sendingRef = useRef(false);
+  // 開き直し・新しい会話・送信のたびに進める。遅れて届いた開き直しの結果を捨てるための印（DocuNavi の jobRef）
+  const jobRef = useRef(0);
+  const restoreAbortRef = useRef<AbortController | null>(null);
+  // いまの解析結果。health の読み込みが終わった最初の 1 回だけ決める（開き直した回答との食い違いを、1 回だけ比べる。仕様 §7.1.5 の 2）
+  const health = useHealth();
+  const [currentRun, setCurrentRun] = useState<CurrentRun>({ status: 'pending' });
+  if (currentRun.status === 'pending') {
+    const next = currentRunFrom(health.state);
+    if (next.status !== 'pending') setCurrentRun(next);
+  }
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -121,28 +185,83 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
+      // 送信を始めたら、取得中の開き直しの結果は捨てる（仕様 §7.1.4 の 2）
+      jobRef.current += 1;
+      restoreAbortRef.current?.abort();
+      setRestore(IDLE);
+      sendingRef.current = true;
       retryRef.current = { messages, entryId };
       setSending(true);
       setFailure(null);
+      // 保存するか: ログイン中（期限切れでない）で、保存を飛ばしていない会話だけ、conversation_id を付ける。ログインしていなければ、今までどおり（付けない・JWT も取らない）。
+      // ID は、ログイン中の新しい会話の最初の送信で作る（「もう一度送る」は同じ ID で送る）
+      const record = conversationRef.current;
+      let conversationId: string | null = null;
+      if (historyRef.current.active && !record.skipped) {
+        record.id ??= newConversationId();
+        conversationId = record.id;
+      }
+      if (conversationId === null && !record.skipped && historyRef.current.loggedIn && historyRef.current.expired) {
+        // ログインの期限切れが先に分かっている（一覧・開き直しの 401）。保存せずに送り、注記を 1 回だけ出す（以降の送信にも conversation_id を付けない）
+        record.skipped = true;
+        record.pendingNotice = MSG_NOT_SAVED_EXPIRED;
+      }
       try {
-        const res = await postChat(messages, ctrl.signal);
+        let res;
+        try {
+          res = await postChat(messages, ctrl.signal, conversationId ?? undefined);
+        } catch (e) {
+          if (ctrl.signal.aborted || conversationId === null || !isLoginCheckFailure(e)) throw e;
+          // ログインの確認が通らなかった（取り直しても 401、またはログインの確認だけが 503）: 保存せずに送り直す。「ログインしなくても全機能が使える」を、ログインの失敗で崩さない。
+          // 401 は LLM を呼ぶ前に返るので、LLM を呼ぶのは、この送り直しの 1 回だけ。保存を飛ばした会話では、以降の送信にも conversation_id を付けない（仕様 §2.3.4・§7.1.7）
+          if (e.status === 401) historyRef.current.markExpired();
+          record.skipped = true;
+          record.pendingNotice = MSG_NOT_SAVED;
+          conversationId = null;
+          res = await postChat(messages, ctrl.signal);
+        }
         // 「新しい会話」で捨てた返答は、新しい会話に混ぜない
         if (ctrl.signal.aborted) return;
         const msg = res.message;
         const results = Array.isArray(msg?.results) ? msg.results : [];
         const toolCalls: ToolCall[] = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+        const notice = record.pendingNotice;
+        record.pendingNotice = undefined;
         setEntries((prev) => [
           ...prev.map((e) => (e.id === entryId && e.failed ? { ...e, failed: false } : e)),
-          { id: newId(), role: 'assistant', content: typeof msg?.content === 'string' ? msg.content : '', results, tool_calls: toolCalls },
+          {
+            id: newId(),
+            role: 'assistant',
+            content: typeof msg?.content === 'string' ? msg.content : '',
+            results,
+            tool_calls: toolCalls,
+            ...(notice ? { notice } : {}),
+          },
         ]);
         retryRef.current = null;
+        if (conversationId !== null) {
+          // 保存された（サーバーが回答と一緒に保存する）。ID を sessionStorage に書くのは、conversation_id つきで送った最初の回答が届いたとき（失敗・保存を飛ばした送信では書かない）
+          if (!record.saved) {
+            record.saved = true;
+            writeConversationId(conversationId);
+            setCurrentId(conversationId);
+          }
+          // 回答が最後まで届いたので、一覧を取り直す（新しい会話・更新の新しい順）
+          historyRef.current.list.reload();
+        }
       } catch (e) {
+        // 保存つきで送って止まったとき（通信が切れたが、サーバーは保存していたかもしれない）も、一覧を取り直す（仕様 §7.1.3・§2.3.4）
+        if (conversationId !== null) historyRef.current.list.reload();
         if (ctrl.signal.aborted) return;
         const err = e instanceof ApiError ? e : new ApiError('送信に失敗しました。', 0, 'unknown');
         setEntries((prev) => prev.map((x) => (x.id === entryId ? { ...x, failed: true } : x)));
-        setFailure({ message: err.message, code: err.code });
+        // 1 会話の発言数の上限は、再送しても直らない（「もう一度送る」は出さない）。文は仕様のとおり
+        setFailure({ message: err.code === 'conversation_full' ? MSG_CONVERSATION_FULL : err.message, code: err.code });
       } finally {
-        if (abortRef.current === ctrl) setSending(false);
+        if (abortRef.current === ctrl) {
+          sendingRef.current = false;
+          setSending(false);
+        }
       }
     },
     [],
@@ -169,11 +288,19 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
     if (r) void request(r.messages, r.entryId);
   }, [request]);
 
-  // 会話をやり直す。返答待ちの通信も止める
+  // 会話をやり直す。返答待ちの通信も止める。開いている会話 ID も忘れる（sessionStorage の値を消し、「保存を飛ばした」印も戻す。次に送るとき、新しい ID を作る）
   const reset = useCallback(() => {
+    jobRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
+    restoreAbortRef.current?.abort();
+    restoreAbortRef.current = null;
+    sendingRef.current = false;
     retryRef.current = null;
+    conversationRef.current = NEW_RECORD();
+    clearConversationId();
+    setCurrentId(null);
+    setRestore(IDLE);
     setEntries([]);
     setFailure(null);
     setSending(false);
@@ -181,8 +308,82 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
     focusComposer();
   }, [focusComposer, onNewConversation]);
 
-  // サイドパネルの「新しい会話」も、同じ処理を呼ぶ
+  /** 保存した会話の発言を取って並べる。取得の間に別の会話へ移った・新しい会話にした・送信を始めたなら（jobRef が進む）、遅れて届いた結果は捨てる */
+  const loadConversation = useCallback((id: string) => {
+    const token = ++jobRef.current;
+    restoreAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    restoreAbortRef.current = ctrl;
+    setRestore({ status: 'loading' });
+    getConversationMessages(id, ctrl.signal).then(
+      (messages) => {
+        if (jobRef.current !== token) return;
+        setEntries(entriesFromStored(messages, newId));
+        setRestore(IDLE);
+      },
+      (error: unknown) => {
+        if (jobRef.current !== token || ctrl.signal.aborted) return;
+        const kind = conversationErrorKind(error);
+        if (kind === 'not_found') {
+          // 会話が無い（削除された・保存の上限で消えた）。失敗と分けて知らせ、会話 ID を忘れる（再試行しても直らない）
+          conversationRef.current = NEW_RECORD();
+          clearConversationId();
+          setCurrentId(null);
+          setRestore({ status: 'notfound' });
+          return;
+        }
+        if (kind === 'unauthorized') historyRef.current.markExpired();
+        // 失敗しても会話 ID は捨てない（再試行できるように）
+        setRestore({ status: 'error' });
+      },
+    );
+  }, []);
+
+  /**
+   * 保存した会話を開く（サイドパネルの一覧の項目・立ち上がり・再試行）。返答待ちを止め、発言を空にし、拡大ビューも「新しい会話」と同じに閉じて回答ごとの状態を捨てる（startup は、まだ何も無いので呼ばない）。
+   * 会話 ID を sessionStorage に書き、取得して並べる。生成中は、別の会話へ移らない（一覧のボタンも押せない。生成が止まってしまうため）
+   */
+  const openConversation = useCallback(
+    (id: string, startup = false) => {
+      if (!isConversationId(id) || sendingRef.current) return;
+      retryRef.current = null;
+      conversationRef.current = { id, saved: true, skipped: false };
+      writeConversationId(id);
+      setCurrentId(id);
+      setEntries([]);
+      setFailure(null);
+      if (!startup) onNewConversation?.();
+      loadConversation(id);
+    },
+    [loadConversation, onNewConversation],
+  );
+  const openRef = useRef(openConversation);
+  useEffect(() => {
+    openRef.current = openConversation;
+  });
+
+  // 立ち上がり（再読み込み・精度の画面からホームへ戻ったとき）: ログイン中は、覚えている会話 ID があれば、自動で開き直す。
+  // ログインしていなければ、ID を見ない（残っていれば消す。次に同じタブで別の人がログインしても、前の人の ID を開こうとしない）
+  useEffect(() => {
+    if (!historyRef.current.active) {
+      clearConversationId();
+      return;
+    }
+    const id = readConversationId();
+    if (id !== null) openRef.current(id, true);
+    return () => restoreAbortRef.current?.abort();
+  }, []);
+
+  const retryRestore = useCallback(() => {
+    const id = conversationRef.current.id;
+    if (id !== null) loadConversation(id);
+  }, [loadConversation]);
+
+  // サイドパネルの「新しい会話」も、同じ処理を呼ぶ。一覧の項目も、会話を開く処理を呼ぶ
   useRegisterNewConversation(reset);
+  const openFromList = useCallback((id: string) => openConversation(id), [openConversation]);
+  useRegisterConversationOpen(openFromList);
+  usePublishConversationStatus(currentId, sending);
 
   // 結果カードの操作を、その回答に束ねる。状態の単位は回答 1 件で、どの回答のカードを押したかを、親へ渡す
   const actionsFor = useCallback(
@@ -214,6 +415,9 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
     return IN_SCOPE_SUGGESTIONS.filter((q) => !asked.has(q)).slice(0, 3);
   }, [entries, sending, failure, lastEntry?.role]);
 
+  // 開き直した会話に、別の解析結果に基づく回答があるか（health の読み込みを待っている間は、注意書きは出さない）
+  const hasStale = entries.some((e) => runCheck(e, currentRun) === 'stale');
+
   return (
     <section
       className="chat"
@@ -223,8 +427,41 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
         pressedRef.current = e.target instanceof Element ? e.target.closest('button') : null;
       }}
     >
-      <div className="chat__scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions" aria-busy={sending}>
-        {entries.length === 0 && (
+      {/* 開き直した会話を並べ終えるまで、aria-busy を真にする（並べる発言を読み上げない。実際の読み上げでの挙動は未確認。仕様 §7.1.4 の 7） */}
+      <div className="chat__scroll" ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions" aria-busy={sending || restore.status === 'loading'}>
+        {hasStale && (
+          // 開き直した会話の一部が、いまとは別の解析結果に基づくとき、会話の先頭に 1 行（仕様 §7.1.5 の 4）
+          <p className="chat__notice" role="note">
+            {MSG_STALE_RUN}
+          </p>
+        )}
+        {restore.status === 'loading' && (
+          <div className="msg msg--assistant msg--pending" role="status">
+            <span className="dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            {MSG_RESTORING}
+          </div>
+        )}
+        {restore.status === 'error' && (
+          <div className="msg msg--error" role="alert">
+            <span>{MSG_RESTORE_FAILED}</span>
+            <button type="button" className="btn btn--small" onClick={retryRestore}>
+              再試行
+            </button>
+            <button type="button" className="btn btn--small" onClick={reset}>
+              新しい会話
+            </button>
+          </div>
+        )}
+        {restore.status === 'notfound' && (
+          <div className="msg msg--error" role="alert">
+            <span>{MSG_RESTORE_NOT_FOUND}</span>
+          </div>
+        )}
+        {entries.length === 0 && restore.status !== 'loading' && restore.status !== 'error' && (
           <Welcome
             onPick={(text) => {
               send(text);
@@ -234,6 +471,8 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
           />
         )}
         {entries.map((entry) => {
+          // 開き直した回答が、いまとは別の解析結果に基づく（または、まだ確かめられない）ときは、拡大ビューへ進むボタンを押せなくし、回答の中の図を出さない（仕様 §7.1.5 の 4）
+          const staleRun = runCheck(entry, currentRun) !== 'fresh';
           // 質問の前に、その時刻を薄く出す（時刻の無い発言・読めない値には出さない）
           const sentLabel = entry.role === 'user' && entry.sentAt ? formatSentAt(entry.sentAt, new Date()) : null;
           return entry.role === 'user' ? (
@@ -262,14 +501,21 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
               {entry.results?.map((r, i) => (
                 // 使ったツールは、同じ順番の結果カードの「根拠を見る」の中で見せる（数が合わないときは出さない）
                 <ToolCallContext.Provider key={i} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
-                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} />
+                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} />
                 </ToolCallContext.Provider>
               ))}
               {/* 図（地図・グラフ）は、結果カードの並びの下。出る種類は、回答の結果で決まる（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図） */}
               {renderFigure &&
+                !staleRun &&
                 figureKinds(entry.results ?? []).map((kind) => (
                   <Fragment key={kind}>{renderFigure({ id: entry.id, results: entry.results ?? [] }, kind)}</Fragment>
                 ))}
+              {entry.notice && (
+                // 保存を飛ばして送り直した回答にだけ、1 回出す（以降の回答には繰り返さない。仕様 §7.1.7）
+                <p className="msg__notice" role="note">
+                  {entry.notice}
+                </p>
+              )}
             </div>
           );
         })}
@@ -304,9 +550,16 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
           <div className="msg msg--error" role="alert">
             <strong>送信できませんでした</strong>
             <span>{failure.message}</span>
-            <button type="button" className="btn btn--small" onClick={retry} disabled={sending}>
-              もう一度送る
-            </button>
+            {failure.code === 'conversation_full' ? (
+              // 1 会話の発言数の上限は、再送しても直らない。「もう一度送る」を出さず、新しい会話へ促す
+              <button type="button" className="btn btn--small" onClick={reset}>
+                新しい会話
+              </button>
+            ) : (
+              <button type="button" className="btn btn--small" onClick={retry} disabled={sending}>
+                もう一度送る
+              </button>
+            )}
           </div>
         )}
       </div>

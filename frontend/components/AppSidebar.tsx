@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
+import { clearConversationId } from '../lib/conversation-session';
 import { useWideScreen } from '../lib/use-wide-screen';
+import { ConversationList } from './ConversationList';
 import { BrandIcon, PlusIcon, SidebarIcon } from './icons';
 import { useStartNewConversation } from './NewConversation';
 
@@ -23,16 +25,19 @@ type Props = {
  * 開いた表示: 上にロゴと名前・閉じるボタン、続いて「新しい会話」、下にアカウント（アバター＋名前）。ページへの入口の欄は無い（ホームはロゴ、「このアプリの精度」はアカウントのメニューの中）。状態の印（模擬モデルなど）は出さない。はじめは開いた状態で、保存はしない。
  * 閉じた表示（細い帯）: ロゴの位置が「サイドパネルを開く」ボタンになる（ホバー・フォーカスで、ロゴが開閉の絵に変わる）。帯の空き部分をクリックしても開く。名前は、ホバーとキーボードのフォーカスで、アイコンの右に出る。
  * 開閉（細い帯）は、1024px 以上（JobNavi・DocuNavi と同じ）。1023px 以下は、はじめは閉じていて（出さない）、上の細い行の「サイドパネルを開く」ボタンで、本文の上に重ねて開く（DocuNavi の狭い幅と同じく、開閉できる。背景の暗い部分・Esc・閉じるボタン・ページの移動・「新しい会話」で閉じる。重ねて開くときは、いつも開いた表示）。
- * ロゴの下に「新しい会話」（DocuNavi と同じ位置）。ホームが開いていればそのチャットを新しくし、ほかのページではホームへ移る（NewConversation.tsx）。
+ * ロゴの下に「新しい会話」（DocuNavi と同じ位置）。ホームが開いていればそのチャットを新しくし、ほかのページでは、覚えている会話 ID を消してからホームへ移る（NewConversation.tsx）。
+ * 「新しい会話」の下・アカウントの上に、会話の履歴の一覧（ConversationList。ログイン中だけ中身が出る。仕様 §7.1）。開いた表示で、PC 幅（1024px 以上）のときだけ出す。細い帯と、1023px 以下の重ねて開くパネルには、初版では出さない（決定。仕様 §7.1.1）。
  * ボタンの名前は、閉じた表示では画面に出さない文字（`.app-rail-label`）で持つ（読み上げの名前になり、開いた表示では見える）。
  * 開閉の見た目（アカウントの名前を出すことを含む）は、`data-open` を見る CSS が決める。アカウントのメニューはサーバーの layout から渡されるので、開閉の状態は props では渡さない。
  */
 export function AppSidebar({ brand, brandHref, navLabel, children }: Props) {
   const router = useRouter();
   const startNew = useStartNewConversation();
-  // ホームが開いていれば、そのチャットを新しくする。ほかのページなら、ホームへ移る（チャットは新しく始まる）
+  // ホームが開いていれば、そのチャットを新しくする。ほかのページなら、覚えている会話 ID を消して、ホームへ移る（チャットは新しく始まる。移った先で、前の会話を開き直さない）
   const newConversation = () => {
-    if (!startNew()) router.push('/');
+    if (startNew()) return;
+    clearConversationId();
+    router.push('/');
   };
   const wide = useWideScreen();
   const pathname = usePathname();
@@ -118,6 +123,7 @@ export function AppSidebar({ brand, brandHref, navLabel, children }: Props) {
           <span className="app-rail-label">新しい会話</span>
         </button>
       </nav>
+      {wide && !rail && <ConversationList />}
       <div className="app-rail-foot">
         {children}
       </div>

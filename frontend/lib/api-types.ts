@@ -288,3 +288,22 @@ export interface AssistantMessage {
 export interface ChatResponse {
   message: AssistantMessage;
 }
+
+// ---- /api/conversations（会話の履歴。ログイン中だけ。仕様 §2.3・§4.4。Go の API だけ） ----
+
+/** GET /api/conversations の 1 件。時刻の表記（+00:00 か Z）は固定されない（Date.parse で読む） */
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * GET /api/conversations/{id}/messages の 1 件（古い順）。ユーザーの発言は role・content だけ。
+ * 回答は、その回答を返した POST /api/chat の message と JSON として等しい content・results・tool_calls に、履歴だけの run_created_at
+ * （その回答を作ったときの run の created_at。run が無かった回答は null。仕様 §7.1.5）
+ */
+export type StoredMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string; results: ToolResult[]; tool_calls: ToolCall[]; run_created_at: string | null };

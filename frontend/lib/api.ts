@@ -1,3 +1,4 @@
+import { fetchAuthorized, SessionExpiredError, TokenUnavailableError } from './auth-token';
 import type {
   AreaSummary,
   CandidateDetail,
@@ -44,15 +45,31 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(message, res.status, code);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** ログインが切れたとき（取り直しても 401。lib/auth-token.ts）の文。履歴の API とチャットが、同じ文・同じ code（session_expired）で扱う */
+export const MSG_SESSION_EXPIRED = 'ログインの有効期限が切れました。ログインし直してください。';
+/** トークンを取れなかったのが通信・サーバーの不調のとき（ログアウトとは限らない）。再試行を促す */
+const MSG_AUTH_UNAVAILABLE = 'ログイン状態を確認できませんでした。通信を確認して、もう一度お試しください。';
+
+/**
+ * 応答を返す（成功の応答だけ）。失敗は ApiError にする。authorized が真なら、ログイン中の JWT（Authorization: Bearer）を付ける（lib/auth-token.ts。401 は 1 回だけ取り直して送り直す）。
+ * ログインの確認に失敗したときの code は、取り直しても 401 なら session_expired（status 401）、トークンを取れなかったのが通信・5xx なら auth_unavailable（status 0）。
+ */
+export async function sendRequest(path: string, init?: RequestInit, authorized = false): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, init);
+    res = authorized ? await fetchAuthorized(`${BASE}${path}`, init) : await fetch(`${BASE}${path}`, init);
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    if (e instanceof SessionExpiredError) throw new ApiError(MSG_SESSION_EXPIRED, 401, 'session_expired');
+    if (e instanceof TokenUnavailableError) throw new ApiError(MSG_AUTH_UNAVAILABLE, 0, 'auth_unavailable');
     throw new ApiError('サーバーに接続できませんでした。起動しているか確かめてください。', 0, 'network');
   }
   if (!res.ok) throw await parseError(res);
+  return res;
+}
+
+async function request<T>(path: string, init?: RequestInit, authorized = false): Promise<T> {
+  const res = await sendRequest(path, init, authorized);
   try {
     return (await res.json()) as T;
   } catch {
@@ -106,11 +123,19 @@ export function getMetrics(signal?: AbortSignal): Promise<MetricsResponse> {
   return request('/metrics', { signal });
 }
 
-export function postChat(messages: ChatRequestMessage[], signal?: AbortSignal): Promise<ChatResponse> {
-  return request('/chat', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages }),
-    signal,
-  });
+/**
+ * 質問を送る。conversationId を渡すと（ログイン中の、会話を保存するとき。仕様 §2.3.4）、本文に conversation_id を足し、JWT を付けて送る。
+ * 渡さなければ、今までと同じ（Authorization を付けない・conversation_id を足さない）
+ */
+export function postChat(messages: ChatRequestMessage[], signal?: AbortSignal, conversationId?: string): Promise<ChatResponse> {
+  return request(
+    '/chat',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(conversationId === undefined ? { messages } : { messages, conversation_id: conversationId }),
+      signal,
+    },
+    conversationId !== undefined,
+  );
 }

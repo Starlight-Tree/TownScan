@@ -78,3 +78,12 @@ export function PersonIcon() {
     </Line>
   );
 }
+
+/** ゴミ箱（会話の削除。DocuNavi の TrashIcon と同じ線）。 */
+export function TrashIcon() {
+  return (
+    <Line size={18}>
+      <path d="M3.5 5.5h13M8 5.5V3.8c0-.7.5-1.3 1.2-1.3h1.6c.7 0 1.2.6 1.2 1.3v1.7M5.2 5.5l.7 10.2c0 .6.5 1.1 1.1 1.1h6c.6 0 1.1-.5 1.1-1.1l.7-10.2M8.3 9v4.5M11.7 9v4.5" />
+    </Line>
+  );
+}

@@ -2926,3 +2926,215 @@ p.banner {
   }
 }
 
+/* ---- 会話の履歴（ログイン中だけ。components/ConversationList.tsx。仕様 §7.1）----
+   見た目は DocuNavi の ThreadSidebar（frontend/src/styles.css の .thread-*・shell.css の .ws-sidebar .thread-*）と同じ。値は、そのまま写す（丸めない・計算し直さない）。
+   TownScan の色の変数を使う（DocuNavi の --danger-border・--danger-bg・--danger-text は、TownScan では --error-border・--error-bg・--error-text。--ws-err は --error）。
+   次の 2 つの塊（.thread-*・.app-sidebar .thread-*）は、DocuNavi の宣言を、変数名とセレクターの接頭辞（.ws-sidebar → .app-sidebar）だけ替えて写した（テストで宣言を確かめる）。
+   .btn は TownScan の（44px・margin-left つきの）.btn--small なので、この一覧の中だけ、DocuNavi の .btn-small（padding 0.25rem 0.6rem・0.8rem）にそろえる。
+   細い帯（閉じた表示）と、1023px 以下の重ねて開くパネルには出さない（初版の決定。AppSidebar が描かない）ので、DocuNavi の狭い画面の規則（@media (max-width: 700px)）は写さない。 */
+.thread-sidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 16rem;
+  min-height: 0;
+  padding: 0.75rem 0.5rem 0.75rem 1rem;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.thread-sidebar-title {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.thread-sidebar-note,
+.thread-sidebar-error {
+  margin: 0.25rem 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.thread-sidebar-error {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--error-border);
+  border-radius: 0.5rem;
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thread-item {
+  position: relative;
+  border-radius: 0.5rem;
+}
+
+.thread-item:hover,
+.thread-item:focus-within {
+  background: var(--surface-muted);
+}
+
+.thread-item[data-current='true'] {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.thread-open {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  padding: 0.4rem 3rem 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: none;
+  /* 並んだ題名は一段淡く、開いている会話だけ濃くする（暗い地の明るい文字は、実際より太く見える） */
+  color: var(--text-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.thread-item[data-current='true'] .thread-open:not(:disabled) {
+  color: var(--text);
+}
+
+.thread-open:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.thread-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.thread-time {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.thread-delete {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.4rem;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  /* 目立たせすぎない。キーボードで来たとき・触れたときは見える */
+  opacity: 0;
+}
+
+.thread-item:hover .thread-delete,
+.thread-item:focus-within .thread-delete,
+.thread-item[data-current='true'] .thread-delete {
+  opacity: 1;
+}
+
+.thread-delete:hover:not(:disabled) {
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.thread-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.thread-confirm {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 0.6rem 0.4rem;
+}
+
+.thread-confirm-yes {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+
+/* 会話の履歴は、サイドバーの残りの高さを使って、中だけをスクロールする */
+.app-sidebar .thread-sidebar {
+  flex: 1;
+  width: auto;
+  padding: 0.75rem 0 0;
+  border-right: 0;
+}
+
+/* 削除ボタンの分の右の余白は、ボタンが見えるとき（触れた・フォーカス・開いている会話）だけ取る。ふだんは題名に幅を使う */
+.app-sidebar .thread-open {
+  padding-right: 0.6rem;
+}
+
+.app-sidebar .thread-item:hover .thread-open,
+.app-sidebar .thread-item:focus-within .thread-open,
+.app-sidebar .thread-item[data-current='true'] .thread-open {
+  padding-right: 2.75rem;
+}
+
+/* 会話の履歴の取得に失敗したとき: 読み込み中・0 件の案内と見分けがつくよう、エラーの色にする */
+.app-sidebar .thread-sidebar-note [role='alert'] {
+  margin: 0 0 0.4rem;
+  color: var(--error);
+}
+
+/* 案内の中の「Google でログイン」（リンク）は、案内の文の下に置く */
+.thread-sidebar-note a {
+  display: inline-block;
+  margin-top: 0.15rem;
+}
+
+/* .btn--small（TownScan）を、DocuNavi の .btn-small と同じ大きさにする。左の余白（8px）・最小の高さ（36px）は、この一覧では要らない */
+.thread-sidebar .btn--small {
+  min-height: 0;
+  margin-left: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* 「削除する」は、触れても危険色のまま（.btn の hover は青い地） */
+.thread-confirm-yes:hover:not(:disabled) {
+  background: var(--error-bg);
+}
+
+/* 開き直した会話の一部が、いまとは別の解析結果に基づくときの、会話の先頭の 1 行（仕様 §7.1.5）。警告の色（既存の --warn-*） */
+.chat__notice {
+  padding: 10px 14px;
+  border: 1px solid var(--warn-border);
+  border-radius: 10px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+/* 保存を飛ばして送り直した回答の下の注記（1 回だけ。仕様 §7.1.7） */
+.msg__notice {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
