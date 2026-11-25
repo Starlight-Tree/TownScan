@@ -34,7 +34,7 @@ flowchart LR
 
 A question goes through the API's chat: a rule-based mock model (Gemini is optional) picks a tool (counts, comparison, list, detection image), and the answer is built from the tool's result. A number check replaces any answer that contains a figure that is not in that result.
 
-`compose.yaml` runs the Go API. The FastAPI version (`backend/`) is kept only for comparison during the switch (`scripts/dev-up.sh --api python`; it will be removed). Gemini (`LLM_PROVIDER=gemini`) works in the Go API too. The Go API passes the same contract tests (`contract/`) and is compared with FastAPI response by response (`api/difftest/`; detection images by pixel difference). Loading data stays in Python (`docker compose run --rm loader python -m app.load …`).
+`compose.yaml` runs the Go API. Gemini (`LLM_PROVIDER=gemini`) is supported too. The API is checked by the contract tests (`contract/`). Loading data is done in Python (`docker compose run --rm loader python -m pipeline.load …`).
 
 The data comes from an offline pipeline, run on demand:
 
@@ -44,7 +44,7 @@ flowchart LR
     C --> PP["pipeline/<br/>vectorize, diff against the<br/>2018 building data, 3 classes, evaluation"]
     K[("Fundamental Geospatial Data<br/>building outlines 2018-10")] --> PP
     PP --> O["out/<br/>run.json, candidates.geojson, eval.json"]
-    O -->|"python -m app.load"| DB[("Postgres 17")]
+    O -->|"python -m pipeline.load"| DB[("Postgres 17")]
 ```
 
 ### Environments
@@ -52,7 +52,7 @@ flowchart LR
 | Environment | Setup | Notes |
 |---|---|---|
 | Local | `scripts/dev-up.sh`: Docker Compose (db, api, web) | The only app environment. Photo tiles and building data are read from `data/`, which is not in Git. |
-| Analysis | Google Colab (T4) and `pipeline/` | Building extraction runs on demand; the results are loaded into Postgres with `python -m app.load`. |
+| Analysis | Google Colab (T4) and `pipeline/` | Building extraction runs on demand; the results are loaded into Postgres with `python -m pipeline.load`. |
 | Deployed | none | Not deployed. Where to publish (plan stage P7) is not decided. |
 
 ## Quick start
@@ -65,7 +65,7 @@ scripts/dev-up.sh    # builds the frontend and starts db, api and web
 
 - App: <http://127.0.0.1:3500> · API docs (FastAPI version only): <http://127.0.0.1:8500/api/docs>
 - `data/` is not in Git (the photos and building data are not redistributed), so a fresh clone starts with no candidates. The files a run needs are in [docs/spec-prototype.md](docs/spec-prototype.md) §4.1.
-- Stop: `docker compose down` (add `-v` to delete the DB). Checks: `scripts/verify.sh [repo|pipeline|backend|frontend|all]`.
+- Stop: `docker compose down` (add `-v` to delete the DB). Checks: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`.
 - Google sign-in and a Gemini key are optional and live in Infisical: see [ADR 0004](docs/decisions/0004-secrets-infisical.md). Sign in at <http://localhost:3500>, not `127.0.0.1`, and never change `BETTER_AUTH_SECRET` once it is set.
 
 ## Documentation
@@ -77,7 +77,7 @@ The documents are written in Japanese.
 | [docs/plan.md](docs/plan.md) | Plan, stages, exit criteria, pending decisions |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | The contract: data files, DB, API, classes, evaluation, UI |
 | [docs/decisions/](docs/decisions/) | Decisions and reasons: data and terms (0001), direction (0002), chat LLM (0003), secrets (0004), Go API (0005) |
-| [frontend/README.md](frontend/README.md) · [backend/README.md](backend/README.md) | Running, checks and details of each part |
+| [frontend/README.md](frontend/README.md) · [api/README.md](api/README.md) | Running, checks and details of each part |
 | [CLAUDE.md](CLAUDE.md) | Development conventions (for AI agents) |
 
 ## About

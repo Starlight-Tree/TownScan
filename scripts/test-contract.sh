@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # 契約の検査（contract/）を、使い捨ての環境で 1 つのコマンドで流す（ホストの Docker を使う）。仕様: contract/README.md・docs/decisions/0005-api-in-go.md
-# 使い方: scripts/test-contract.sh [python|go] [pytest の引数...]   例: scripts/test-contract.sh python -k chat -x
-#   対象（省略時は python）: 契約を満たすことを確かめる API の実装。
-#     python  FastAPI 版の API（backend/ のイメージの runtime。消す予定）。
+# 使い方: scripts/test-contract.sh [go] [pytest の引数...]   例: scripts/test-contract.sh -k chat -x
+#   対象（省略時は go）: 契約を満たすことを確かめる API の実装。
 #     go      Go の API（api/）。既定はローカルの docunavi-dev でビルドして alpine に載せる（GO_IMAGE_BUILD=local。取得なし）。api/Dockerfile を使うなら GO_IMAGE_BUILD=dockerfile。
 #
 # やること（どの対象でも同じ。API のコードは、対象のイメージの中だけ。検査は HTTP だけで叩く）:
@@ -12,7 +11,7 @@
 #   3. 合成データ（contract/synthetic.py の run と写真タイル。画像の 404 を確かめる故障つき）を、専用ボリュームに書き、
 #      `python -m pipeline.load --run` で DB へ入れる。
 #   4. API の「構成」ごとに、API を起動 → 検査の pytest を流す → API を止める（contract/README.md の「API の構成」。既定は次の順）:
-#        empty（データ無し）→ main（認証あり・全検査の本体）→ history（会話の履歴。対象が go のときだけ）→
+#        empty（データ無し）→ main（認証あり・全検査の本体）→ history（会話の履歴）→
 #        noauth・badauth（認証の設定が無い・不正）→ jwksdown（JWKS に届かない）→ dbdown（DB が止まる）
 #      データを読み込んだあと、検査用の利用者を auth_user へ入れる（HISTORY_USERS 人。構成 history の検査が、検査ごとに別の利用者を使う）。
 #   5. 結果を表にして、起動したものを全部消す（名前が townscan-contract-* のものだけ）。
@@ -22,19 +21,19 @@
 #   重い Docker の処理は 1 つずつ（イメージのビルド → DB → API → 検査の順。並べて流さない）。
 #
 # 環境変数（どれも省略できる。開発用）:
-#   CONTRACT_PHASES    流す構成（空白区切り）。既定は上の順の全部（history は対象が go のときだけ）。例: CONTRACT_PHASES=main scripts/test-contract.sh python -k chat
+#   CONTRACT_PHASES    流す構成（空白区切り）。既定は上の順の全部。例: CONTRACT_PHASES=main scripts/test-contract.sh -k chat
 #                      empty を入れるときは先頭に置く（空の DB に API を向ける。データの読み込みはそのあと）。
-#                      history は go だけ（Python の API には履歴が無い）。使い捨ての DB 専用（同じ DB に 2 回流すと、利用者が新しくならず落ちる）。
+#                      history は使い捨ての DB 専用（同じ DB に 2 回流すと、利用者が新しくならず落ちる）。
 #   CONTRACT_PREFIX    コンテナ・ネットワーク・ボリューム・イメージの名前の頭（既定 townscan-contract）。同時に複数本流すときに変える。
 #   CONTRACT_HISTORY_USERS  検査用の利用者の人数（既定 200。検査の側の CONTRACT_USER_POOL に同じ値を渡す）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # ---- 引数 ----
-usage() { echo "使い方: $0 [python|go] [pytest の引数...]" >&2; exit 2; }
-TARGET=python
+usage() { echo "使い方: $0 [go] [pytest の引数...]" >&2; exit 2; }
+TARGET=go
 case "${1:-}" in
-  python|go) TARGET="$1"; shift ;;
+  go) TARGET="$1"; shift ;;
   ""|-*) ;;  # 対象を省略して、pytest の引数だけを渡す
   *) usage ;;
 esac
@@ -54,17 +53,11 @@ DBNAME=townscan_contract
 SYNTHETIC=contract/synthetic.py
 HISTORY_USERS="${CONTRACT_HISTORY_USERS:-200}"   # 検査用の利用者の人数。auth_user に ct_user_000001〜 の形で入れる（contract/support/fakes.py の fresh_user）
 case "$HISTORY_USERS" in ""|*[!0-9]*|0) echo "CONTRACT_HISTORY_USERS は 1 以上の整数です（実際: ${HISTORY_USERS}）" >&2; exit 2 ;; esac
-# 既定の構成の並び。history（会話の履歴）は、履歴の経路を持つ Go の API だけ（Python の API には入れない）
-if [ "$TARGET" = go ]; then DEFAULT_PHASES="empty main history noauth badauth jwksdown dbdown"; else DEFAULT_PHASES="empty main noauth badauth jwksdown dbdown"; fi
+# 既定の構成の並び（history = 会話の履歴）
+DEFAULT_PHASES="empty main history noauth badauth jwksdown dbdown"
 PHASES="${CONTRACT_PHASES:-$DEFAULT_PHASES}"
-# 機能の印（@pytest.mark.history）の検査は、この API が持つ機能のときだけ流す（contract/conftest.py の CONTRACT_FEATURES）。Python の API には渡さない
-FEATURE_ARGS=()
-if [ "$TARGET" = go ]; then FEATURE_ARGS=(-e CONTRACT_FEATURES=history); fi
-if [ "$TARGET" != go ]; then
-  for v in $PHASES; do
-    if [ "$v" = history ]; then echo "構成 history は、対象 go だけです（Python の API には会話の履歴が無い）" >&2; exit 2; fi
-  done
-fi
+# 機能の印（@pytest.mark.history）の検査は、この API が持つ機能のときだけ流す（contract/conftest.py の CONTRACT_FEATURES）
+FEATURE_ARGS=(-e CONTRACT_FEATURES=history)
 AUTH_ISSUER="https://auth.contract.test"   # contract/support/fakes.py の ISSUER の既定と同じ
 JWKS_PORT=8901                              # 同じく JWKS_PORT の既定（runner の中。ネットワークの外へは公開しない）
 JWKS_URL="http://$RUNNER:$JWKS_PORT/api/auth/jwks"
@@ -80,10 +73,6 @@ DB_URL="postgresql://townscan:$PW@$DB:5432/$DBNAME"
 # 引数なしの起動（イメージの CMD）で `/api/*` を待ち受ける。
 TARGET_PORT=8000
 case "$TARGET" in
-  python)
-    TARGET_IMAGE="$PREFIX-api-python"
-    target_build() { docker build --quiet --target runtime -t "$TARGET_IMAGE" backend >/dev/null; }
-    ;;
   go)
     TARGET_IMAGE="$PREFIX-api-go"
     if [ ! -f api/Dockerfile ]; then

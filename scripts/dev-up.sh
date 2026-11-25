@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # TownScan をローカルで起動する（ホストの Docker。開発コンテナの中では実行しない）。仕様: docs/spec-prototype.md §2・§8 E5
-# 使い方: scripts/dev-up.sh [--no-web] [--api go|python]
+# 使い方: scripts/dev-up.sh [--no-web]
 #   --no-web       db と api だけ起動する（frontend がまだ無いとき・API だけ確かめたいとき）
-#   --api python   API を FastAPI 版にする（既定は Go。切り替え中の比較用で、消す予定。ADR 0005）
 #   WEB_BUILD=host    （既定）frontend をホストの Node 24 でビルドしてから、できた .next/standalone を載せて web を作る
 #   WEB_BUILD=docker  web のイメージの中でビルドする（Docker VM に空きメモリーがあるとき・CI 用）
 # やること: .env を作る（無ければ。乱数のパスワード。値は表示しない）→ frontend をビルド → docker compose up -d --build
@@ -29,20 +28,14 @@ random_hex() {
 }
 
 NO_WEB=0
-API_IMPL=go
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-web) NO_WEB=1 ;;
-    --api) [ $# -ge 2 ] || die "--api には go か python を付けてください"; API_IMPL="$2"; shift ;;
-    --api=*) API_IMPL="${1#--api=}" ;;
     -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
-    *) die "不明な引数: $1（使い方: scripts/dev-up.sh [--no-web] [--api go|python]）" ;;
+    *) die "不明な引数: $1（使い方: scripts/dev-up.sh [--no-web]）" ;;
   esac
   shift
 done
-case "$API_IMPL" in go|python) ;; *) die "--api は go か python です（実際: $API_IMPL）" ;; esac
-# FastAPI 版は、上書きのファイルを重ねる（このスクリプトの中の docker compose は、全部これを読む）
-if [ "$API_IMPL" = python ]; then export COMPOSE_FILE="compose.yaml:compose.python-api.yaml"; fi
 WEB_BUILD="${WEB_BUILD:-host}"
 case "$WEB_BUILD" in host|docker) ;; *) die "WEB_BUILD は host か docker です（実際: $WEB_BUILD）" ;; esac
 
@@ -154,7 +147,7 @@ for svc in "${SERVICES[@]}"; do
       healthy) echo "   $svc: healthy"; break ;;
       unhealthy)
         docker compose logs --tail 30 "$svc" >&2 || true
-        if [ "$svc" = api ] && [ "$API_IMPL" = go ]; then
+        if [ "$svc" = api ]; then
           echo "ヒント: ログに「設定の誤り」が出ているときは、LLM_PROVIDER=gemini なのに GEMINI_API_KEY が空、などです（値は表示されません）。" >&2
         fi
         # パスワードの食い違い（パスワードを作り直した・変えた）は api のログには出ない。db のログで見分けて、直し方を出す
@@ -182,11 +175,7 @@ echo
 echo "== 状態"
 curl -fsS http://127.0.0.1:8500/api/health || true
 echo
-if [ "$API_IMPL" = python ]; then
-  echo "API  : http://127.0.0.1:8500/api/health  （FastAPI 版。仕様: http://127.0.0.1:8500/api/docs）"
-else
-  echo "API  : http://127.0.0.1:8500/api/health  （Go。仕様のページは無い。契約は docs/spec-prototype.md §4.4 と contract/）"
-fi
+echo "API  : http://127.0.0.1:8500/api/health  （Go。仕様のページは無い。契約は docs/spec-prototype.md §4.4 と contract/）"
 if [ "$NO_WEB" = 0 ]; then
   echo "画面 : http://127.0.0.1:3500"
   # Cookie はホスト単位。ログインの往復（Google → /api/auth/callback/google）の state の Cookie は BETTER_AUTH_URL と同じホスト（localhost）に付くので、

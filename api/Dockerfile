@@ -1,5 +1,5 @@
 # TownScan の API（Go）のイメージ。標準ライブラリと pgx・jwt・x/image・x/text だけなので、静的にビルドして distroless に置く（DocuNavi の ops/sse-relay/Dockerfile と同じ作り）。
-# ビルドの文脈は api/。compose.yaml の api が、このイメージ（2026-11-25 に Python の API から切り替えた。FastAPI 版は compose.python-api.yaml）。
+# ビルドの文脈は api/。compose.yaml の api が、このイメージ。
 # 版は go.mod（go 1.26.10）に合わせる。モジュールの取得は、ビルドのときだけ（go.sum で検証される）。
 FROM golang:1.26.10 AS build
 WORKDIR /src

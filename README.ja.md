@@ -34,7 +34,7 @@ flowchart LR
 
 質問は API のチャットを通ります。規則ベースの模擬モデル（Gemini は任意）がツール（件数・比較・一覧・検出画像）を選び、返答はツールの結果から作ります。数字の検査が、その結果に無い数字を含む返答を、安全な文に差し替えます。
 
-`compose.yaml` は Go の API を動かします。FastAPI 版（`backend/`）は、切り替え中の比較のために残していて、`scripts/dev-up.sh --api python` で使えます（消す予定）。Gemini（`LLM_PROVIDER=gemini`）は Go の API にも入っています。Go の API は同じ契約の検査（`contract/`）に合格し、FastAPI と応答ごとに比べています（`api/difftest/`。検出画像は画素の差）。データの読み込みは Python のままです（`docker compose run --rm loader python -m app.load …`）。
+`compose.yaml` は Go の API を動かします。Gemini（`LLM_PROVIDER=gemini`）にも対応しています。API は契約の検査（`contract/`）で確かめます。データの読み込みは Python です（`docker compose run --rm loader python -m pipeline.load …`）。
 
 データは、必要なときに流すオフラインの処理で作ります。
 
@@ -44,7 +44,7 @@ flowchart LR
     C --> PP["pipeline/<br/>ベクトル化・2018 年の建物データとの差分・3 分類・評価"]
     K[("基盤地図情報<br/>建物の外形 2018-10 版")] --> PP
     PP --> O["out/<br/>run.json・candidates.geojson・eval.json"]
-    O -->|"python -m app.load"| DB[("Postgres 17")]
+    O -->|"python -m pipeline.load"| DB[("Postgres 17")]
 ```
 
 ### 環境
@@ -52,7 +52,7 @@ flowchart LR
 | 環境 | 構成 | 備考 |
 |---|---|---|
 | ローカル | `scripts/dev-up.sh`: Docker Compose（db・api・web） | アプリを動かす唯一の環境。写真タイルと建物データは、Git に入れていない `data/` から読みます。 |
-| 解析 | Google Colab（T4）と `pipeline/` | 建物の抽出を必要なときに流し、結果は `python -m app.load` で Postgres へ入れます。 |
+| 解析 | Google Colab（T4）と `pipeline/` | 建物の抽出を必要なときに流し、結果は `python -m pipeline.load` で Postgres へ入れます。 |
 | 公開 | なし | 公開していません。公開先（計画の P7）は未決です。 |
 
 ## クイックスタート
@@ -65,7 +65,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 
 - 画面: <http://127.0.0.1:3500> ・ API の仕様（FastAPI 版だけ）: <http://127.0.0.1:8500/api/docs>
 - `data/` は Git に入れていない（写真と建物データは再配布しない）ので、クローンしただけでは候補は空です。実行に必要なファイルは [docs/spec-prototype.md](docs/spec-prototype.md) §4.1 にあります。
-- 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|backend|frontend|all]`。
+- 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`。
 - Google ログインと Gemini のキーは任意で、Infisical に置きます（[ADR 0004](docs/decisions/0004-secrets-infisical.md)）。ログインは <http://localhost:3500> で試します（`127.0.0.1` では戻れません）。`BETTER_AUTH_SECRET` は、一度決めたら変えないでください。
 
 ## 文書
@@ -77,7 +77,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 | [docs/plan.md](docs/plan.md) | 計画・段階・出口条件・決定待ち |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | 契約: データのファイル・DB・API・3 分類・評価・画面 |
 | [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005） |
-| [frontend/README.md](frontend/README.md) ・ [backend/README.md](backend/README.md) | 各部分の動かし方・検査・詳細 |
+| [frontend/README.md](frontend/README.md) ・ [api/README.md](api/README.md) | 各部分の動かし方・検査・詳細 |
 | [CLAUDE.md](CLAUDE.md) | 開発の規約（AI エージェント向け） |
 
 ## このリポジトリについて
