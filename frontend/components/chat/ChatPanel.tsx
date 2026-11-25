@@ -12,6 +12,7 @@ import { AnswerScope } from './AnswerScope';
 import { TILE_SIDE_TEXT } from './area-scale';
 import { ClassDefinitions } from './ClassGuide';
 import { Composer } from './Composer';
+import { ToolCallContext } from './tool-call-context';
 import { buildRequestMessages } from './history';
 import { ResultCard } from './ResultCard';
 import type { ChatActions, ChatEntry, ResultActions } from './types';
@@ -254,20 +255,12 @@ export function ChatPanel({ actions, onNewConversation }: Props) {
                   <AnswerScope results={entry.results} />
                 </ErrorBoundary>
               )}
-              {entry.results?.map((r, i) => <ResultCard key={i} result={r} actions={actionsFor(entry)} answerText={entry.content} />)}
-              {entry.tool_calls && entry.tool_calls.length > 0 && (
-                <details className="provenance provenance--tools">
-                  <summary>使ったツール</summary>
-                  <ul className="tool-list">
-                    {entry.tool_calls.map((c, i) => (
-                      <li key={i}>
-                        <code>{c.name}</code>
-                        <code className="tool-list__args">{JSON.stringify(c.args)}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+              {entry.results?.map((r, i) => (
+                // 使ったツールは、同じ順番の結果カードの「根拠を見る」の中で見せる（数が合わないときは出さない）
+                <ToolCallContext.Provider key={i} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
+                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} />
+                </ToolCallContext.Provider>
+              ))}
             </div>
           );
         })}

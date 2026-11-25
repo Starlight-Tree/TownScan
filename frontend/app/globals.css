@@ -1809,14 +1809,7 @@ p.banner {
   overflow-wrap: anywhere;
 }
 
-.tool-list {
-  display: grid;
-  gap: 4px;
-  padding: 8px 12px;
-  background: var(--bg);
-  border-radius: 8px;
-}
-
+/* 「根拠を見る」の中の「ツール」の行（ProvenanceBox）。引数は、名前の右に、控えめな色で */
 .tool-list__args {
   margin-left: 6px;
   color: var(--muted);

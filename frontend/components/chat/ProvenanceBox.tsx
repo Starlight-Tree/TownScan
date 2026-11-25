@@ -1,8 +1,10 @@
 import type { Provenance } from '../../lib/api-types';
+import { useToolCall } from './tool-call-context';
 
 /** 結果カードの根拠（出どころ）。折りたたみ。合成データのときは印を付ける */
 export function ProvenanceBox({ provenance }: { provenance: Provenance }) {
   const synthetic = provenance.run_kind === 'synthetic';
+  const tool = useToolCall();
   return (
     <details className="provenance">
       <summary>
@@ -30,6 +32,15 @@ export function ProvenanceBox({ provenance }: { provenance: Provenance }) {
           <>
             <dt>注記</dt>
             <dd>{provenance.note}</dd>
+          </>
+        )}
+        {tool && (
+          <>
+            <dt>ツール</dt>
+            <dd>
+              <code>{tool.name}</code>
+              <code className="tool-list__args">{JSON.stringify(tool.args)}</code>
+            </dd>
           </>
         )}
       </dl>

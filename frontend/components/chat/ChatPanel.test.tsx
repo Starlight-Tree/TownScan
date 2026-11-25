@@ -66,8 +66,10 @@ describe('チャット', () => {
     expect(url).toBe('/api/chat');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ messages: [{ role: 'user', content: '何件ありますか？' }] });
-    // 使ったツールも見られる
-    expect(screen.getByText('使ったツール')).toBeInTheDocument();
+    // 使ったツールは、回答の下の別の行ではなく、結果カードの「根拠を見る」の中で見られる
+    expect(screen.queryByText('使ったツール')).not.toBeInTheDocument();
+    const box = screen.getByText('根拠を見る').closest('details') as HTMLElement;
+    expect(within(box).getByText('ツール').nextElementSibling).toHaveTextContent('count_candidates{"cls":null}');
   });
 
   it('2 回目の質問には、これまでの会話（役割と本文だけ）を付ける', async () => {
@@ -397,6 +399,26 @@ describe('回答が届いても、拡大ビューは開かず、何も頼まな�
     await userEvent.type(input(), 'ふたつめ{Enter}');
     await screen.findByText('2 回目');
     expect(actions.expand).not.toHaveBeenCalled();
+  });
+
+  it('使ったツールは、結果と同じ順番の「根拠を見る」に付く。数が合わないときは、どこにも出さない', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          message: { role: 'assistant', content: '2 つ', results: [count, count], tool_calls: [{ name: 'first_tool', args: {} }, { name: 'second_tool', args: { n: 2 } }] },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ message: { role: 'assistant', content: '合わない', results: [count], tool_calls: [{ name: 'a', args: {} }, { name: 'b', args: {} }] } }),
+      );
+    const { input } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('2 つ');
+    const tools = screen.getAllByText('ツール').map((dt) => dt.nextElementSibling?.textContent);
+    expect(tools).toEqual(['first_tool{}', 'second_tool{"n":2}']);
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('合わない');
+    expect(screen.getAllByText('ツール')).toHaveLength(2);
   });
 
   it('results が配列でない回答でも、画面は壊れず、呼ばない', async () => {
