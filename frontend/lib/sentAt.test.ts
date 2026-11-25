@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatSentAt, parseSentAt } from './sentAt';
+import { formatSentAt } from './sentAt';
 
 // 端末のタイムゾーンで表示するので、時刻は new Date(年, 月, 日, 時, 分)（端末の時刻）で作って、ISO にして渡す
 const at = (y: number, m: number, d: number, h: number, min: number) => new Date(y, m - 1, d, h, min).toISOString();
@@ -33,16 +33,3 @@ describe('formatSentAt', () => {
   });
 });
 
-describe('parseSentAt', () => {
-  it('読める ISO 8601 だけを返す', () => {
-    expect(parseSentAt('2026-11-16T12:34:56+00:00')).toBe('2026-11-16T12:34:56+00:00');
-    expect(parseSentAt('2026-11-16T12:34:56.123Z')).toBe('2026-11-16T12:34:56.123Z');
-  });
-
-  it('文字列でない・読めない値は undefined', () => {
-    expect(parseSentAt(undefined)).toBeUndefined();
-    expect(parseSentAt(12345)).toBeUndefined();
-    expect(parseSentAt('昨日')).toBeUndefined();
-    expect(parseSentAt(null)).toBeUndefined();
-  });
-});

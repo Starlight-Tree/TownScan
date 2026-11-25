@@ -22,17 +22,6 @@ export function storedTheme(): Theme | null {
   }
 }
 
-/** OS の設定。`matchMedia` が無い環境では light。 */
-export function systemTheme(): Theme {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-/** いま画面に効いているテーマ（選択があればそれ、無ければ OS）。 */
-export function currentTheme(): Theme {
-  const applied = document.documentElement.dataset.theme;
-  return isTheme(applied) ? applied : systemTheme();
-}
-
 /** 選んだテーマを、画面に適用して保存する。保存できなくても、このページでは適用する。 */
 export function chooseTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;

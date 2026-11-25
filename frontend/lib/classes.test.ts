@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CANDIDATE_CLASSES, CANDIDATE_REASONS } from './api-types';
 import { CLASS_INFO, CLASS_ORDER, REASON_TEXT, isCandidateClass, reasonText, refusalTitle } from './classes';
-import { formatArea, formatDateTime, formatNumber, formatProb, formatRatio } from './format';
+import { formatArea, formatNumber, formatProb, formatRatio } from './format';
 
 describe('3 分類の見た目', () => {
   it('全分類に定義があり、色・線種・形が互いに異なる（色だけに頼らない）', () => {
@@ -35,13 +35,11 @@ describe('3 分類の見た目', () => {
 });
 
 describe('表示の整形', () => {
-  it('数・面積・割合・確率・日時', () => {
+  it('数・面積・割合・確率', () => {
     expect(formatNumber(1234.5678)).toBe('1,234.568');
     expect(formatNumber(Number.NaN)).toBe('—');
     expect(formatArea(123.45)).toBe('123.5 m²');
     expect(formatRatio(0.031)).toBe('3.1 %');
     expect(formatProb(0.9)).toBe('0.90');
-    expect(formatDateTime('2026-11-24T12:00:00+09:00')).toContain('2026');
-    expect(formatDateTime('not a date')).toBe('not a date');
   });
 });

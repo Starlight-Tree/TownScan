@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CANDIDATE_CLASSES } from './api-types';
 import { CLASS_INFO } from './classes';
-import { THEME_INIT_SCRIPT, THEME_KEY, chooseTheme, clearTheme, currentTheme, storedTheme, systemTheme, themeChoice } from './theme';
+import { THEME_INIT_SCRIPT, THEME_KEY, chooseTheme, clearTheme, storedTheme, themeChoice } from './theme';
 
 function stubSystem(dark: boolean) {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: dark && query === '(prefers-color-scheme: dark)', media: query }));
@@ -25,10 +25,6 @@ describe('テーマ（保存・読み出し）', () => {
     stubSystem(true);
     expect(storedTheme()).toBeNull();
     expect(themeChoice()).toBe('system');
-    expect(systemTheme()).toBe('dark');
-    expect(currentTheme()).toBe('dark');
-    stubSystem(false);
-    expect(currentTheme()).toBe('light');
   });
 
   it('選ぶと、適用して保存し、OS より優先する', () => {
@@ -38,7 +34,6 @@ describe('テーマ（保存・読み出し）', () => {
     expect(window.localStorage.getItem(THEME_KEY)).toBe('light');
     expect(storedTheme()).toBe('light');
     expect(themeChoice()).toBe('light');
-    expect(currentTheme()).toBe('light');
   });
 
   it('選択を取り消すと、保存と data-theme を消して OS に従う', () => {
@@ -47,7 +42,7 @@ describe('テーマ（保存・読み出し）', () => {
     clearTheme();
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(window.localStorage.getItem(THEME_KEY)).toBeNull();
-    expect(currentTheme()).toBe('dark');
+    expect(themeChoice()).toBe('system');
   });
 
   it('保存が無くても、適用中の data-theme があれば、それを選択として返す（保存できない環境）', () => {

@@ -186,14 +186,3 @@ def area_union_bbox(conn: psycopg.Connection, run_id: str, area_ids: list[str] |
     if r is None or r["w"] is None:
         return None
     return [r["w"], r["s"], r["e"], r["n"]]
-
-
-def candidate_union_bbox(conn: psycopg.Connection, run_id: str, ids: list[str]) -> list[float] | None:
-    r = conn.execute(
-        "SELECT min(west) AS w, min(south) AS s, max(east) AS e, max(north) AS n"
-        " FROM candidates WHERE run_id = %s AND id = ANY(%s)",
-        (run_id, ids),
-    ).fetchone()
-    if r is None or r["w"] is None:
-        return None
-    return [r["w"], r["s"], r["e"], r["n"]]

@@ -144,16 +144,6 @@ def _num_field(obj: dict, key: str, where: str, pr: _Problems, *, nullable: bool
     return float(v)
 
 
-def _str_field(obj: dict, key: str, where: str, pr: _Problems, *, nullable: bool = False) -> str | None:
-    v = obj.get(key)
-    if v is None and nullable:
-        return None
-    if not isinstance(v, str) or not v:
-        pr.add(f"{where}.{key}", "空でない文字列である必要があります")
-        return None
-    return v
-
-
 def _bbox_field(obj: dict, key: str, where: str, pr: _Problems) -> list[float] | None:
     v = obj.get(key)
     if not (isinstance(v, list) and len(v) == 4 and all(_is_num(n) for n in v)):
@@ -429,12 +419,6 @@ def write_to_database(database_url: str, parsed: ParsedRun) -> None:
     with psycopg.connect(database_url, autocommit=True) as conn:
         apply_schema(conn)
         write_run(conn, parsed)
-
-
-def load_run(database_url: str, out_dir: str | os.PathLike) -> ParsedRun:
-    parsed = read_run_dir(out_dir)
-    write_to_database(database_url, parsed)
-    return parsed
 
 
 def main(argv: list[str] | None = None) -> int:

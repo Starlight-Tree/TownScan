@@ -1,9 +1,4 @@
-/** 質問の時刻（ISO 8601）の検証と、会話の区切りに出す表示。React にも通信にも依存しない。 */
-
-/** 読める ISO 8601 の文字列だけを返す（サーバー・端末の値を、使う前に確かめる）。 */
-export function parseSentAt(value: unknown): string | undefined {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : undefined;
-}
+/** 質問の時刻（ISO 8601）の、会話の区切りに出す表示。React にも通信にも依存しない。 */
 
 function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();

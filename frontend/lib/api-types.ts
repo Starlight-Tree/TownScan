@@ -288,9 +288,3 @@ export interface AssistantMessage {
 export interface ChatResponse {
   message: AssistantMessage;
 }
-
-// ---- エラー ----
-
-export interface ApiErrorBody {
-  error: { code: string; message: string };
-}

@@ -2881,34 +2881,6 @@ p.banner {
   padding-left: 20px;
 }
 
-.steps {
-  display: grid;
-  gap: 8px;
-  font-size: 14px;
-  list-style: decimal;
-  padding-left: 22px;
-}
-
-.class-list {
-  display: grid;
-  gap: 12px;
-}
-
-.class-list__row dt {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 14px;
-}
-
-.class-list__row dd {
-  margin-top: 2px;
-  padding-left: 30px;
-  font-size: 13px;
-  line-height: 1.8;
-}
-
 .limits-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
