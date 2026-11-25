@@ -1,10 +1,11 @@
 # api/（Go の API）
 
-TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは第 1 段（土台と読み取り API）と第 3 段（認証）だけ**で、`compose.yaml` はまだ Python の API を指している。
+TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換える（[ADR 0005](../docs/decisions/0005-api-in-go.md)）。**いまあるのは第 1 段（土台と読み取り API）・第 3 段（認証）・第 4 段（検出画像）だけ**で、`compose.yaml` はまだ Python の API を指している。
 
 - 作ってある: `GET /api/health`・`/api/areas`・`/api/candidates`・`/api/candidates.geojson`・`/api/candidates/{id}`・`/api/metrics`
 - 認証: `GET /api/me`（JWT を JWKS の公開鍵で検証。下の「認証」）
-- あとの段（ルートを足すだけでよい形にしてある）: 検出画像（`/api/candidates/{id}/image`）→ チャット（`/api/chat`）→ 切り替え
+- 検出画像: `GET /api/candidates/{id}/image`（写真タイルの切り出しと輪郭の描画。`internal/imaging`。Python の Pillow と構造が同じで、画素は平均絶対差 1.07 ほど。`difftest/image.sh` が確かめる）
+- あとの段（ルートを足すだけでよい形にしてある）: チャット（`/api/chat`）→ 切り替え
 - 作らない: `/api/docs`・OpenAPI（契約は `docs/spec-prototype.md` §4.4 と `contract/` が持つ）
 
 振る舞いの正本は `backend/app/`・`backend/tests/`・`docs/spec-prototype.md`。JSON のキー・型・並び順・数の書式（Python の `100.0`・`1e-05`）・検証エラーの文言・307 の Location・405 の本文まで、Python の API と**バイト列が同じ**になるように作ってある（`difftest/` が確かめる）。
@@ -19,12 +20,13 @@ TownScan の API を、Python（FastAPI。`backend/app`）から Go へ置き換
 | `internal/httpx` | ルーター（Starlette と同じ 405・307・404）・クエリの読み方（`parse_qsl` と同じ）・Pydantic と同じ検証・ミドルウェア（アクセスログ・panic の回復・nosniff・本文の上限） |
 | `internal/pyjson` | Python の `json.dumps` と同じ書式（`float` の repr・jsonb の書き直し） |
 | `internal/auth` | `GET /api/me` の JWT の検証: ES256 だけ・JWKS の取得と保持（600 秒）・iss / aud / exp / nbf / iat / sub の規則・`email` / `name` / `picture` の整形・`Authorization: Bearer` の読み方 |
+| `internal/imaging` | 検出画像: 候補の外周の緯度経度 → 写真タイル（`TILES_DIR`）の切り出し・拡縮（CatmullRom）・輪郭（縁取りと実線・破線）の描画 → PNG。入力の上限（正方形・一辺 1024 以下・8 MB 以下・外周 1 万頂点以下）と、`os.Root` による置き場の閉じ込め、同時に作る画像は 8 枚まで |
 | `internal/store` | pgx の接続プール・問い合わせ・整形・スキーマの適用（`sql/` は `backend/db/` の写し。一致をテストで確かめる） |
 | `internal/handlers` | 読み取りのハンドラー（DB は `Reader` インターフェース。テストは偽の実装） |
 | `internal/testdb` | DB のテストが、テストごとに新しいデータベースを作る |
-| `difftest/` | Python の API との差分検査（標準ライブラリだけの Python。`run.sh` が全部用意する） |
+| `difftest/` | Python の API との差分検査（標準ライブラリだけの Python。`run.sh` が JSON の差分、`image.sh` が検出画像の差分を、全部用意して流す） |
 
-依存は標準ライブラリと `github.com/jackc/pgx/v5`（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync・x/text）と、JWT の検証の `github.com/golang-jwt/jwt/v5`（v5.3.1。ES256 の署名とクレームの検査だけに使う。鍵の取得・保持・JWK の読み取りは自前）。
+依存は標準ライブラリと `github.com/jackc/pgx/v5`（推移的に pgpassfile・pgservicefile・puddle/v2・x/sync・x/text）と、JWT の検証の `github.com/golang-jwt/jwt/v5`（v5.3.1。ES256 の署名とクレームの検査だけに使う。鍵の取得・保持・JWK の読み取りは自前）と、検出画像の拡縮の `golang.org/x/image`（v0.46.0。`draw` の CatmullRom だけ）。
 
 ## 認証（`GET /api/me`）
 

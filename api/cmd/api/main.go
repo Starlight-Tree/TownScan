@@ -2,7 +2,7 @@
 //
 // 決定: docs/decisions/0005-api-in-go.md（API は Go、解析は Python）。振る舞いの正本は backend/app/ と docs/spec-prototype.md §4.4。
 // いまあるのは読み取りのエンドポイント（/api/health・/api/areas・/api/candidates・/api/candidates.geojson・/api/candidates/{id}・/api/metrics）と、
-// 認証（/api/me。internal/auth）。検出画像・チャットは、あとの段で internal/handlers に足す。
+// 検出画像（/api/candidates/{id}/image。internal/imaging）、認証（/api/me。internal/auth）。チャットは、あとの段で internal/handlers に足す。
 //
 // 使い方:
 //
@@ -125,6 +125,7 @@ func buildHandler(cfg config.Config, st handlers.Reader, logf func(string, ...an
 		Auth:        newAuthenticator(cfg, logf),
 		LLMProvider: cfg.LLMProvider,
 		GeminiModel: cfg.GeminiModel,
+		TilesDir:    cfg.TilesDir,
 		Logf:        logf,
 	})
 	return httpx.Chain(router,

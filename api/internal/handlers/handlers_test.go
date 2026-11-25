@@ -507,8 +507,8 @@ func TestOnlyGetIsAllowed(t *testing.T) {
 	if rec.Code != 404 || rec.Body.String() != `{"error":{"code":"not_found","message":"見つかりません"}}` {
 		t.Errorf("%d %s", rec.Code, rec.Body.String())
 	}
-	// 画像・チャットは、あとの段（まだ無い）。docs・openapi は作らない
-	for _, path := range []string{"/api/chat", "/api/candidates/c-1-2-3/image", "/api/docs", "/api/openapi.json"} {
+	// チャットは、あとの段（まだ無い）。docs・openapi は作らない
+	for _, path := range []string{"/api/chat", "/api/docs", "/api/openapi.json"} {
 		if rec := tt.get(path); rec.Code != 404 {
 			t.Errorf("%s: %d", path, rec.Code)
 		}
