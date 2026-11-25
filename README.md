@@ -12,7 +12,7 @@ A chat app that finds candidates for new buildings in central Kumamoto City from
 
 ## Features
 
-- **Chat that cites its tools.** Counts, areas and coordinates come only from tool results, never from the model's text. Out-of-scope questions are declined. A mock model answers by default; Gemini is optional.
+- **Chat that cites its tools.** Counts, areas and coordinates come only from tool results, never from the model's text. Out-of-scope questions are declined. Gemini answers by default (an API key is needed); a rule-based mock model is available for testing.
 - **Three classes of candidates.** A 2023 building outline missing from the 2018 building data is checked against the 2018 photo: `confirmed_new`, `existing_omission` or `uncertain`.
 - **Map and photo comparison.** Candidates on GSI tiles, and the 2018 and 2023 crops of one building side by side.
 - **An accuracy page that shows its limits.** Held-out object F1 is about 0.16; recall for new buildings is "not measured".
@@ -32,7 +32,7 @@ flowchart LR
     B -->|"map tiles"| G["GSI tile server"]
 ```
 
-A question goes through the API's chat: a rule-based mock model (Gemini is optional) picks a tool (counts, comparison, list, detection image), and the answer is built from the tool's result. A number check replaces any answer that contains a figure that is not in that result.
+A question goes through the API's chat: Gemini (or the rule-based mock model, for testing) picks a tool (counts, comparison, list, detection image), and the answer is built from the tool's result. A number check replaces any answer that contains a figure that is not in that result.
 
 `compose.yaml` runs the Go API. Gemini (`LLM_PROVIDER=gemini`) is supported too. The API is checked by the contract tests (`contract/`). Loading data is done in Python (`docker compose run --rm loader python -m pipeline.load …`).
 

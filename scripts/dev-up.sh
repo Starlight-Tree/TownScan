@@ -4,6 +4,7 @@
 #   --no-web       db と api だけ起動する（frontend がまだ無いとき・API だけ確かめたいとき）
 #   WEB_BUILD=host    （既定）frontend をホストの Node 24 でビルドしてから、できた .next/standalone を載せて web を作る
 #   WEB_BUILD=docker  web のイメージの中でビルドする（Docker VM に空きメモリーがあるとき・CI 用）
+#   LLM_PROVIDER=mock  返答のモデルを模擬にする（既定は gemini。GEMINI_API_KEY が要る。開発中の検証のときだけ使い、終わったら付けずに流して戻す）
 # やること: .env を作る（無ければ。乱数のパスワード。値は表示しない）→ frontend をビルド → docker compose up -d --build
 #          → healthy を待つ → 実データがあれば DB へ読み込む → URL を表示。
 # ログイン（Google）: .env に BETTER_AUTH_SECRET が無いときだけ、1 回だけ足す（乱数。値は表示しない）。GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET は、あなたが .env に書く（このスクリプトは作らない・読まない・表示しない。Infisical を使うときは、下の「秘密の置き場」の注記のとおり、BETTER_AUTH_SECRET も含めて Infisical が持つ）。
@@ -31,7 +32,7 @@ NO_WEB=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-web) NO_WEB=1 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) die "不明な引数: $1（使い方: scripts/dev-up.sh [--no-web]）" ;;
   esac
   shift
@@ -148,7 +149,7 @@ for svc in "${SERVICES[@]}"; do
       unhealthy)
         docker compose logs --tail 30 "$svc" >&2 || true
         if [ "$svc" = api ]; then
-          echo "ヒント: ログに「設定の誤り」が出ているときは、LLM_PROVIDER=gemini なのに GEMINI_API_KEY が空、などです（値は表示されません）。" >&2
+          echo "ヒント: ログに「設定の誤り」が出ているときは、既定の LLM（gemini）なのに GEMINI_API_KEY が空、などです（値は表示されません）。キーを登録する（scripts/login-secrets.sh）か、検証のあいだだけ LLM_PROVIDER=mock scripts/dev-up.sh で模擬にしてください。" >&2
         fi
         # パスワードの食い違い（パスワードを作り直した・変えた）は api のログには出ない。db のログで見分けて、直し方を出す
         db_log="$(docker compose logs --tail 50 db 2>&1 || true)"
