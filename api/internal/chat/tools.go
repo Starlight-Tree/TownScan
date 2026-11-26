@@ -428,7 +428,8 @@ func compareAreas(_ context.Context, tc *ToolContext, args Args) (Result, error)
 	}, nil
 }
 
-// pickCandidate は、写真・地図の対象の候補。candidate_id があればそれ。無ければ、地区・分類の条件で面積が最大のもの。
+// pickCandidate は、写真の対象の候補。candidate_id があればそれ。無ければ、地区・分類の条件で面積が最大のもの。
+// 分類の指定が無ければ、全分類で最大（言葉どおりに選ぶ。誤検出が出ることもある。ADR 0013）。
 func pickCandidate(ctx context.Context, tc *ToolContext, args Args) (*store.Candidate, error) {
 	if args.CandidateID != "" {
 		cand, err := tc.Data.GetCandidate(ctx, tc.Run.RunID, args.CandidateID)
@@ -448,24 +449,17 @@ func pickCandidate(ctx context.Context, tc *ToolContext, args Args) (*store.Cand
 	if err != nil {
 		return nil, err
 	}
-	// 分類の指定が無いときは、主役の「2018 年は未検出」を先に探し、無ければ全分類から選ぶ
-	tries := []string{cls}
-	if cls == "" {
-		tries = []string{"confirmed_new", ""}
+	_, items, err := tc.Data.ListCandidates(ctx, tc.Run.RunID, store.Filter{AreaIDs: ids, Class: cls}, store.SortAreaDesc, 1, 0)
+	if err != nil {
+		return nil, err
 	}
-	for _, c := range tries {
-		_, items, err := tc.Data.ListCandidates(ctx, tc.Run.RunID, store.Filter{AreaIDs: ids, Class: c}, store.SortAreaDesc, 1, 0)
+	if len(items) > 0 {
+		cand, err := tc.Data.GetCandidate(ctx, tc.Run.RunID, items[0].ID)
 		if err != nil {
 			return nil, err
 		}
-		if len(items) > 0 {
-			cand, err := tc.Data.GetCandidate(ctx, tc.Run.RunID, items[0].ID)
-			if err != nil {
-				return nil, err
-			}
-			if cand != nil {
-				return cand, nil
-			}
+		if cand != nil {
+			return cand, nil
 		}
 	}
 	return nil, toolErr("no_data", "該当する候補がありません。")

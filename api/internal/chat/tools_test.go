@@ -337,17 +337,20 @@ func TestShowCandidate(t *testing.T) {
 	pick := func(args Args) string {
 		return callTool(t, f, "show_candidate", args).(DetectionImageResult).CandidateID
 	}
-	// 指定が無ければ、条件に合う最大の候補。分類の指定が無いときは、新規出現を先に探す
+	// 指定が無ければ、条件に合う最大の候補。分類の指定が無ければ、全分類で最大
 	if got := pick(Args{}); got != "c-226250-105759-1" {
 		t.Errorf("全体の最大 = %s", got)
 	}
-	if got := pick(Args{AreaIDs: []string{a1}}); got != "c-226249-105759-2" { // 合成町の新規出現（uncertain の方が大きくても）
+	if got := pick(Args{AreaIDs: []string{a1}}); got != "c-226249-105759-1" { // 合成町は、新規出現より大きい uncertain
+		t.Errorf("合成町の最大 = %s", got)
+	}
+	if got := pick(Args{AreaIDs: []string{a1}, Cls: "confirmed_new"}); got != "c-226249-105759-2" {
 		t.Errorf("合成町の新規出現 = %s", got)
 	}
 	if got := pick(Args{AreaIDs: []string{a3}, Cls: "existing_omission"}); got != "c-226249-105760-1" {
 		t.Errorf("仮想町の描き漏れ = %s", got)
 	}
-	// 新規出現が無い地区は、全分類から最大のものを選ぶ
+	// 新規出現が無い地区でも、全分類で最大
 	f2 := newFakeData()
 	f2.cands = f2.cands[:0]
 	f2.cands = append(f2.cands, candidate("c-226249-105760-1", a3, "仮想町", "existing_omission", 188.9), candidate("c-226249-105760-2", a3, "仮想町", "uncertain", 100.8))
