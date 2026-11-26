@@ -24,6 +24,7 @@
 改訂 2026-11-26（21）: 精度 1 件だけの回答の本文は、実 LLM の文を使わず、コードが組み立てる（§4.5。[ADR 0013](decisions/0013-one-view-per-answer.md) の追記）。
 改訂 2026-11-27（22）: 新築の再現率は「未測定」にする。理由の言い方を「正解になる新築のデータが無い」に改めた（[ADR 0014](decisions/0014-new-building-recall-unmeasured.md)）。
 改訂 2026-11-27（23）: **対象を熊本からフランス（パリ南西の近郊の 12 地区）に変えた**（ユーザー指示 2026-11-27・実画面は「OK」。[ADR 0015](decisions/0015-move-to-france.md)）。写真は 2014 年と 2024 年の IGN の航空写真。差し引く建物データは使わず、前の写真でも検出した建物は候補にしない（画面の分類は「2014 年は未検出」「未判定」の 2 つ）。倍率と閾値は固定で、精度は未測定。§1・§3・§4・§5・§6・§7・§8 の該当箇所を直した。**これより前の改訂の記録（熊本・2018／2023 年）は、そのまま残す。**
+改訂 2026-11-27（24）: **熊本向けのデータと処理を消した**（ユーザー指示 2026-11-27。[ADR 0015](decisions/0015-move-to-france.md) の追記）。評価の正解の建物データの入力を、基盤地図情報の XML から GeoJSON（`--reference`）に替えた。地理院の逆ジオコーダの読み取りと、試作スクリプト（`scripts/spike/`）を消した。§4.1・§6 を直した。API・DB の形は変えない。
 位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）を、薄く一通り通す。GEE 層（P5）・パネル（P6）・公開（P7）は対象外。
 
 ## 1. 何ができれば「たたき台」か
@@ -265,10 +266,10 @@ TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`fro
 ```
 data/townscan/
   tiles/{year}/{x}_{y}.png            写真タイル 256×256 RGB（z18。IGN の公開タイル配信の BD ORTHO（2014 年・2024 年）。Colab が取得したものを持ち帰る）
-  run1/colab/                         Colab の出力（メインが置く）
+  fr1/colab/                          Colab の出力（メインが置く。fr1 は run のフォルダ名）
     meta.json                         モデル・版・正規化・タイル一覧・取得結果
     prob_{year}_{x}_{y}_s{100|150|200}.npy   建物の確率 float16 (H,W)。H=W=256×倍率（1.0/1.5/2.0 倍に双三次で拡大して推論）
-  run1/out/                           後処理の出力（pipeline が作る。backend のローダーが読む）
+  fr1/out/                            後処理の出力（pipeline が作る。backend のローダーが読む）
     run.json                          {run_id, kind:"real"|"synthetic", created, model, params, tiles:[...], notes}
     areas.json                        [{id, z, x, y, bbox:[w,s,e,n], centroid:[lon,lat], name, ward, municipality, name_source}]
     buildings_2014.geojson / buildings_2024.geojson   建物ポリゴン（lon/lat）。properties: area_id, area_m2, prob_mean
@@ -434,9 +435,9 @@ ToolResult =
 
 **フランス版は未測定**（2026-11-27）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は、写真に重ねた図を目で見て選んだ、検証していない値。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、実装はこのあと。
 
-以下は、正解の建物データがあるとき（`--fixed` を付けないとき）の評価と `eval.json` の形（熊本で使った参照の記録）。
+以下は、正解の建物データがあるとき（`--fixed` を付けないとき）の評価と `eval.json` の形。
 
-- 参照: `data/kiban/kmm_20181001`（基盤地図情報 BldA 2018-10 版。解析の読み方は `scripts/spike/kiban/loader_only.py`）。対象は 2018 年の写真 12 枚。
+- 参照: `--reference` で渡す GeoJSON（FeatureCollection。座標は経度・緯度。地物 1 つが建物 1 棟で、MultiPolygon は最大の面を使う。使えない地物は理由ごとに数えて飛ばし、解析する範囲に 1 棟も無ければエラー。読み込みは `pipeline/reference.py`）。既定の置き場は持たない。対象は 2014 年の写真。
 - 指標: 画素 IoU・適合率・再現率・F1、物体単位 F1（IoU ≥ 0.5 の 1 対 1 対応）。
 - **縁の除外は、参照と予測で対称にする。**
   1. タイルの縁に接する物体は、参照・予測の両方から外す（切れた建物の不利を避けるため。参照 = 建物のポリゴンがタイルの縁の線と交わる、予測 = 連結成分が配列の縁に接する）。
@@ -447,12 +448,10 @@ ToolResult =
 - `eval.json`: `{reference, split:{tune:[area_id], holdout:[area_id]}, sweep:[{scale,threshold,tune_object_f1,...}], chosen:{scale,threshold,selected_by}, holdout:{pixel:{...}, object:{...}}, tune:{...}, overall:{...}, per_area:[...], excluded_edge_objects:{reference,prediction}, excluded_edge_by_split:{...}, reference_detail:{...}, protocol:{year,...}, new_building_recall:null, notes:[...]}`。`overall` は 12 地区の合計の指標（`tune`・`holdout` と同じ形）、`excluded_edge_by_split` は縁の除外の数を調整用・評価用・全体に分けたもの、`protocol` は評価の取り決め（評価に使った写真の年 `year`、縁の除外の下限 `edge_overlap_min` など）、`reference_detail` は参照の素性。`new_building_recall` は、正解になる新築のデータが無いので **null**（UI は「未測定」と表示）。
 - **任意項目**（追加のみ。既存の項目の形は変えない。読む側は、知らない項目を無視する）:
   - `excluded_edge_detail`: `{overall|tune|holdout: {reference:{touching_edge, overlapping_excluded_prediction}, prediction:{touching_edge, overlapping_excluded_reference}}}`。`excluded_edge_objects`・`excluded_edge_by_split` の内訳（足すと一致する）。
-  - `year_compare`: 同じ参照・同じ設定（調整用で選んだ倍率・閾値）で、もう一方の年の写真の抽出を測った指標。`{selected_on_year:2018, compare_year:2023, setting:{scale,threshold}, by_year:{"2018":{tune,holdout,overall}, "2023":{tune,holdout,overall}}}`（各 `tune`・`holdout`・`overall` は `{pixel:{...}, object:{...}}`）。選択には使わない。評価の年 `protocol.year` は 2018 のまま、比べる年を `protocol.compare_year` に書く。
-  - `existing_absent_in_2018`: 基盤地図情報にある既存の建物（面積 20 m² 以上・縁に接しない）のうち、2018 年の抽出が「何も見ていない」（§5 の `confirmed_new` の 2018 側の条件。`diff` の関数と `DiffParams` をそのまま使う）棟数と割合 `absent`・`absent_share`、`ov_2018 ≥ 0.5` の棟数と割合 `present`・`present_share`。`{setting, params, overall|tune|holdout:{n_buildings, absent, absent_share, present, present_share}}`。**正解データの代わりにはならない**（absent には、モデルの見逃しと、写真の時点で取り壊し済みの参照の建物が混ざり、分けられない）。
-  - `reference_detail.vintage`: 読み込んだ建物の属性の集計 `{gml_id_prefix, lf_span_from, dev_date: {値: 棟数}}`。`protocol.edge_overlap_min`: 縁の除外の重なりの下限（0.5）。
-- `notes` には、**参照の時期**を、事実と推定を分けて書く。
-  - 事実（読み込んだデータの集計。`reference_detail.vintage` から作る）: 読み込んだ建物は全棟が gml:id 接頭辞 K17・lfSpanFr 2018-10-01・devDate 2018-10-02 で、「2018-10」は配布の版の日付にすぎず、建物ごとの日付の違いは無い。
-  - 推定（独立の確認はしていない）: [ADR 0001](decisions/0001-data-candidates.md) は、この地域の建物データは 2017-10 の更新のあと実質凍結、2018 年の熊本の写真は 2018 年 12 月の簡易空中写真と記す。これが正しければ、参照は写真より古い。写真にあって参照に無い建物は予測の FP に、参照に残る取り壊し済みの建物は FN に入る。**物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値**である。
+  - `year_compare`: 同じ参照・同じ設定（調整用で選んだ倍率・閾値）で、もう一方の年の写真の抽出を測った指標。`{selected_on_year:2014, compare_year:2024, setting:{scale,threshold}, by_year:{"2014":{tune,holdout,overall}, "2024":{tune,holdout,overall}}}`（各 `tune`・`holdout`・`overall` は `{pixel:{...}, object:{...}}`）。選択には使わない。評価の年 `protocol.year` は 2014 のまま、比べる年を `protocol.compare_year` に書く。
+  - `existing_absent_in_2014`: 正解の建物データにある既存の建物（面積 20 m² 以上・縁に接しない）のうち、2014 年の抽出が「何も見ていない」（§5 の `confirmed_new` の 2014 側の条件。`diff` の関数と `DiffParams` をそのまま使う）棟数と割合 `absent`・`absent_share`、`ov_2014 ≥ 0.5` の棟数と割合 `present`・`present_share`。`{setting, params, overall|tune|holdout:{n_buildings, absent, absent_share, present, present_share}}`。**正解データの代わりにはならない**（absent には、モデルの見逃しと、写真の時点で取り壊し済みの参照の建物が混ざり、分けられない）。
+  - `reference_detail`: `{name, files, buildings_loaded_in_range, photo_year}`。`protocol.edge_overlap_min`: 縁の除外の重なりの下限（0.5）。
+- `notes` には、**参照の時期**を書く。参照がいつの測量・写真に基づくかは、このパイプラインでは確かめていないと書く。推定として、参照が写真より古ければ、写真にあって参照に無い建物は予測の FP に、参照に残る取り壊し済みの建物は FN に入るので、**物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値**だと書く。
 
 ## 7. UI（`frontend/`）
 

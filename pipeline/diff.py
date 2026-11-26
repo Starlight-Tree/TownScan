@@ -1,6 +1,7 @@
 """2 時点の差分と 3 分類（仕様 §5）。
 
-入口: 2024 年の建物の塊 c のうち、基盤地図情報（2018-10 版）に載っていないもの（ov_kiban < kiban_ov_max）。
+入口: 2024 年の建物の塊 c のうち、正解の建物データに載っていないもの（ov_kiban < kiban_ov_max。建物データを使わないときは全部）。
+  ov_kiban・kiban_ov_max・in_kiban の kiban は以前の参照データの名前の名残。DB・API・run.json の項目名なので変えていない。
   面積が min_area_m2 未満は捨てる。次に、タイルの縁に接するものは uncertain（reason=edge）。
   それ以外は 2014 年の確率で確かめる:
     existing_omission : ov_2014 >= omission_ov_2014_min（旧写真に既にある。建物データの描き漏れ。モデルが両年で同じ誤検出をした場合も入る）

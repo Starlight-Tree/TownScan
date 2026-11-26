@@ -1,11 +1,13 @@
-"""地区名: 地理院の逆ジオコーダの応答 → 地区名・区名。
+"""地区名: IGN の逆ジオコーダの応答 → 地区名・市町村名。
 
 純粋な関数（build_area_name）と、取得用の関数（fetch_reverse_geocode・fetch_all）に分ける。
 **取得は外部通信なので、メインが承認の範囲で実行する。このモジュールのテスト・後処理は通信しない。**
-応答の形式: {"results": {"muniCd": "43101", "lv01Nm": "水前寺"}}。想定と違う応答は、例外を投げず name を None にする。
-外部 API の応答は信用しない: 名前が長すぎる・`<>&"'` や制御文字を含むときは取得できなかったものとして扱う（画面側が HTML として解釈しても注入にならないように）。
+応答の形式（GeoJSON）: {"features": [{"properties": {"street": "...", "citycode": "92050", "city": "Nanterre"}}]}。
+想定と違う応答は、例外を投げず name を None にする。
+外部 API の応答は信用しない: 名前が長すぎる・`<>&"` や制御文字を含むときは取得できなかったものとして扱う（画面側が HTML として解釈しても注入にならないように）。
+フランス語の通り名の ' は、画面で安全な ’ に置き換える。
 画面は name・ward を必ず文字列として使うので、後処理（run_postprocess）は area_fields で、取れなかった地区に代わりの名前を入れる。
-取得の例: python -m pipeline.geocode --run-dir data/townscan/run1   → <run-dir>/geocode.json（{area_id: 応答}）
+取得の例: python -m pipeline.geocode --run-dir data/townscan/fr1   → <run-dir>/geocode.json（{area_id: 応答}）
 """
 
 from __future__ import annotations
@@ -22,17 +24,20 @@ from collections.abc import Callable
 
 from . import tilemath
 
-ENDPOINT = "https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress"
+ENDPOINT = "https://data.geopf.fr/geocodage/reverse"
 USER_AGENT = "townscan-prototype/0.1 (personal learning project)"
-NAME_SOURCE = "gsi_reverse_geocoder"
+NAME_SOURCE = "ign_reverse_geocoder"
 
-MUNICIPALITY = "熊本市"
-WARDS = {"43101": "中央区", "43102": "東区", "43103": "西区", "43104": "南区", "43105": "北区"}
-_BLANK_NAMES = {"", "-", "－", "ー", "―", "null", "None"}
+# 県 92 の選んだ地区の市町村（INSEE コード → カタカナ）。無いコードは、応答の市町村名をそのまま使う
+COMMUNES_JA = {
+    "92019": "シャトネ・マラブリー", "92020": "シャティヨン", "92023": "クラマール", "92032": "フォントネー・オ・ローズ",
+    "92048": "ムードン", "92050": "ナンテール", "92060": "ル・プレシ・ロバンソン", "92063": "リュエイユ・マルメゾン",
+}
+DEPARTMENT = "オー・ド・セーヌ県"
 
-MAX_NAME_LEN = 40  # 熊本市の町丁目名は十数文字までに収まる。それを大きく超えるものは応答の異常として捨てる
+MAX_NAME_LEN = 40  # 通り名・市町村名として長すぎるものは、応答の異常として捨てる
 _UNSAFE_CHARS = frozenset("<>&\"'")
-FALLBACK_SOURCE = "fallback"  # name_source: name は地理院の応答ではなく、地区 id から作った代わりの名前
+FALLBACK_SOURCE = "fallback"  # name_source: name は逆ジオコーダの応答ではなく、地区 id から作った代わりの名前
 FALLBACK_WARD = "区不明"
 
 
@@ -54,68 +59,38 @@ def _is_safe_name(name: str) -> bool:
     return True
 
 
-IGN_ENDPOINT = "https://data.geopf.fr/geocodage/reverse"
-IGN_NAME_SOURCE = "ign_reverse_geocoder"
-# 県 92 の選んだ地区の市町村（INSEE コード → カタカナ）。無いコードは、応答の市町村名をそのまま使う
-COMMUNES_JA = {
-    "92019": "シャトネ・マラブリー", "92020": "シャティヨン", "92023": "クラマール", "92032": "フォントネー・オ・ローズ",
-    "92048": "ムードン", "92050": "ナンテール", "92060": "ル・プレシ・ロバンソン", "92063": "リュエイユ・マルメゾン",
-}
-IGN_DEPARTMENT = "オー・ド・セーヌ県"
-
-
-def build_area_name_ign(response) -> dict:
-    """IGN の逆ジオコーダの応答（GeoJSON）→ {name, ward, municipality, name_source}。name は通り名、ward は市町村。"""
-    feats = response.get("features") if isinstance(response, dict) else None
-    props = feats[0].get("properties") if isinstance(feats, list) and feats and isinstance(feats[0], dict) else None
-    if not isinstance(props, dict):
-        return {"name": None, "ward": None, "municipality": None, "name_source": None}
-
-    def safe(value):
-        s = _text(value)
-        if s is None:
-            return None
-        s = s.replace("'", "’")  # フランス語の通り名の ' は、画面で安全な ’ にする
-        s = s[:1].upper() + s[1:]
-        return s if _is_safe_name(s) else None
-
-    name = safe(props.get("street") or props.get("name"))
-    ward = COMMUNES_JA.get(_text(props.get("citycode")) or "") or safe(props.get("city"))
-    return {
-        "name": name,
-        "ward": ward,
-        "municipality": IGN_DEPARTMENT if (_text(props.get("citycode")) or "").startswith("92") else None,
-        "name_source": IGN_NAME_SOURCE if (name or ward) else None,
-    }
+def _safe_name(value) -> str | None:
+    s = _text(value)
+    if s is None:
+        return None
+    s = s.replace("'", "’")
+    s = s[:1].upper() + s[1:]
+    return s if _is_safe_name(s) else None
 
 
 def build_area_name(response) -> dict:
     """逆ジオコーダの応答 → {name, ward, municipality, name_source}。どれも分からなければ None。
 
-    name は町丁目名（lv01Nm）、ward は muniCd（43101〜43105）から。名前も区も取れなければ name_source も None。
-    名前が空・長すぎる・安全でない文字を含むときは name を None にする（区は固定の表から引くので、そのまま使う）。
+    name は通り名、ward は市町村、municipality は県（県 92 の応答のときだけ）。名前も市町村も取れなければ name_source も None。
+    名前が空・長すぎる・安全でない文字を含むときは name を None にする（表にある市町村は、固定の表から引くので残る）。
     """
-    if isinstance(response, dict) and "features" in response:
-        return build_area_name_ign(response)
-    results = response.get("results") if isinstance(response, dict) else None
-    if not isinstance(results, dict):
+    feats = response.get("features") if isinstance(response, dict) else None
+    props = feats[0].get("properties") if isinstance(feats, list) and feats and isinstance(feats[0], dict) else None
+    if not isinstance(props, dict):
         return {"name": None, "ward": None, "municipality": None, "name_source": None}
-    name = _text(results.get("lv01Nm"))
-    if name in _BLANK_NAMES or (name is not None and not _is_safe_name(name)):
-        name = None
-    muni_cd = _text(results.get("muniCd"))
-    ward = WARDS.get(muni_cd) if muni_cd else None
-    municipality = MUNICIPALITY if ward else None
+    name = _safe_name(props.get("street") or props.get("name"))
+    code = _text(props.get("citycode")) or ""
+    ward = COMMUNES_JA.get(code) or _safe_name(props.get("city"))
     return {
         "name": name,
         "ward": ward,
-        "municipality": municipality,
+        "municipality": DEPARTMENT if code.startswith("92") else None,
         "name_source": NAME_SOURCE if (name or ward) else None,
     }
 
 
 def fallback_name(area_id: str) -> str:
-    """地区 id（z18-226274-105752）から作る代わりの名前（地区 226274-105752）。"""
+    """地区 id（z18-132739-90287）から作る代わりの名前（地区 132739-90287）。"""
     return "地区 " + re.sub(r"^z\d+-", "", area_id)
 
 
@@ -123,7 +98,7 @@ def area_fields(response, area_id: str) -> dict:
     """build_area_name に、取れなかった項目の代わりの値を入れたもの。name・ward は必ず空でない文字列になる。
 
     name が取れない: name = 「地区 {x}-{y}」・name_source = "fallback"。ward が取れない: ward = 「区不明」。
-    municipality は区が分かるときだけ入る（取れなければ None）。
+    municipality は県 92 の応答のときだけ入る（それ以外は None）。
     """
     info = build_area_name(response)
     if info["name"] is None:
@@ -135,7 +110,7 @@ def area_fields(response, area_id: str) -> dict:
 
 
 def reverse_geocode_url(lon: float, lat: float) -> str:
-    return ENDPOINT + "?" + urllib.parse.urlencode({"lat": f"{lat:.6f}", "lon": f"{lon:.6f}"})
+    return ENDPOINT + "?" + urllib.parse.urlencode({"lon": f"{lon:.6f}", "lat": f"{lat:.6f}", "limit": 1, "index": "address"})
 
 
 def fetch_reverse_geocode(lon: float, lat: float, *, timeout: float = 15.0, opener: Callable | None = None) -> dict:
@@ -171,7 +146,7 @@ def fetch_all(
         if a["id"] in got:
             continue
         if not first:
-            sleep(delay_s)  # 地理院への負荷を抑える
+            sleep(delay_s)  # 相手のサーバーへの負荷を抑える
         first = False
         lon, lat = a["centroid"]
         try:
@@ -187,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     from . import colabio
 
     ap = argparse.ArgumentParser(description="地区の中心点の逆ジオコーダ応答を取得して geocode.json に書く（外部通信）")
-    ap.add_argument("--run-dir", required=True, help="例: data/townscan/run1（colab/ と tiles.json がある場所）")
+    ap.add_argument("--run-dir", required=True, help="例: data/townscan/fr1（colab/ と tiles.json がある場所）")
     ap.add_argument("--delay", type=float, default=1.0, help="リクエストの間隔（秒）")
     args = ap.parse_args(argv)
     run_dir = Path(args.run_dir)

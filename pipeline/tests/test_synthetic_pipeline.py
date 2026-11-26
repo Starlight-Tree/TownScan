@@ -12,6 +12,14 @@ from pipeline import evaluate, geo, make_synthetic_run, run_postprocess, tilemat
 CREATED = "2026-01-01T00:00:00+00:00"
 
 
+def _ref(root):
+    return root / "reference" / make_synthetic_run.REFERENCE_FILE
+
+
+def _ign(street, citycode):
+    return {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"street": street, "citycode": citycode}}]}
+
+
 @pytest.fixture(scope="module")
 def synth(tmp_path_factory):
     root = tmp_path_factory.mktemp("synthetic")
@@ -41,6 +49,7 @@ def test_run_json_marks_synthetic_clearly(synth):
     assert p["scale"] in evaluate.DEFAULT_SCALES and p["threshold"] in evaluate.DEFAULT_THRESHOLDS
     assert p["diff"] == {"kiban_ov_max": 0.25, "min_area_m2": 20.0, "omission_ov_2014_min": 0.5, "new_ov_2014_max": 0.1, "new_p90_max": 0.2, "drop_present_before": False}
     assert p["diff_thresholds_status"] == "unverified_initial_values"
+    assert p["reference"]["file"] == "buildings.geojson" and p["reference"]["load"]["kept"] > 0
     assert run["tiles"] == [a["id"] for a in synth["load"]("areas.json")]  # 地区 id の配列
 
 
@@ -54,7 +63,7 @@ def test_areas_json(synth):
         assert (w, s, e, n) == pytest.approx(tilemath.tile_bbox_lonlat(a["z"], a["x"], a["y"]), abs=1e-7)
         assert w < a["centroid"][0] < e and s < a["centroid"][1] < n
         assert "合成" in a["name"] and a["name_source"] == "synthetic"
-    assert [a["ward"] for a in areas] == ["中央区", "東区"]
+    assert [a["ward"] for a in areas] == ["ナンテール", "シャトネ・マラブリー"]
 
 
 def _candidate_at(cands, center):
@@ -148,7 +157,7 @@ def test_eval_json_matches_contract(synth):
         assert {"iou", "precision", "recall", "f1"} <= set(part["pixel"]) and {"f1", "precision", "recall"} <= set(part["object"])
     run = synth["load"]("run.json")
     assert (e["chosen"]["scale"], e["chosen"]["threshold"]) == (run["params"]["scale"], run["params"]["threshold"])
-    assert isinstance(e["reference"], str) and "基盤地図情報" in e["reference"]
+    assert isinstance(e["reference"], str) and "合成データの建物" in e["reference"]
     assert isinstance(e["excluded_edge_objects"], dict) and all(isinstance(v, int) for v in e["excluded_edge_objects"].values())
     # 全体の物体数は、地区ごとの合計
     assert e["overall"]["object"]["n_ref"] == sum(a["n_ref"] for a in e["per_area"])
@@ -166,7 +175,7 @@ def test_eval_json_matches_contract(synth):
 
 
 def test_eval_json_optional_diagnostics(synth):
-    """仕様 §6 の任意項目: year_compare・existing_absent_in_2014・excluded_edge_detail・reference_detail.vintage。既存の項目と食い違わない。"""
+    """仕様 §6 の任意項目: year_compare・existing_absent_in_2014・excluded_edge_detail・reference_detail。既存の項目と食い違わない。"""
     e = synth["load"]("eval.json")
     # year_compare: 2014 年の側はトップレベルと同じ。評価の年（protocol.year）は 2014 のまま、比べる年を別に明示
     assert e["protocol"]["year"] == 2014 and e["protocol"]["compare_year"] == 2024
@@ -185,25 +194,11 @@ def test_eval_json_optional_diagnostics(synth):
     d = e["excluded_edge_detail"]["overall"]
     assert sum(d["reference"].values()) == e["excluded_edge_objects"]["reference"]
     assert sum(d["prediction"].values()) == e["excluded_edge_objects"]["prediction"]
-    # 参照の素性（読み込んだ建物の属性の集計）は、合成の XML の値から作る。実データ向けの ADR の引用は付かない
-    v = e["reference_detail"]["vintage"]
-    assert v["lf_span_from"] == {"2018-10-01": e["reference_detail"]["buildings_loaded_in_range"]}
-    assert any("参照の版の素性（事実" in n and "2018-10-01" in n for n in e["notes"])
-    assert not any("参照の時期（推定。独立の確認" in n for n in e["notes"])
+    # 参照の素性: 読み込んだファイルと棟数。いつのデータかは確かめていないと注記する
+    r = e["reference_detail"]
+    assert r["files"] == ["buildings.geojson"] and r["buildings_loaded_in_range"] > 0 and "合成" in r["name"]
+    assert any("いつの測量・写真に基づくかは" in n for n in e["notes"])
     assert any("参照の時期（推定）" in n and "FP" in n and "FN" in n for n in e["notes"])
-
-
-def test_reference_notes_separate_facts_from_estimates():
-    uniform = {"gml_id_prefix": {"K17": 74929}, "lf_span_from": {"2018-10-01": 74929}, "dev_date": {"2018-10-02": 74929}}
-    real = run_postprocess.reference_notes(uniform, 74929, "real")
-    assert len(real) == 2
-    assert "事実" in real[0] and "K17 が 74,929 棟" in real[0] and "2018-10-01 が 74,929 棟" in real[0] and "2018-10-02 が 74,929 棟" in real[0]
-    assert "建物ごとの日付の違いは無い" in real[0] and "配布の版の日付にすぎず" in real[0]
-    assert "推定" in real[1] and "独立の確認はしていない" in real[1] and "0001-data-candidates.md" in real[1]
-    assert len(run_postprocess.reference_notes(uniform, 74929, "synthetic")) == 1  # ADR の引用は実データだけ
-    mixed = {**uniform, "dev_date": {"2018-10-02": 3, "2019-01-05": 2, "2019-02-01": 2, "2019-03-01": 1, "2019-04-01": 1}}
-    text = run_postprocess.reference_notes(mixed, 9, "real")[0]
-    assert "ほか 2 種" in text and "建物ごとの日付の違いは無い" not in text and "値が複数ある" in text
 
 
 def test_synthetic_run_is_reproducible(synth, tmp_path):
@@ -215,7 +210,7 @@ def test_synthetic_run_is_reproducible(synth, tmp_path):
 
 def test_postprocess_can_be_rerun_on_existing_input(synth, tmp_path):
     out = tmp_path / "other_out"
-    summary = run_postprocess.run_postprocess(synth["root"], out_dir=out, created=CREATED, log=lambda m: None)
+    summary = run_postprocess.run_postprocess(synth["root"], reference_path=_ref(synth["root"]), out_dir=out, created=CREATED, log=lambda m: None)
     assert summary["candidates"] == 7 and (out / "run.json").is_file()
     assert (out / "candidates.geojson").read_text(encoding="utf-8") == (synth["out"] / "candidates.geojson").read_text(encoding="utf-8")
 
@@ -236,7 +231,7 @@ def _assert_fallback_names(areas):
 def test_fallback_names_without_geocode_json(synth, tmp_path):
     dst = _copy_input(synth, tmp_path)
     (dst / "run1" / "geocode.json").unlink()
-    run_postprocess.run_postprocess(dst, log=lambda m: None)
+    run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)
     areas = json.loads((dst / "run1" / "out" / "areas.json").read_text(encoding="utf-8"))
     assert len(areas) == 2
     _assert_fallback_names(areas)
@@ -248,7 +243,7 @@ def test_unexpected_geocode_responses_give_fallback_names(synth, tmp_path):
     dst = _copy_input(synth, tmp_path)
     ids = [t["id"] for t in json.loads((dst / "run1" / "colab" / "meta.json").read_text(encoding="utf-8"))["tiles"]]
     (dst / "run1" / "geocode.json").write_text(json.dumps({ids[0]: {"unexpected": 1}, ids[1]: [1, 2]}), encoding="utf-8")
-    run_postprocess.run_postprocess(dst, log=lambda m: None)
+    run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)
     _assert_fallback_names(json.loads((dst / "run1" / "out" / "areas.json").read_text(encoding="utf-8")))
 
 
@@ -258,9 +253,9 @@ def test_partial_geocode_json_only_replaces_the_missing_area(synth, tmp_path):
     geo_path = dst / "run1" / "geocode.json"
     full = json.loads(geo_path.read_text(encoding="utf-8"))
     geo_path.write_text(json.dumps({ids[0]: full[ids[0]]}), encoding="utf-8")  # 2 枚目の応答が欠けた
-    run_postprocess.run_postprocess(dst, log=lambda m: None)
+    run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)
     first, second = json.loads((dst / "run1" / "out" / "areas.json").read_text(encoding="utf-8"))
-    assert first["name_source"] == "synthetic" and "合成" in first["name"] and first["ward"] == "中央区"
+    assert first["name_source"] == "synthetic" and "合成" in first["name"] and first["ward"] == "ナンテール"
     _assert_fallback_names([second])
 
 
@@ -269,52 +264,51 @@ def test_html_in_a_geocode_name_never_reaches_areas_json(synth, tmp_path):
     ids = [t["id"] for t in json.loads((dst / "run1" / "colab" / "meta.json").read_text(encoding="utf-8"))["tiles"]]
     evil = "<img src=x onerror=alert(document.domain)>"
     (dst / "run1" / "geocode.json").write_text(
-        json.dumps({ids[0]: {"results": {"muniCd": "43101", "lv01Nm": evil}}, ids[1]: {"results": {"muniCd": "43102", "lv01Nm": "a\nb" + "あ" * 100}}}),
+        json.dumps({ids[0]: _ign(evil, "92050"), ids[1]: _ign("a\nb" + "あ" * 100, "92019")}),
         encoding="utf-8",
     )
-    run_postprocess.run_postprocess(dst, log=lambda m: None)
+    run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)
     text = (dst / "run1" / "out" / "areas.json").read_text(encoding="utf-8")
     assert "<" not in text and "onerror" not in text
     first, second = json.loads(text)
-    assert first["name"] == f"地区 {first['x']}-{first['y']}" and first["ward"] == "中央区"  # 区は固定の表から取れるので残る
-    assert second["name"] == f"地区 {second['x']}-{second['y']}" and second["ward"] == "東区"
+    assert first["name"] == f"地区 {first['x']}-{first['y']}" and first["ward"] == "ナンテール"  # 市町村は固定の表から取れるので残る
+    assert second["name"] == f"地区 {second['x']}-{second['y']}" and second["ward"] == "シャトネ・マラブリー"
 
 
 def test_lone_surrogate_in_a_geocode_name_does_not_break_the_run(synth, tmp_path):
     dst = _copy_input(synth, tmp_path)
     ids = [t["id"] for t in json.loads((dst / "run1" / "colab" / "meta.json").read_text(encoding="utf-8"))["tiles"]]
     (dst / "run1" / "geocode.json").write_text(
-        json.dumps({ids[0]: {"results": {"muniCd": "43101", "lv01Nm": "a\ud800b"}}, ids[1]: {"results": {"muniCd": "43102", "lv01Nm": "水前寺"}}}),
+        json.dumps({ids[0]: _ign("a\ud800b", "92050"), ids[1]: _ign("Rue de la Paix", "92019")}),
         encoding="utf-8",
     )
-    run_postprocess.run_postprocess(dst, log=lambda m: None)  # UTF-8 で書けない文字が areas.json に届くと、ここで落ちる
+    run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)  # UTF-8 で書けない文字が areas.json に届くと、ここで落ちる
     first, second = json.loads((dst / "run1" / "out" / "areas.json").read_text(encoding="utf-8"))
-    assert first["name_source"] == "fallback" and second["name"] == "水前寺"
+    assert first["name_source"] == "fallback" and second["name"] == "Rue de la Paix"
 
 
-def test_kiban_default_depends_on_kind_not_on_folder_presence(synth, tmp_path, monkeypatch):
-    root = synth["root"]
-    assert run_postprocess.default_kiban_dir("synthetic", root) == root / "kiban"
-    assert run_postprocess.default_kiban_dir("real", root) == run_postprocess.DEFAULT_KIBAN_DIR
-    # 実データの run（kind=real）の置き場に kiban/ があっても、そちらへ静かに切り替わらない
-    dst = _copy_input(synth, tmp_path)
-    meta_path = dst / "run1" / "colab" / "meta.json"
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    meta["kind"] = "real"
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
-    assert (dst / "kiban").is_dir()
-    absent = tmp_path / "no_such_kiban"
-    monkeypatch.setattr(run_postprocess, "DEFAULT_KIBAN_DIR", absent)
-    with pytest.raises(FileNotFoundError, match="no_such_kiban"):
-        run_postprocess.run_postprocess(dst, log=lambda m: None)
-    # 明示すれば使える
-    run_postprocess.run_postprocess(dst, kiban_dir=dst / "kiban", log=lambda m: None)
-    assert json.loads((dst / "run1" / "out" / "run.json").read_text(encoding="utf-8"))["kind"] == "real"
+def test_without_fixed_values_the_reference_must_be_given(synth, tmp_path):
+    assert _ref(synth["root"]).is_file()  # 置き場にあっても、黙っては使わない
+    with pytest.raises(ValueError, match="--reference"):
+        run_postprocess.run_postprocess(synth["root"], out_dir=tmp_path / "o", log=lambda m: None)
+    assert not (tmp_path / "o").exists()
+
+
+def test_a_reference_that_covers_none_of_the_tiles_is_an_error(synth, tmp_path):
+    ring = [[2.28, 48.76], [2.2802, 48.76], [2.2802, 48.7602], [2.28, 48.76]]
+    far = tmp_path / "far.geojson"
+    far.write_text(
+        json.dumps({"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [ring]}}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="1 棟も無い"):
+        run_postprocess.run_postprocess(synth["root"], reference_path=far, out_dir=tmp_path / "o", log=lambda m: None)
+    assert not (tmp_path / "o").exists()
 
 
 def test_kind_conflict_is_refused(synth, tmp_path):
     with pytest.raises(ValueError, match="kind"):
-        run_postprocess.run_postprocess(synth["root"], kind="real", out_dir=tmp_path / "o", log=lambda m: None)
+        run_postprocess.run_postprocess(synth["root"], reference_path=_ref(synth["root"]), kind="real", out_dir=tmp_path / "o", log=lambda m: None)
     assert run_postprocess.resolve_kind({}, None) == "real"
     assert run_postprocess.resolve_kind({}, "synthetic") == "synthetic"
     assert run_postprocess.resolve_kind({"kind": "synthetic"}, "synthetic") == "synthetic"
@@ -335,7 +329,7 @@ def test_tile_with_incomplete_arrays_is_skipped_with_a_note(synth, tmp_path):
     (colab / f"prob_2024_{x_new}_{y0}_s150.npy").unlink()  # 3 枚目のタイルは、1 つ欠ける
     meta["tiles"].append({"z": 18, "x": x_new, "y": y0, "id": tilemath.area_id(18, x_new, y0)})
     (colab / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
-    run_postprocess.run_postprocess(dst, log=lambda m: None)
+    run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)
     out = dst / "run1" / "out"
     assert len(json.loads((out / "areas.json").read_text(encoding="utf-8"))) == 2  # 欠けたタイルは地区にならない
     assert tilemath.area_id(18, x_new, y0) in json.loads((out / "run.json").read_text(encoding="utf-8"))["notes"]
@@ -346,17 +340,19 @@ def test_fewer_than_two_usable_tiles_is_an_error(synth, tmp_path):
     dst = _copy_input(synth, tmp_path)
     next((dst / "run1" / "colab").glob("prob_2024_*_s150.npy")).unlink()
     with pytest.raises(RuntimeError):  # 2 枚のうち 1 枚が欠けると、調整用と評価用に分けられない
-        run_postprocess.run_postprocess(dst, log=lambda m: None)
+        run_postprocess.run_postprocess(dst, reference_path=_ref(dst), log=lambda m: None)
 
 
-def test_missing_kiban_folder_is_an_error(synth, tmp_path):
+def test_missing_reference_file_is_an_error(synth, tmp_path):
     with pytest.raises(FileNotFoundError):
-        run_postprocess.run_postprocess(synth["root"], kiban_dir=tmp_path / "none", out_dir=tmp_path / "o", log=lambda m: None)
+        run_postprocess.run_postprocess(synth["root"], reference_path=tmp_path / "none.geojson", out_dir=tmp_path / "o", log=lambda m: None)
 
 
 def test_cli_main_runs(synth, tmp_path, capsys):
     out = tmp_path / "cli_out"
-    code = run_postprocess.main(["--data-root", str(synth["root"]), "--out", str(out), "--created", CREATED, "--new-p90-max", "0.5"])
+    code = run_postprocess.main(
+        ["--data-root", str(synth["root"]), "--run", "run1", "--reference", str(_ref(synth["root"])), "--out", str(out), "--created", CREATED, "--new-p90-max", "0.5"]
+    )
     assert code == 0
     printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert printed["kind"] == "synthetic" and printed["candidates"] == 7

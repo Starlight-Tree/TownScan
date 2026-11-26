@@ -34,7 +34,7 @@ def _ign(props):
 
 def test_ign_reverse_geocode_gives_street_name_and_japanese_commune():
     got = geocode.build_area_name(_ign({"street": "rue de l'Église", "citycode": "92050", "city": "Nanterre"}))
-    assert got == {"name": "Rue de l’Église", "ward": "ナンテール", "municipality": "オー・ド・セーヌ県", "name_source": geocode.IGN_NAME_SOURCE}
+    assert got == {"name": "Rue de l’Église", "ward": "ナンテール", "municipality": "オー・ド・セーヌ県", "name_source": geocode.NAME_SOURCE}
     # 表に無い市町村は、応答の名前をそのまま使う。県 92 の外は、県の名前を付けない
     other = geocode.build_area_name(_ign({"name": "Avenue X", "citycode": "75056", "city": "Paris"}))
     assert (other["name"], other["ward"], other["municipality"]) == ("Avenue X", "Paris", None)
@@ -53,14 +53,14 @@ def test_ign_unsafe_street_name_is_dropped():
 def test_fixed_run_uses_no_reference_and_reports_unmeasured(tmp_path):
     make_synthetic_run.make_synthetic_run(tmp_path, created="2026-01-01T00:00:00+00:00")
     out = tmp_path / "fixed_out"
-    res = run_postprocess.run_postprocess(tmp_path, "run1", out_dir=out, fixed=(1.0, 0.5), kiban_dir=tmp_path / "no-such-dir", log=lambda _: None)
+    res = run_postprocess.run_postprocess(tmp_path, "run1", out_dir=out, fixed=(1.0, 0.5), reference_path=tmp_path / "no-such-file", log=lambda _: None)
     load = lambda name: json.loads((out / name).read_text(encoding="utf-8"))  # noqa: E731
     ev = load("eval.json")
     assert ev["reference"] is None and ev["new_building_recall"] is None
     assert not ({"holdout", "tune", "sweep", "split"} & set(ev))
     assert ev["chosen"] == {"scale": 1.0, "threshold": 0.5, "selected_by": "fixed"}
     run = load("run.json")
-    assert run["params"]["selected_on"] == "fixed" and run["params"]["kiban"] is None
+    assert run["params"]["selected_on"] == "fixed" and run["params"]["reference"] is None
     assert run["params"]["diff"]["drop_present_before"] is True
     classes = {f["properties"]["class"] for f in load("candidates.geojson")["features"]}
     assert classes and diff.CLASS_OMISSION not in classes

@@ -1,4 +1,4 @@
-"""建物抽出の評価（仕様 §6）。参照は基盤地図情報（2018-10 版）、予測は 2014 年の写真の確率。
+"""建物抽出の評価（仕様 §6）。参照は正解の建物データ（読み込みは reference.py）、予測は 2014 年の写真の確率。
 
 - 指標: 画素の IoU・適合率・再現率・F1、物体単位の F1（IoU >= 0.5 の 1 対 1 対応。IoU の大きい順に貪欲に結ぶ）。
 - タイルの縁に接する物体は、参照・予測の両方から外す（切れた建物の不利を避ける）。さらに、外した物体と自分の面積の半分以上が
@@ -194,7 +194,7 @@ def reference_vs_2014(
     min_blob_m2: float = vectorize.DEFAULT_MIN_BLOB_M2,
     simplify_m: float = vectorize.DEFAULT_SIMPLIFY_M,
 ) -> dict[str, int]:
-    """基盤地図情報にある既存の建物（面積 params.min_area_m2 以上・縁に接しない）を、差分の判定にそのままかける。
+    """正解の建物データにある既存の建物（面積 params.min_area_m2 以上・縁に接しない）を、差分の判定にそのままかける。
 
     2014 年の抽出が何も見ていない（confirmed_new の 2014 側の条件）棟数 absent と、半分以上覆う（existing_omission の条件）棟数 present。
     diff.classify に ov_kiban=0（建物データに載っていない塊とみなす）を渡すので、判定の式は差分と同じ。
@@ -400,18 +400,18 @@ def run_evaluation(
         "画素の指標では、外した物体の画素を、その物体の側の配列から除いた。外した数は excluded_edge_objects（縁に接する数と重なりで外した数の内訳は excluded_edge_detail）。",
         "倍率・閾値は調整用のタイルだけで選んだ（物体単位 F1 が最大。同点は画素 F1 → 倍率が小さい順 → 閾値が 0.5 に近い順）。評価用と全体は、選んだ値のままの結果。",
         "物体単位は IoU >= 0.5 の 1 対 1 対応（IoU の大きい順に貪欲に対応づける）。画素の指標は、予測の配列と同じ格子（256×倍率）で数えた。",
-        f"標本は {len(tiles)} 地区（z18 のタイル 1 枚ずつ。約 130 m 四方）だけ。熊本市全体の精度ではない。",
+        f"標本は {len(tiles)} 地区（z18 のタイル 1 枚ずつ）だけ。地域全体の精度ではない。",
         "新築の再現率は、正解になる新築のデータが無いので未測定（new_building_recall = null）。",
     ]
     if compare_year is not None:
         notes.append(
-            f"year_compare: 同じ参照（2018-10 版）・同じ設定（倍率 {chosen['scale']}・閾値 {chosen['threshold']}。{EVAL_YEAR} 年の調整用で選んだ値のまま）で、"
-            f"{compare_year} 年の写真の抽出も測った。参照は古いままなので、{compare_year} 年の写真にだけ写る建物（参照より後の新築）は誤検出に数えられる。"
+            f"year_compare: 同じ参照・同じ設定（倍率 {chosen['scale']}・閾値 {chosen['threshold']}。{EVAL_YEAR} 年の調整用で選んだ値のまま）で、"
+            f"{compare_year} 年の写真の抽出も測った。参照は同じものなので、{compare_year} 年の写真にだけ写る建物（参照より後の新築）は誤検出に数えられる。"
             f"{compare_year} 年の指標が {EVAL_YEAR} 年より低ければ、参照の古さと整合する。ただし、原因はこれだけでは分けられない"
             "（写真の撮影条件・解像度・季節・モデルの得意不得意も混ざる）。選択には使っていない。"
         )
     notes.append(
-        f"existing_absent_in_2014: 基盤地図情報にある既存の建物（面積 {diff_params.min_area_m2:g} m² 以上・縁に接しない）のうち、"
+        f"existing_absent_in_2014: 正解の建物データにある既存の建物（面積 {diff_params.min_area_m2:g} m² 以上・縁に接しない）のうち、"
         f"{EVAL_YEAR} 年の抽出が何も見ていない（差分の confirmed_new の {EVAL_YEAR} 年側の条件: ov_2014 <= {diff_params.new_ov_2014_max:g} かつ "
         f"prob_2014_p90 < {diff_params.new_p90_max:g}。diff の関数をそのまま使って判定）棟の数と割合（absent）、"
         f"ov_2014 >= {diff_params.omission_ov_2014_min:g}（{EVAL_YEAR} 年の抽出が半分以上を覆う）の棟の数と割合（present）。"

@@ -8,7 +8,7 @@ import pytest
 
 from pipeline import colabio, make_synthetic_run, run_postprocess
 
-KIBAN_REAL_NAME = "FG-GML-493040-BldA-20181001-0001.xml"
+REAL_REFERENCE_NAME = "reference_real.geojson"
 
 
 def snapshot(root):
@@ -18,7 +18,7 @@ def snapshot(root):
 
 @pytest.fixture
 def fake_real(tmp_path, monkeypatch):
-    """実データの置き場に見立てた場所（Colab の実出力・取得済みの geocode.json・基盤地図情報の写真タイル）。本物の data/townscan には触れない。"""
+    """実データの置き場に見立てた場所（Colab の実出力・取得済みの geocode.json・写真タイル）。本物の data/townscan には触れない。"""
     root = tmp_path / "townscan"
     colab = root / "run1" / "colab"
     colab.mkdir(parents=True)
@@ -31,7 +31,7 @@ def fake_real(tmp_path, monkeypatch):
         for x, y in ((226274, 105752), (226266, 105755)):
             for s in colabio.SCALES:
                 np.save(colabio.prob_path(colab, year, x, y, s), np.zeros((int(256 * s),) * 2, dtype=np.float16))
-    (root / "run1" / "geocode.json").write_text(json.dumps({"z18-226274-105752": {"results": {"muniCd": "43101", "lv01Nm": "実在の町"}}}), encoding="utf-8")
+    (root / "run1" / "geocode.json").write_text(json.dumps({"z18-226274-105752": {"features": [{"properties": {"street": "Rue réelle", "citycode": "92050"}}]}}), encoding="utf-8")
     monkeypatch.setattr(run_postprocess, "DEFAULT_DATA_ROOT", root)
     return root
 
@@ -49,7 +49,7 @@ def test_real_root_is_refused_even_with_dots_or_a_symlink(fake_real, tmp_path):
     for alias in (fake_real / "run1" / "..", link, tmp_path / "x" / ".." / "townscan"):
         with pytest.raises(make_synthetic_run.UnsafeOutputError):
             make_synthetic_run.make_synthetic_run(alias, postprocess=False)
-    assert snapshot(fake_real) == before and not (fake_real / "kiban").exists()
+    assert snapshot(fake_real) == before and not (fake_real / "reference").exists()
 
 
 def test_real_colab_output_is_not_replaced_even_in_a_subfolder_root(fake_real):
@@ -60,7 +60,7 @@ def test_real_colab_output_is_not_replaced_even_in_a_subfolder_root(fake_real):
     tiles_before = colabio.read_tiles(other / "run1" / "colab", other / "run1")
     with pytest.raises(make_synthetic_run.UnsafeOutputError, match="合成と確かめられない"):
         make_synthetic_run.make_synthetic_run(other, postprocess=False)
-    assert snapshot(other) == before  # 1 バイトも変わらない（meta.json・geocode.json・kiban/ を作らない）
+    assert snapshot(other) == before  # 1 バイトも変わらない（meta.json・geocode.json・reference/ を作らない）
     assert colabio.read_tiles(other / "run1" / "colab", other / "run1") == tiles_before
     assert colabio.read_meta(other / "run1" / "colab").get("kind") is None
 
@@ -97,12 +97,15 @@ def test_real_data_in_the_default_synthetic_folder_is_not_touched_either(fake_re
             id="tiles_only",
         ),
         pytest.param(
-            lambda c, r: ((r.parent / "kiban").mkdir(), (r.parent / "kiban" / KIBAN_REAL_NAME).write_text("<Dataset/>", encoding="utf-8")),
-            id="real_looking_kiban_xml",
+            lambda c, r: ((r.parent / "reference").mkdir(), (r.parent / "reference" / REAL_REFERENCE_NAME).write_text('{"features": []}', encoding="utf-8")),
+            id="another_reference_file",
         ),
         pytest.param(
-            lambda c, r: ((r.parent / "kiban").mkdir(), (r.parent / "kiban" / make_synthetic_run.KIBAN_FILE).write_text("<Dataset/>", encoding="utf-8")),
-            id="same_name_kiban_without_the_synthetic_mark",
+            lambda c, r: (
+                (r.parent / "reference").mkdir(),
+                (r.parent / "reference" / make_synthetic_run.REFERENCE_FILE).write_text('{"features": []}', encoding="utf-8"),
+            ),
+            id="same_name_reference_without_the_synthetic_mark",
         ),
     ],
 )
@@ -149,9 +152,9 @@ def test_cli_stops_with_a_message_and_writes_nothing(fake_real, capsys):
     assert snapshot(fake_real) == before
 
 
-def test_postprocess_reads_the_synthetic_kiban_explicitly(tmp_path):
-    """合成の後処理は <root>/kiban を明示して読む（フォルダの有無による暗黙の切り替えに頼らない）。"""
+def test_postprocess_reads_the_synthetic_reference(tmp_path):
+    """合成の後処理は <root>/reference/buildings.geojson を明示して読む。"""
     res = make_synthetic_run.make_synthetic_run(tmp_path / "s", created="2026-01-01T00:00:00+00:00")
     assert res["summary"]["kind"] == "synthetic" and res["summary"]["candidates"] == 7
     run = json.loads((tmp_path / "s" / "run1" / "out" / "run.json").read_text(encoding="utf-8"))
-    assert run["params"]["kiban"]["load"]["kept"] > 0
+    assert run["params"]["reference"]["load"]["kept"] > 0

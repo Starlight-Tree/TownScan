@@ -1,9 +1,9 @@
 """合成データ（テスト用。kind="synthetic"）の入力と、期待どおりの out/ を作る。実データではない。
 
-2 地区（名前は「合成地区A」「合成地区B」）に、建物らしい矩形を人工的に置く。矩形ごとに、2014・2024 年の確率・写真・基盤地図情報への
+2 地区（名前は「合成地区A」「合成地区B」）に、建物らしい矩形を人工的に置く。矩形ごとに、2014・2024 年の確率・写真・正解の建物データへの
 載り方を決め、3 分類の期待（truth.json）を残す。出力は仕様の契約どおりの形で、backend のローダー・画像切り出しのテストにも使える。
   <out>/tiles/{2014,2024}/{x}_{y}.png        合成の写真（256×256）
-  <out>/kiban/FG-GML-…-BldA-….xml           基盤地図情報の BldA 相当（実データと同じ書式。座標は「緯度 経度」）
+  <out>/reference/buildings.geojson           正解の建物データ（GeoJSON。座標は経度・緯度）
   <out>/<run>/colab/                          meta.json・prob_{year}_{x}_{y}_s{100|150|200}.npy
   <out>/<run>/geocode.json                    逆ジオコーダの応答の形（名前は合成と分かるもの）
   <out>/<run>/truth.json                      置いた矩形と、期待する分類
@@ -23,14 +23,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import colabio, kiban, run_postprocess, tilemath
+from . import colabio, run_postprocess, tilemath
 
 Z = 18
-# (x, y, 名前, 逆ジオコーダの市区町村コード)。実データの近くの番号だが、写真・確率はすべて合成
-SYNTH_TILES = [(226250, 105770, "合成地区A", "43101"), (226251, 105770, "合成地区B", "43102")]
+# (x, y, 名前, 逆ジオコーダの応答の市町村コード)。タイル番号も市町村も、合成の値（写真・確率はすべて合成）
+SYNTH_TILES = [(226250, 105770, "合成地区A", "92050"), (226251, 105770, "合成地区B", "92019")]
 SEED = 20261124
-KIBAN_FILE = "FG-GML-000000-BldA-20181001-0001.xml"
-KIBAN_MARK = "合成データ（テスト用）"  # 合成の XML にだけ入れる印。実データの XML と取り違えて上書きしない
+REFERENCE_FILE = "buildings.geojson"
+REFERENCE_MARK = "合成データ（テスト用）"  # 合成の GeoJSON にだけ入れる印。実データと取り違えて上書きしない
 BLUR_PX = 2  # 倍率 1 での、確率の縁のぼかし（箱形。モデルの出力のなだらかさの代わり）
 
 
@@ -44,7 +44,7 @@ class Obj:
     p23: float | None
     photo18: bool  # 写真に建物が写っているか
     photo23: bool
-    kiban_shift: tuple[int, int] | None  # 基盤地図情報に載る（ずらす画素数）。None = 載らない
+    ref_shift: tuple[int, int] | None  # 正解の建物データに載る（ずらす画素数）。None = 載らない
     hole: tuple[int, int, int, int] | None = None
     expect: tuple[str, str] | None = None  # (class, reason)。None = 候補にならない
     role: str = ""
@@ -121,53 +121,26 @@ def make_photo(objs: list[Obj], year: int, rng: np.random.Generator) -> Image.Im
     return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGB")
 
 
-def _ring_text(z: int, x: int, y: int, rect, shift) -> str:
+def _ring(z: int, x: int, y: int, rect, shift) -> list[list[float]]:
     x0, y0, x1, y1 = rect
     dx, dy = shift
     pts = [(x0 + dx, y0 + dy), (x1 + dx, y0 + dy), (x1 + dx, y1 + dy), (x0 + dx, y1 + dy), (x0 + dx, y0 + dy)]
-    lines = []
-    for col, row in pts:
-        lon, lat = tilemath.pixel_to_lonlat(z, x, y, col, row)
-        lines.append(f"{lat:.9f} {lon:.9f}")
-    return "\n".join(lines)
+    return [[round(float(v), 9) for v in tilemath.pixel_to_lonlat(z, x, y, col, row)] for col, row in pts]
 
 
-def make_kiban_xml(tiles_objs: list[tuple[int, int, list[Obj]]]) -> str:
-    """基盤地図情報 BldA（2018-10 版）に載る建物だけを、実データと同じ書式で書く。"""
-    out = [
-        '<?xml version="1.0" encoding="utf-8"?>',
-        '<Dataset xmlns:gml="http://www.opengis.net/gml/3.2" xmlns="http://fgd.gsi.go.jp/spec/2008/FGD_GMLSchema" gml:id="Dataset1">',
-        f"  <gml:description>{KIBAN_MARK}。実際の基盤地図情報ではない</gml:description>",
-    ]
-    n = 0
+def make_reference_geojson(tiles_objs: list[tuple[int, int, list[Obj]]]) -> str:
+    """正解の建物データに載る建物だけを GeoJSON にする。中庭のある建物は、内側の輪（穴）を持つ。"""
+    features = []
     for x, y, objs in tiles_objs:
         for o in objs:
-            if o.kiban_shift is None:
+            if o.ref_shift is None:
                 continue
-            n += 1
-            gid = f"SYN_{n}"
-            interior = ""
+            rings = [_ring(Z, x, y, o.rect, o.ref_shift)]
             if o.hole:
-                # 穴の輪（建物の中庭）。基盤地図情報の形式どおり gml:interior に入れる
-                interior = (
-                    "<gml:interior><gml:Ring><gml:curveMember><gml:Curve><gml:segments><gml:LineStringSegment>"
-                    f"<gml:posList>\n{_ring_text(Z, x, y, o.hole, o.kiban_shift)}\n</gml:posList>"
-                    "</gml:LineStringSegment></gml:segments></gml:Curve></gml:curveMember></gml:Ring></gml:interior>"
-                )
-            out.append(
-                f'<BldA gml:id="{gid}">\n<fid>synthetic-{n}</fid>\n'
-                f'<lfSpanFr gml:id="{gid}-1"><gml:timePosition>2018-10-01</gml:timePosition></lfSpanFr>\n'
-                f'<devDate gml:id="{gid}-2"><gml:timePosition>2018-10-02</gml:timePosition></devDate>\n'
-                "<orgGILvl>2500</orgGILvl>\n<area>\n"
-                f'<gml:Surface gml:id="{gid}-g" srsName="fguuid:jgd2011.bl"><gml:patches><gml:PolygonPatch>\n'
-                "<gml:exterior><gml:Ring><gml:curveMember>"
-                f'<gml:Curve gml:id="{gid}-3"><gml:segments><gml:LineStringSegment>'
-                f"<gml:posList>\n{_ring_text(Z, x, y, o.rect, o.kiban_shift)}\n</gml:posList>"
-                "</gml:LineStringSegment></gml:segments></gml:Curve></gml:curveMember></gml:Ring></gml:exterior>\n"
-                f"{interior}\n</gml:PolygonPatch></gml:patches></gml:Surface>\n</area>\n<type>普通建物</type>\n</BldA>"
-            )
-    out.append("</Dataset>")
-    return "\n".join(out) + "\n"
+                rings.append(_ring(Z, x, y, o.hole, o.ref_shift))
+            features.append({"type": "Feature", "properties": {"id": f"synthetic-{len(features) + 1}"}, "geometry": {"type": "Polygon", "coordinates": rings}})
+    # name を先頭に書く（上書きしてよいかの確認は、ファイルの先頭だけを読む）
+    return json.dumps({"name": REFERENCE_MARK, "type": "FeatureCollection", "features": features}, ensure_ascii=False, indent=1) + "\n"
 
 
 class UnsafeOutputError(ValueError):
@@ -186,13 +159,13 @@ def _is_synthetic_meta(colab_dir: Path) -> bool:
     return isinstance(meta, dict) and meta.get("kind") == "synthetic"
 
 
-def _is_own_kiban_file(path: Path) -> bool:
-    """この module が書く合成の XML か（名前と、先頭に入れた印で見る。実データは大きいので先頭だけ読む）。"""
-    if path.name != KIBAN_FILE:
+def _is_own_reference_file(path: Path) -> bool:
+    """この module が書く合成の GeoJSON か（名前と、先頭に入れた印で見る。実データは大きいことがあるので先頭だけ読む）。"""
+    if path.name != REFERENCE_FILE:
         return False
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
-            return KIBAN_MARK in f.read(2000)
+            return REFERENCE_MARK in f.read(2000)
     except OSError:
         return False
 
@@ -200,7 +173,7 @@ def _is_own_kiban_file(path: Path) -> bool:
 def check_output_dir(root, run: str = "run1") -> None:
     """出力先を上書きしてよいか確かめる。だめなら UnsafeOutputError（何も書かない）。
 
-    実データの置き場そのもの（data/townscan）は不可。それ以外でも、colab/・geocode.json・truth.json・合成以外の基盤地図情報が
+    実データの置き場そのもの（data/townscan）は不可。それ以外でも、colab/・geocode.json・truth.json・合成以外の正解の建物データが
     既にあって、colab/ の記録が合成のもの（kind=synthetic）と確かめられなければ不可。空の場所と、前に合成で作った場所は可。
     """
     root = Path(root)
@@ -217,11 +190,7 @@ def check_output_dir(root, run: str = "run1") -> None:
         found += [str(p) for p in (*colab_dir.glob("meta*.json"), *colab_dir.glob("prob_*.npy"))]
         found += [str(p) for p in (run_dir / "geocode.json", run_dir / "truth.json") if p.exists()]
         found += [str(p) for p in (root / "tiles").glob("*/*.png")]
-    kiban_dir = root / "kiban"
-    if kiban_dir.is_dir():
-        for f in kiban.find_xml_files(kiban_dir):
-            if not _is_own_kiban_file(Path(f)):
-                found.append(f)
+    found += [str(f) for f in sorted((root / "reference").glob("*.geojson")) if not _is_own_reference_file(f)]
     if found:
         shown = ", ".join(found[:5]) + (f" ほか {len(found) - 5} 件" if len(found) > 5 else "")
         raise UnsafeOutputError(f"出力先 {root} に、合成と確かめられない既存のファイルがある（上書きしない）。別の出力先を指定する: {shown}")
@@ -234,7 +203,8 @@ def make_synthetic_run(root, run: str = "run1", *, postprocess: bool = True, cre
     run_dir = root / run
     colab_dir = run_dir / "colab"
     colab_dir.mkdir(parents=True, exist_ok=True)
-    (root / "kiban").mkdir(parents=True, exist_ok=True)
+    reference_path = root / "reference" / REFERENCE_FILE
+    reference_path.parent.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(seed)
 
     tiles_meta, geocodes, truth, tiles_objs = [], {}, [], []
@@ -242,7 +212,7 @@ def make_synthetic_run(root, run: str = "run1", *, postprocess: bool = True, cre
         objs = OBJS[name]
         aid = tilemath.area_id(Z, x, y)
         tiles_meta.append({"z": Z, "x": x, "y": y, "id": aid, "name": name})
-        geocodes[aid] = {"results": {"muniCd": muni, "lv01Nm": name}}
+        geocodes[aid] = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"street": name, "citycode": muni}}]}
         tiles_objs.append((x, y, objs))
         for year in colabio.YEARS:
             tdir = root / "tiles" / str(year)
@@ -260,7 +230,7 @@ def make_synthetic_run(root, run: str = "run1", *, postprocess: bool = True, cre
                     "role": o.role,
                     "rect_px": list(o.rect),
                     "center": [lon, lat],
-                    "in_kiban": o.kiban_shift is not None,
+                    "in_reference": o.ref_shift is not None,
                     "photo_2014": o.photo18,
                     "photo_2024": o.photo23,
                     "expected_class": o.expect[0] if o.expect else None,
@@ -279,11 +249,11 @@ def make_synthetic_run(root, run: str = "run1", *, postprocess: bool = True, cre
     (colab_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (run_dir / "geocode.json").write_text(json.dumps(geocodes, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (run_dir / "truth.json").write_text(json.dumps(truth, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (root / "kiban" / KIBAN_FILE).write_text(make_kiban_xml(tiles_objs), encoding="utf-8")
+    reference_path.write_text(make_reference_geojson(tiles_objs), encoding="utf-8")
 
     summary = None
     if postprocess:
-        summary = run_postprocess.run_postprocess(root, run, kiban_dir=root / "kiban", created=created, log=lambda _msg: None)
+        summary = run_postprocess.run_postprocess(root, run, reference_path=reference_path, created=created, log=lambda _msg: None)
     return {"root": str(root), "run_dir": str(run_dir), "truth": truth, "summary": summary}
 
 
