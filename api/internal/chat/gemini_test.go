@@ -609,8 +609,8 @@ func TestMockRepliesKeepPythonsGuard(t *testing.T) {
 	if r.Content == SafeTemplate || strings.Contains(r.Content, "三年町") {
 		t.Errorf("content = %q", r.Content)
 	}
-	// 同じ文を、実 LLM が書けば、強い検査に落ちる
-	f := newFakeGemini(t, call("refuse", map[string]any{"reason": "out_of_scope"}), say(want))
+	// 同じ文を、実 LLM が書けば、強い検査に落ちる（お断り 1 件の本文は LLM の文を使わないので、LLM の文が本文になる使い方の表で確かめる）
+	f := newFakeGemini(t, call("show_help", nil), say(want))
 	s, _ := geminiService(t, f, newFakeData())
 	if r := mustAsk(t, s, "六本木ヒルズ周辺の建物は？"); r.Content != SafeTemplate {
 		t.Errorf("実 LLM の文が通った: %q", r.Content)
@@ -655,8 +655,33 @@ func TestOutOfScopeQuestionIsRefusedWithTheRefuseTool(t *testing.T) {
 	if got := jsonOf(t, r.ToolCalls); got != `[{"name":"refuse","args":{"reason":"out_of_scope","message":"天気のことはお答えできません。"}}]` {
 		t.Errorf("tool_calls = %s", got)
 	}
-	if r.Content != "このアプリでは、天気についてはお答えできません。" {
+	if r.Content != want.Message { // 本文は、LLM が 2 回目に書いた文でなく、結果の理由の文
 		t.Errorf("content = %q", r.Content)
+	}
+}
+
+// お断り 1 件だけの回答は、LLM が 2 回目に聞かれた年を書いても、本文に断る理由が出る（数字の検査の固定の文にしない）。
+func TestASingleRefusalAnswersWithItsReasonEvenIfTheModelRepeatsTheAskedYear(t *testing.T) {
+	f := newFakeGemini(t,
+		call("refuse", map[string]any{"reason": "no_photo_period", "message": "2020 年の写真はありません。"}),
+		say("2020 年の写真はないため、お答えできません。"))
+	s, logs := geminiService(t, f, newFakeData())
+	r := mustAsk(t, s, "2020 年に建った建物は何件ですか？")
+	if r.Content != msgYear || r.Results[0].(RefusalResult).Message != msgYear {
+		t.Errorf("content = %q / 結果 = %s", r.Content, jsonOf(t, r.Results[0]))
+	}
+	if strings.Contains(logs.text(), "安全なテンプレート") {
+		t.Errorf("差し替えが起きている: %s", logs.text())
+	}
+}
+
+// 理由の文は本文になるので、カードの位置の語を含む文は、固定の文に替える。
+func TestRefusalTextWithCardPositionWordsFallsBackToTheFixedText(t *testing.T) {
+	for _, msg := range []string{"下のカードを見てください。", "上記のとおりです。"} {
+		got := sanitizeRefusalArgs(map[string]any{"reason": "not_implemented", "message": msg}, nil)
+		if got.Message != refusalFixed["not_implemented"] {
+			t.Errorf("%q: %q", msg, got.Message)
+		}
 	}
 }
 

@@ -119,7 +119,8 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 			content = s.compose(results)
 		}
 	}
-	// 件数だけ・候補の一覧だけ・候補 1 件の写真だけ・精度だけの回答の本文は、実 LLM の文も使わず、結果からコードで組み立てる（毎回同じ形にする）。
+	// 件数だけ・候補の一覧だけ・候補 1 件の写真だけ・精度だけ・お断りだけの回答の本文は、実 LLM の文も使わず、結果からコードで組み立てる（毎回同じ形にする）。
+	// お断りは、結果の理由の文にする。実 LLM が 2 回目に書く文は、聞かれた年などの数字を写して数字の検査に落ち、理由の分からない固定の文になることがある。
 	// 一覧は、件数の全体と、載せた件数だけを言う（実 LLM が行を数えて作る件数は、結果に無い）。使い方の表（Filter なし）は替えない。
 	// 写真は、結果の説明（地区・面積・輪郭の注記）にする。どう選んだか（いちばん大きい、など）は結果に無いので言わない。画面は、本文にある説明をカードで繰り返さない。
 	// 模擬モデルの写真の文は替えない（模擬の振り分けは、前の本文に書かれた候補の ID で対象を引き継ぐ。実 LLM には ID を書かせない）。
@@ -140,6 +141,10 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 		case AccuracyResult:
 			if s.gemini != nil {
 				content, composed = renderAccuracyBrief(r), true
+			}
+		case RefusalResult:
+			if s.gemini != nil {
+				content, composed = r.Message, true
 			}
 		}
 	}

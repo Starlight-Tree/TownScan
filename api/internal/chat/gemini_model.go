@@ -339,6 +339,7 @@ var refusalYears = []any{"2014", "2024"}
 
 // sanitizeRefusalArgs は、refuse の引数を整える。refuse だけは、LLM の書いた文が結果（refusal の message）にそのまま入る。
 // 結果の中の数字は GuardNumbers が「結果の値」と見なすので、ここで、写真の年以外の数字を含む文・長すぎる文・空の文は、理由ごとの固定の文に替える。
+// この文は返答の本文にもなる（service.go）ので、カードの位置の語（下のカード・上記など）を含む文も、固定の文に替える。
 // suggestions は捨てる（既定の候補が付く）。known は、数として見ない地区名・区名（漢数字を含む名前を、断りの文は書いてよい）。
 func sanitizeRefusalArgs(args map[string]any, known []string) Args {
 	reason := "out_of_scope"
@@ -349,7 +350,9 @@ func sanitizeRefusalArgs(args map[string]any, known []string) Args {
 	if s, ok := args["message"].(string); ok {
 		trimmed := strings.TrimFunc(s, isPySpace)
 		if n := utf8.RuneCountInString(trimmed); 0 < n && n <= maxRefusalChars && len(findUnsupportedNumbers(s, refusalYears, known...)) == 0 {
-			message = trimmed
+			if stripped, replaced := stripPositionWords(trimmed); !replaced && stripped == trimmed {
+				message = trimmed
+			}
 		}
 	}
 	return Args{Reason: reason, Message: message}
