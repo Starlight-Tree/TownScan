@@ -299,12 +299,6 @@ export function HomeClient() {
     setAnnouncement('新しい回答が届きました');
   }, []);
 
-  const closeButton = (
-    <button type="button" className="btn expanded-view__close" title="拡大ビューを閉じます（Esc でも閉じます）" onClick={close}>
-      閉じる
-    </button>
-  );
-
   return (
     <AreasProvider areas={areas}>
       <div className="home">
@@ -316,7 +310,6 @@ export function HomeClient() {
             selected={current && !showChat ? current.view : 'chat'}
             onSelect={selectTab}
             marks={unread ? { chat: '（新着）' } : undefined}
-            trailing={current ? closeButton : undefined}
             unmounted={current ? undefined : RESULT_VIEW_ORDER}
             onEscape={current && !showChat ? close : undefined}
           />

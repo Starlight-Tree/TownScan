@@ -7,7 +7,7 @@ import { ResultPanelBoundary } from './ResultPanelBoundary';
 /** タブの 1 つ。狭い幅では、先頭にチャットのタブが付く（ADR 0007） */
 export type TabId = ResultView | 'chat';
 
-const TAB_LABELS: Record<TabId, string> = { chat: 'チャット', ...RESULT_VIEW_LABELS };
+const TAB_LABELS: Record<TabId, string> = { chat: '回答', ...RESULT_VIEW_LABELS };
 
 /** タブ・画面の id。タブの帯（ResultTabs）と画面（ResultPanels・チャット）が、別の場所に置かれても、aria-controls・aria-labelledby で結べるよう、共通の元の id から作る */
 export const resultTabId = (baseId: string, id: TabId) => `${baseId}-tab-${id}`;

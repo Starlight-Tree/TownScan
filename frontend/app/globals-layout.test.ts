@@ -145,9 +145,8 @@ describe('拡大ビュー（.expanded-view。モーダルではない。結果�
     expect(css.replace(/\.answer-figure__map \.map-stage/g, '')).not.toMatch(/\.map-stage\s*\{[^}]*clamp\(/);
   });
 
-  it('「閉じる」は、タブの帯の右端（タブと同じ高さ 44px）。質問の行は 1 行で省略する', () => {
-    expect(decl(ruleIn(css, '.expanded-view__close'), 'min-height')).toBe('44px');
-    expect(decl(ruleIn(css, '.expanded-view__close'), 'flex')).toBe('none');
+  it('質問の行は 1 行で省略する。タブの高さは 44px', () => {
+    expect(decl(ruleIn(css, '.result-area__tab'), 'min-height')).toBe('44px');
     const q = ruleIn(css, '.expanded-view__question');
     expect(decl(q, 'white-space')).toBe('nowrap');
     expect(decl(q, 'text-overflow')).toBe('ellipsis');

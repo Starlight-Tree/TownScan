@@ -40,16 +40,16 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
   it('tablist に、地図・グラフ・写真の比較の順でタブが並び、選択中のものが aria-selected', () => {
     render(<Harness />);
     const list = screen.getByRole('tablist');
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['地図', 'グラフ', '写真の比較']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['地図', 'グラフ', '画像']);
     expect(list).toContainElement(tab('地図'));
     expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
     expect(tab('グラフ')).toHaveAttribute('aria-selected', 'false');
-    expect(tab('写真の比較')).toHaveAttribute('aria-selected', 'false');
+    expect(tab('画像')).toHaveAttribute('aria-selected', 'false');
   });
 
   it('タブと tabpanel は、aria-controls と aria-labelledby で結ばれる。選択中の画面だけが見え、ほかは hidden のまま中身を保つ', () => {
     render(<Harness />);
-    for (const name of ['地図', 'グラフ', '写真の比較']) {
+    for (const name of ['地図', 'グラフ', '画像']) {
       const t = tab(name);
       const panel = document.getElementById(t.getAttribute('aria-controls')!)!;
       expect(panel).toHaveAttribute('role', 'tabpanel');
@@ -67,7 +67,7 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
     render(<Harness />);
     expect(tab('地図')).toHaveAttribute('tabindex', '0');
     expect(tab('グラフ')).toHaveAttribute('tabindex', '-1');
-    expect(tab('写真の比較')).toHaveAttribute('tabindex', '-1');
+    expect(tab('画像')).toHaveAttribute('tabindex', '-1');
     await userEvent.click(tab('グラフ'));
     expect(tab('地図')).toHaveAttribute('tabindex', '-1');
     expect(tab('グラフ')).toHaveAttribute('tabindex', '0');
@@ -76,14 +76,14 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
   it('クリックで切り替わり、親へ伝わる。Tab キーでタブの帯に入ると選択中のタブ、次の Tab でパネルの中へ出る', async () => {
     const onChange = vi.fn();
     render(<Harness onChange={onChange} />);
-    await userEvent.click(tab('写真の比較'));
+    await userEvent.click(tab('画像'));
     expect(onChange).toHaveBeenLastCalledWith('photos');
-    expect(tab('写真の比較')).toHaveAttribute('aria-selected', 'true');
+    expect(tab('画像')).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('button', { name: '写真の中のボタン' })).toBeVisible();
 
     screen.getByRole('textbox', { name: '外の入力' }).focus();
     await userEvent.tab();
-    expect(tab('写真の比較')).toHaveFocus(); // 選択中のタブだけが Tab の順に入る
+    expect(tab('画像')).toHaveFocus(); // 選択中のタブだけが Tab の順に入る
     await userEvent.tab();
     expect(screen.getByRole('button', { name: '写真の中のボタン' })).toHaveFocus();
   });
@@ -99,13 +99,13 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
     expect(onChange).toHaveBeenLastCalledWith('chart');
 
     await userEvent.keyboard('{ArrowRight}');
-    expect(tab('写真の比較')).toHaveFocus();
+    expect(tab('画像')).toHaveFocus();
     await userEvent.keyboard('{ArrowRight}'); // 右端から左端へ
     expect(tab('地図')).toHaveFocus();
     expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
 
     await userEvent.keyboard('{ArrowLeft}'); // 左端から右端へ
-    expect(tab('写真の比較')).toHaveFocus();
+    expect(tab('画像')).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}');
     expect(tab('グラフ')).toHaveFocus();
 
@@ -113,8 +113,8 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
     expect(tab('地図')).toHaveFocus();
     expect(onChange).toHaveBeenLastCalledWith('map');
     await userEvent.keyboard('{End}');
-    expect(tab('写真の比較')).toHaveFocus();
-    expect(tab('写真の比較')).toHaveAttribute('aria-selected', 'true');
+    expect(tab('画像')).toHaveFocus();
+    expect(tab('画像')).toHaveAttribute('aria-selected', 'true');
     expect(onChange).toHaveBeenLastCalledWith('photos');
   });
 
@@ -132,10 +132,10 @@ describe('結果領域のタブ（WAI-ARIA の tabs）', () => {
     render(<Harness />);
     screen.getByRole('button', { name: '地図の中のボタン' }).focus();
     await act(async () => {
-      tab('写真の比較').click();
+      tab('画像').click();
     });
-    expect(tab('写真の比較')).toHaveAttribute('aria-selected', 'true');
-    expect(tab('写真の比較')).toHaveFocus();
+    expect(tab('画像')).toHaveAttribute('aria-selected', 'true');
+    expect(tab('画像')).toHaveFocus();
   });
 
   it('フォーカスが画面の外（チャットの入力・ボタン）にあるときは、画面が替わっても動かさない', async () => {

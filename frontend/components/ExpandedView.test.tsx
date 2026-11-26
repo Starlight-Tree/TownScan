@@ -120,7 +120,7 @@ describe('拡大ビュー: タブの画面の側の構造。モーダルでも�
     render(<Harness />);
     await open();
     const outer = screen.getByTestId('outer-tabs');
-    expect(within(outer).getAllByRole('tab').map((t) => t.textContent)).toEqual(['チャット', '地図', 'グラフ', '写真の比較']);
+    expect(within(outer).getAllByRole('tab').map((t) => t.textContent)).toEqual(['回答', '地図', 'グラフ', '画像']);
     expect(root()!.querySelector('[role="tablist"]')).toBeNull();
     expect(within(root()!).getAllByRole('tabpanel', { hidden: true })).toHaveLength(3);
     expect(outer.querySelector('.result-area__bar')).toContainElement(closeButton());

@@ -760,12 +760,6 @@ p.banner {
   flex: 1;
 }
 
-/* 右端の「閉じる」。タブの高さにそろえる */
-.expanded-view__close {
-  flex: none;
-  min-height: 44px;
-}
-
 /* どの回答かを示す行（回答の質問と、「チャットへ戻る」）。質問は 1 行で省略する（全文は title） */
 .expanded-view__context {
   display: flex;
@@ -799,39 +793,40 @@ p.banner {
   min-height: 0;
 }
 
-/* タブの帯。左にタブの列（role=tablist。タブだけを入れる）、右端に拡大ビューの「閉じる」ボタン（tablist の外） */
+/* タブの帯。枠も背景も無い。下に細い線を 1 本だけ引く（Perplexity など、いまの一般的なタブの形。ADR 0008）。
+   タブの列（role=tablist）はタブだけを入れる。帯の右端に置く部品（trailing）は、いまは使わない */
 .result-area__bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-bottom: 1px solid var(--border);
 }
 
 .result-area__tabs {
   display: flex;
   flex: 1 1 auto;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
-/* 選択中は、色だけでなく、塗りと太字でも区別する（.seg-btn の押した状態と同じ見た目） */
+/* 枠も塗りも無い。選択中は、文字を濃く・太くし、下に 2px の線を引く（色だけでなく、太字と線でも区別する）。ほかのタブは淡い文字色 */
 .result-area__tab {
   min-height: 44px;
-  padding: 0 18px;
-  border-radius: 8px;
-  border: 1px solid var(--input-border);
-  background: var(--surface);
+  padding: 0 14px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
   font-size: 14px;
   cursor: pointer;
 }
 
 .result-area__tab:hover {
   background: var(--tag-bg);
-  border-color: var(--primary);
+  color: var(--text);
 }
 
 .result-area__mark {
@@ -839,9 +834,8 @@ p.banner {
 }
 
 .result-area__tab[aria-selected='true'] {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
+  border-bottom-color: var(--primary);
+  color: var(--text);
   font-weight: 700;
 }
 

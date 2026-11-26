@@ -9,7 +9,7 @@ export const RESULT_VIEW_ORDER: readonly ResultView[] = ['map', 'chart', 'photos
 export const RESULT_VIEW_LABELS: Record<ResultView, string> = {
   map: '地図',
   chart: 'グラフ',
-  photos: '写真の比較',
+  photos: '画像',
 };
 
 /** 地図・グラフ・一覧に共通の絞り込み。areaId が空なら全地区、classes は表示する分類 */
