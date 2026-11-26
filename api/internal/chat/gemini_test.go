@@ -267,6 +267,36 @@ func TestPhotoOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	}
 }
 
+// 一覧だけの回答の本文は、LLM の文でなく、コードで組み立てた文。LLM が行を数えて作った件数が出ず、固定文にも替わらない
+func TestListOnlyAnswerIgnoresTheModelText(t *testing.T) {
+	f := newFakeGemini(t,
+		call("list_candidates", map[string]any{"limit": json.Number("2")}, nil),
+		say("合成町が 987 件です。"))
+	s, logs := geminiService(t, f, newFakeData())
+	r := mustAsk(t, s, "候補を一覧で見せてください")
+	table := r.Results[0].(TableResult)
+	if want := renderListBrief(table); r.Content != want || r.Content == SafeTemplate {
+		t.Errorf("content = %q（期待 %q）", r.Content, want)
+	}
+	if int64(table.Shown) >= table.Total || !strings.Contains(r.Content, "面積の大きい順の 2 件です。") {
+		t.Errorf("一部だけの一覧のはず: total=%d shown=%d content=%q", table.Total, table.Shown, r.Content)
+	}
+	if strings.Contains(logs.text(), "安全なテンプレートに差し替えました") {
+		t.Errorf("ログ = %s", logs.text())
+	}
+}
+
+// 使い方の表（Filter なし）は、候補の一覧ではないので、LLM の文のまま
+func TestHelpTableKeepsTheModelText(t *testing.T) {
+	f := newFakeGemini(t,
+		call("show_help", map[string]any{}, nil),
+		say("使い方の例をまとめました。"))
+	s, _ := geminiService(t, f, newFakeData())
+	if r := mustAsk(t, s, "使い方を教えてください"); r.Content != "使い方の例をまとめました。" {
+		t.Errorf("content = %q", r.Content)
+	}
+}
+
 // 精度だけの回答の本文は、LLM の文でなく、F1 と「新築の再現率はまだ測っていない」を必ず言う文。数字の検査も通る
 func TestAccuracyOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	f := newFakeGemini(t,

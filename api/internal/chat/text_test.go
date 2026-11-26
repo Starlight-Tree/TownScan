@@ -136,6 +136,23 @@ func TestRenderCompare(t *testing.T) {
 	}
 }
 
+// 一覧の短い本文: 全部を載せた・一部だけ載せた・0 件・分類の指定（分類の名前は書かない）
+func TestRenderListBrief(t *testing.T) {
+	for _, c := range []struct {
+		r    TableResult
+		want string
+	}{
+		{TableResult{Total: 7, Shown: 7, Filter: &FilterInfo{Scope: "試験町"}}, "試験町で、2014 年の写真で確認できていない建物の候補は 7 件です。"},
+		{TableResult{Total: 1234, Shown: 10, Filter: &FilterInfo{Scope: "全地区"}}, "2014 年の写真で確認できていない建物の候補は 1,234 件です。一覧は、面積の大きい順の 10 件です。"},
+		{TableResult{Filter: &FilterInfo{Scope: "仮想町", Cls: "uncertain"}}, "仮想町で、判定できていない候補はありません。"},
+		{TableResult{Total: 2, Shown: 2, Filter: &FilterInfo{Cls: "confirmed_new"}}, "モデルが 2024 年の写真だけで見つけた候補は 2 件です。"},
+	} {
+		if got := renderListBrief(c.r); got != c.want {
+			t.Errorf("%q（期待 %q）", got, c.want)
+		}
+	}
+}
+
 // 精度の短い本文: 値の有無・再現率の値（0 を含む）・合成データの印
 func TestRenderAccuracyBrief(t *testing.T) {
 	num := func(v float64) *pyjson.Float { f := pyjson.Float(v); return &f }

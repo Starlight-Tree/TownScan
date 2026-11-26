@@ -115,15 +115,35 @@ var countSubjects = map[string]string{
 	"uncertain":         "判定できていない候補",
 }
 
-// renderCount は、件数の本文。件数だけの回答では、実 LLM の文も使わず、これを返す（毎回同じ形にする）。
-func renderCount(r CountResult) string {
+// candidateSubject は、件数と一覧の本文の主語（分類の指定と、範囲）。
+func candidateSubject(f FilterInfo) string {
 	subject := "2014 年の写真で確認できていない建物の候補"
-	if named, ok := countSubjects[r.Filter.Cls]; ok {
+	if named, ok := countSubjects[f.Cls]; ok {
 		subject = named
 	}
-	if scope := scopeOf(r.Filter); scope != "全地区" {
+	if scope := scopeOf(f); scope != "全地区" {
 		subject = scope + "で、" + subject
 	}
+	return subject
+}
+
+// renderListBrief は、候補の一覧の結果 1 件だけの回答の本文（実 LLM のとき。service.go）。r.Filter があること（使い方の表は渡さない）。
+// 実 LLM は、行を自分で数えて、結果に無い件数（地区ごとの内訳など）を書くことがあり、本文が固定文に替わった。件数は、結果の total と shown だけを言う。
+func renderListBrief(r TableResult) string {
+	subject := candidateSubject(*r.Filter)
+	if r.Total == 0 {
+		return subject + "はありません。"
+	}
+	text := fmt.Sprintf("%sは %s 件です。", subject, commas(r.Total))
+	if int64(r.Shown) < r.Total {
+		text += fmt.Sprintf("一覧は、面積の大きい順の %s 件です。", commas(int64(r.Shown)))
+	}
+	return text
+}
+
+// renderCount は、件数の本文。件数だけの回答では、実 LLM の文も使わず、これを返す（毎回同じ形にする）。
+func renderCount(r CountResult) string {
+	subject := candidateSubject(r.Filter)
 	side := fmt.Sprintf("約 %d m 四方", tileSideM)
 	oneArea := r.Filter.AreaID != ""
 	if r.Total == 0 {

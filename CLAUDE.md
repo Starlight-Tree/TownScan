@@ -12,7 +12,7 @@ TownScan。パリ南西の近郊（県 92 の 12 地区）の IGN の空中写�
 ## 守ること
 
 - **仕様が先。** 段の始めに `docs/plan.md` へ出口条件（実行できる検査）を書いてから実装する。評価（P2）を先に作り、指標を落とさない。
-- **数字は、ツールの結果の値だけから出す。** 結果（件数・表・地図など）は画面が結果のまま描く。**件数の結果 1 件だけの回答は、本文をコードが組み立てる**（LLM の文は使わない。`api/internal/chat/text.go` の `renderCount`。[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。**写真 1 件だけの回答も LLM の文を使わず、結果の説明を本文にする**（実 LLM のとき。`service.go`）。それ以外の回答で LLM の返答文に書かれる数字は、結果の値だけから出ていることを `guard.go` が検査し、満たさなければ固定文に替える（座標・ID は書かせない。[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。**検査が止めるのは、数字とカードの位置の語（上の・下記など）だけ**で、数字以外の主張（最も多い・過半など）は検査の外。範囲外の質問は断る。
+- **数字は、ツールの結果の値だけから出す。** 結果（件数・表・地図など）は画面が結果のまま描く。**件数の結果 1 件だけの回答は、本文をコードが組み立てる**（LLM の文は使わない。`api/internal/chat/text.go` の `renderCount`。[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。**候補の一覧・写真・精度の結果 1 件だけの回答も LLM の文を使わず、結果からコードが本文を作る**（実 LLM のとき。写真は結果の説明。`service.go`）。それ以外の回答で LLM の返答文に書かれる数字は、結果の値だけから出ていることを `guard.go` が検査し、満たさなければ固定文に替える（座標・ID は書かせない。[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。**検査が止めるのは、数字とカードの位置の語（上の・下記など）だけ**で、数字以外の主張（最も多い・過半など）は検査の外。範囲外の質問は断る。
 - **データの規約を先に確かめる。** 画像・ラベルは、公式ページでライセンスを確認してから使い、ADR に残す。`data/` は Git に入れない（再配布しない）。
 - **実 API（課金）・外部への書き込み・新しいサービス・言語・DB（PostGIS を含む）は、事前に承認を得る**（件数・回数・概算費用を先に示す）。
 - **`.env`・`backups/` は読まない。** 値を表示・ログ・コミットしない。`BETTER_AUTH_SECRET` は `scripts/dev-up.sh` が 1 回だけ作り、**決めたら変えない**（DB の署名鍵 `auth_jwks` と Google のトークンの暗号化に使う）。秘密の置き場は Infisical（プロジェクト `townscan`・env dev。[ADR 0004](docs/decisions/0004-secrets-infisical.md)）で、`.env` は代わりの経路。`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`GEMINI_API_KEY` は、ユーザーが自分の端末で `scripts/login-secrets.sh` から登録する（値は私が読まない）。
