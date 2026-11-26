@@ -1,0 +1,20 @@
+[
+  {"id": "count-all", "question": "候補は何件ありますか？", "tool": "count_candidates", "filter": {"scope": "全地区", "cls": ""}},
+  {"id": "count-area", "question": "本荘五丁目の候補は何件ですか？", "tool": "count_candidates", "filter": {"scope": "本荘五丁目", "cls": ""}},
+  {"id": "count-ward", "question": "南区の候補は何件ですか？", "tool": "count_candidates", "filter": {"scope": "南区", "cls": ""}},
+  {"id": "count-new", "question": "2018 年は未検出の候補は何件ですか？", "tool": "count_candidates", "filter": {"scope": "全地区", "cls": "confirmed_new"}},
+  {"id": "count-uncertain", "question": "未判定の候補は何件ありますか？", "tool": "count_candidates", "filter": {"scope": "全地区", "cls": "uncertain"}},
+  {"id": "list-all", "question": "面積の大きい候補を一覧にしてください", "tool": "list_candidates", "filter": {"scope": "全地区", "cls": ""}},
+  {"id": "list-ward", "question": "西区の候補を一覧で見せてください", "tool": "list_candidates", "filter": {"scope": "西区", "cls": ""}},
+  {"id": "compare-all", "question": "地区ごとの候補数を比べてください", "tool": "compare_areas", "filter": {"scope": "全地区", "cls": ""}},
+  {"id": "photo-largest", "question": "いちばん大きい候補の写真を見せてください", "tool": "show_candidate"},
+  {"id": "photo-area", "question": "薄場一丁目の候補の写真を見せてください", "tool": "show_candidate"},
+  {"id": "map-area", "question": "本荘五丁目を地図で表示してください", "tool": "focus_map"},
+  {"id": "accuracy", "question": "このアプリの精度は？", "tool": "get_accuracy"},
+  {"id": "help", "question": "このアプリでは何を聞けますか？", "tool": "show_help"},
+  {"id": "refuse-weather", "question": "明日の熊本の天気を教えてください", "tool": "refuse", "reasons": ["out_of_scope"]},
+  {"id": "refuse-year", "question": "2020 年に建った建物は何件ですか？", "tool": "refuse", "reasons": ["no_photo_period"]},
+  {"id": "refuse-panel", "question": "屋根の太陽光パネルは何枚ありますか？", "tool": "refuse", "reasons": ["not_implemented"]},
+  {"id": "refuse-demolished", "question": "取り壊された建物はどこですか？", "tool": "refuse", "reasons": ["not_implemented"]},
+  {"id": "refuse-satellite", "question": "衛星データで変化した場所を教えてください", "tool": "refuse", "reasons": ["not_implemented"]}
+]
