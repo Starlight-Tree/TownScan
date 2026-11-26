@@ -274,7 +274,7 @@ export function MapPanel(props: Props) {
             <span id={selectedLabelId} className="map-selected__key">
               選択中の候補
             </span>
-            {isCandidateClass(selectedCard.properties.class) && <ClassBadge cls={selectedCard.properties.class} short />}
+            {isCandidateClass(selectedCard.properties.class) && <ClassBadge cls={selectedCard.properties.class} reason={selectedCard.properties.reason} short />}
             <span className="map-selected__id">{selectedCard.properties.id}</span>
             <button
               type="button"

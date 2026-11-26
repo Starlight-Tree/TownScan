@@ -14,7 +14,7 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
     const items = answerScope([countWith({ area_id: 'z18-1-2', cls: 'uncertain' })], nameOf);
     expect(items).toEqual([
       { key: 'area', label: '地区', text: 'テスト地区 01' },
-      { key: 'class', label: '分類', text: '判定保留', cls: 'uncertain' },
+      { key: 'class', label: '分類', text: '未判定', cls: 'uncertain' },
       { key: 'years', label: '写真の年', text: '2018・2023 年' },
     ]);
   });
@@ -43,7 +43,7 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
     expect(cls).toEqual({ key: 'class', label: '分類', text: 'すべて' });
     const noScope = answerScope([countWith({ area_ids: ['z18-1-2', 'z18-2-2', 'z18-3-3'], cls: 'uncertain' })], nameOf);
     expect(noScope[0]).toEqual({ key: 'area', label: '地区', text: '3 地区' });
-    expect(noScope[1]).toEqual({ key: 'class', label: '分類', text: '判定保留', cls: 'uncertain' });
+    expect(noScope[1]).toEqual({ key: 'class', label: '分類', text: '未判定', cls: 'uncertain' });
   });
 
   it('count が複数なら、地区・分類とも最後の件数の条件を出す', () => {
@@ -77,7 +77,7 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
       const items = answerScope([byWard, narrow], nameOf);
       expect(rows(items)).toEqual([
         { key: 'area', label: '地区', text: 'テスト地区 01' },
-        { key: 'class', label: '分類', text: '判定保留', cls: 'uncertain' },
+        { key: 'class', label: '分類', text: '未判定', cls: 'uncertain' },
       ]);
       expect(filterFromResults([byWard, narrow])).toMatchObject({ areaId: 'z18-1-2' });
     });
@@ -208,7 +208,7 @@ describe('AnswerScope（回答の対象・条件の行）', () => {
     const group = screen.getByRole('group', { name: 'この回答の対象・条件' });
     const term = (label: string) => within(group).getByText(label, { selector: 'dt' });
     expect(term('地区').nextElementSibling).toHaveTextContent('テスト地区 01');
-    expect(term('分類').nextElementSibling).toHaveTextContent('新規出現（旧写真に無い）');
+    expect(term('分類').nextElementSibling).toHaveTextContent('2018 年は未検出');
     expect(term('分類').nextElementSibling?.querySelector('svg')).not.toBeNull();
     expect(term('写真の年').nextElementSibling).toHaveTextContent('2018・2023 年');
   });

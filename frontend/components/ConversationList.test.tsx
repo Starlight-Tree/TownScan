@@ -25,7 +25,7 @@ const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push }), usePathname: () => '/' }));
 
 const c = (id: string, title: string, updated = '2026-11-25T01:05:00+00:00'): ConversationSummary => ({ id, title, created_at: '2026-11-25T01:00:00+00:00', updated_at: updated });
-const LIST = [c('c1', '新規出現の候補は何件ありますか？'), c('c2', '地区ごとの候補数を比べて', '2026-11-24T10:30:00+09:00')];
+const LIST = [c('c1', '2018 年は未検出の候補は何件ありますか？'), c('c2', '地区ごとの候補数を比べて', '2026-11-24T10:30:00+09:00')];
 
 /** 項目の「開く」ボタン（title 属性が題名。ゴミ箱の名前「「題名」を削除」と取り違えない） */
 const openButton = (region: HTMLElement, title: string) => within(region).getByTitle(title);
@@ -87,9 +87,9 @@ describe('一覧の 6 つの状態（仕様 §7.1.2）', () => {
     const { region } = setupView({ status: 'ready', conversations: LIST });
     const items = within(region).getAllByRole('listitem');
     expect(items).toHaveLength(2);
-    const open = within(items[0]!).getByTitle('新規出現の候補は何件ありますか？');
+    const open = within(items[0]!).getByTitle('2018 年は未検出の候補は何件ありますか？');
     expect(open.tagName).toBe('BUTTON');
-    expect(open.querySelector('.thread-title')).toHaveTextContent('新規出現の候補は何件ありますか？');
+    expect(open.querySelector('.thread-title')).toHaveTextContent('2018 年は未検出の候補は何件ありますか？');
     expect(open.querySelector('.thread-time')?.textContent).toBe(new Date('2026-11-25T01:05:00+00:00').toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
     expect(within(items[1]!).getByTitle('地区ごとの候補数を比べて')).toBeInTheDocument();
   });
@@ -113,7 +113,7 @@ describe('項目と操作', () => {
     const current = openButton(region, '地区ごとの候補数を比べて');
     expect(current).toHaveAttribute('aria-current', 'true');
     expect(current.closest('li')).toHaveAttribute('data-current', 'true');
-    const other = openButton(region, '新規出現の候補は何件ありますか？');
+    const other = openButton(region, '2018 年は未検出の候補は何件ありますか？');
     expect(other).not.toHaveAttribute('aria-current');
     await userEvent.click(other);
     expect(onSelect).toHaveBeenCalledWith('c1');
@@ -121,10 +121,10 @@ describe('項目と操作', () => {
 
   it('生成中（busy）は、別の会話へ移れない（開いている会話のボタンは押せる）。開いている会話は削除できない（別の会話は削除できる）', () => {
     const { region } = setupView({ status: 'ready', conversations: LIST }, { currentId: 'c2', busy: true });
-    expect(openButton(region, '新規出現の候補は何件ありますか？')).toBeDisabled();
+    expect(openButton(region, '2018 年は未検出の候補は何件ありますか？')).toBeDisabled();
     expect(openButton(region, '地区ごとの候補数を比べて')).toBeEnabled();
     expect(within(region).getByRole('button', { name: '「地区ごとの候補数を比べて」を削除' })).toBeDisabled();
-    expect(within(region).getByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' })).toBeEnabled();
+    expect(within(region).getByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' })).toBeEnabled();
   });
 
   it('生成中でなければ、すべて押せる', () => {
@@ -151,7 +151,7 @@ describe('削除（2 段階）', () => {
   it('同時に確認が出るのは 1 件だけ。「やめる」で元に戻る', async () => {
     const { region } = setupView({ status: 'ready', conversations: LIST });
     await userEvent.click(trash(region, '地区ごとの候補数を比べて'));
-    await userEvent.click(trash(region, '新規出現の候補は何件ありますか？'));
+    await userEvent.click(trash(region, '2018 年は未検出の候補は何件ありますか？'));
     expect(within(region).getAllByRole('button', { name: '削除する' })).toHaveLength(1);
     expect(within(region).getByRole('button', { name: '「地区ごとの候補数を比べて」を削除' })).toBeInTheDocument();
     await userEvent.click(within(region).getByRole('button', { name: 'やめる' }));
@@ -161,7 +161,7 @@ describe('削除（2 段階）', () => {
 
   it('「削除する」で、その会話の削除を頼む。成功なら、何も出ない', async () => {
     const { region, onDelete } = setupView({ status: 'ready', conversations: LIST });
-    await userEvent.click(trash(region, '新規出現の候補は何件ありますか？'));
+    await userEvent.click(trash(region, '2018 年は未検出の候補は何件ありますか？'));
     await userEvent.click(within(region).getByRole('button', { name: '削除する' }));
     expect(onDelete).toHaveBeenCalledWith('c1');
     expect(within(region).queryByRole('alert')).not.toBeInTheDocument();
@@ -172,7 +172,7 @@ describe('削除（2 段階）', () => {
     const message = '会話を削除できませんでした。しばらく待ってから再試行してください。';
     const { region, onDelete } = setupView({ status: 'ready', conversations: LIST });
     onDelete.mockResolvedValueOnce(message);
-    await userEvent.click(trash(region, '新規出現の候補は何件ありますか？'));
+    await userEvent.click(trash(region, '2018 年は未検出の候補は何件ありますか？'));
     await userEvent.click(within(region).getByRole('button', { name: '削除する' }));
     const alert = await within(region).findByRole('alert');
     expect(alert).toHaveTextContent(message);
@@ -246,7 +246,7 @@ describe('サイドパネルの一覧（ConversationList）', () => {
       </Providers>,
     );
     expect(screen.getByRole('status')).toHaveTextContent('読み込み中…');
-    expect(await screen.findByTitle('新規出現の候補は何件ありますか？')).toBeInTheDocument();
+    expect(await screen.findByTitle('2018 年は未検出の候補は何件ありますか？')).toBeInTheDocument();
     expect(router.to('GET /api/conversations')[0]?.headers.get('authorization')).toMatch(/^Bearer /);
     expect(router.count('GET /api/conversations')).toBe(1);
   });
@@ -322,9 +322,9 @@ describe('サイドパネルの一覧（ConversationList）', () => {
         <ConversationList />
       </Providers>,
     );
-    await userEvent.click(await screen.findByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' }));
+    await userEvent.click(await screen.findByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' }));
     await userEvent.click(screen.getByRole('button', { name: '削除する' }));
-    await waitFor(() => expect(screen.queryByTitle('新規出現の候補は何件ありますか？')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTitle('2018 年は未検出の候補は何件ありますか？')).not.toBeInTheDocument());
     expect(router.count('GET /api/conversations')).toBe(2);
     // 覚えていた会話（c1）を消した: チャットを新しくする
     expect(reset).toHaveBeenCalledTimes(1);
@@ -343,7 +343,7 @@ describe('サイドパネルの一覧（ConversationList）', () => {
     await userEvent.click(screen.getByRole('button', { name: '削除する' }));
     await waitFor(() => expect(router.count('DELETE /api/conversations/c2')).toBe(1));
     expect(readConversationId()).toBe('c1');
-    await userEvent.click(await screen.findByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' }));
+    await userEvent.click(await screen.findByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' }));
     await userEvent.click(screen.getByRole('button', { name: '削除する' }));
     await waitFor(() => expect(readConversationId()).toBeNull());
   });
@@ -355,10 +355,10 @@ describe('サイドパネルの一覧（ConversationList）', () => {
         <ConversationList />
       </Providers>,
     );
-    await userEvent.click(await screen.findByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' }));
+    await userEvent.click(await screen.findByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' }));
     await userEvent.click(screen.getByRole('button', { name: '削除する' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('会話を削除できませんでした。しばらく待ってから再試行してください。');
-    expect(screen.getByTitle('新規出現の候補は何件ありますか？')).toBeInTheDocument();
+    expect(screen.getByTitle('2018 年は未検出の候補は何件ありますか？')).toBeInTheDocument();
   });
 });
 

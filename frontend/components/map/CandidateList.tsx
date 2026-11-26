@@ -66,7 +66,7 @@ function CandidateListBody({ areaId, cls, onSelect }: Omit<Props, 'multiArea'>) 
         {items.map((c) => (
           <li key={c.id}>
             <button type="button" className="cand-list__item" onClick={() => onSelect(c.id)}>
-              <ClassBadge cls={c.class} short />
+              <ClassBadge cls={c.class} reason={c.reason} short />
               <span className="cand-list__area">{formatArea(c.area_m2)}</span>
               <span className="cand-list__where">{c.area_name ?? nameOf(c.area_id)}</span>
               <span className="visually-hidden">（{c.id} の詳細を開く）</span>

@@ -1,4 +1,4 @@
-import { CLASS_INFO } from '../lib/classes';
+import { CLASS_INFO, classText } from '../lib/classes';
 import type { CandidateClass } from '../lib/api-types';
 
 /** 分類の印。色だけでなく、形と線種のサンプルも並べる */
@@ -22,12 +22,12 @@ export function ClassSwatch({ cls, size = 18 }: { cls: CandidateClass; size?: nu
   );
 }
 
-export function ClassBadge({ cls, short = false }: { cls: CandidateClass; short?: boolean }) {
+export function ClassBadge({ cls, short = false, reason }: { cls: CandidateClass; short?: boolean; reason?: string }) {
   const info = CLASS_INFO[cls];
   return (
     <span className="class-badge" style={{ borderColor: info.color, color: info.color }} data-class={cls}>
       <ClassSwatch cls={cls} size={14} />
-      {short ? info.short : info.label}
+      {reason ? classText(cls, reason) : short ? info.short : info.label}
     </span>
   );
 }

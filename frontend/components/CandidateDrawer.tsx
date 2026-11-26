@@ -152,7 +152,7 @@ function DetailBody({ detail, onShowOnMap }: { detail: CandidateDetail; onShowOn
   return (
     <>
       <div className="drawer__summary">
-        {cls ? <ClassBadge cls={cls} /> : <span className="pill">{String(detail.class)}</span>}
+        {cls ? <ClassBadge cls={cls} reason={detail.reason} /> : <span className="pill">{String(detail.class)}</span>}
         <p className="drawer__meta">
           {detail.area_name ?? nameOf(detail.area_id)}・{formatArea(detail.area_m2)}
           <br />

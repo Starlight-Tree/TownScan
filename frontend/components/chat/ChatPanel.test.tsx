@@ -154,11 +154,11 @@ describe('チャット', () => {
     await userEvent.type(input(), '渋谷の新築は？{Enter}');
     await screen.findByText('範囲外です');
     const card = screen.getByRole('note', { name: 'この質問は範囲外です' });
-    await userEvent.click(within(card).getByRole('button', { name: '新規出現の候補は何件ありますか？' }));
+    await userEvent.click(within(card).getByRole('button', { name: '2018 年は未検出の候補は何件ありますか？' }));
     await screen.findByText('件数です');
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body)).messages.at(-1)).toEqual({
       role: 'user',
-      content: '新規出現の候補は何件ありますか？',
+      content: '2018 年は未検出の候補は何件ありますか？',
     });
   });
 
@@ -342,7 +342,7 @@ describe('最初の画面（説明・サンプルの質問）', () => {
     expect(screen.queryByText(/12 地区/)).not.toBeInTheDocument();
   });
 
-  it('対象・比較・出典と、新規出現の「候補」であって新築と断定しない旨を出す', () => {
+  it('対象・比較・出典と、2018 年は未検出の「候補」であって新築と断定しない旨を出す', () => {
     setup({ areas });
     const facts = screen.getByText('対象').closest('dl')!;
     expect(within(facts).getByText('比較').nextElementSibling).toHaveTextContent('2018 年と 2023 年の航空写真');
@@ -466,7 +466,7 @@ describe('回答の対象・条件の行', () => {
     await userEvent.type(input(), '保留は？{Enter}');
     const scope = await screen.findByRole('group', { name: scopeName });
     expect(scope).toHaveTextContent('テスト地区 01');
-    expect(scope).toHaveTextContent('判定保留');
+    expect(scope).toHaveTextContent('未判定');
     expect(scope).toHaveTextContent('2018・2023 年');
     const text = screen.getByText('件数です。');
     const card = screen.getByRole('region', { name: count.title });
@@ -721,7 +721,7 @@ describe('チャットのスクロール位置（開いた直後は説明の見�
 });
 
 describe('比較の回答の並び（本文 → 要点 → 条件 → 補足。2026-11-26）', () => {
-  it('比較の要点と判定保留の 1 行は本文のすぐ下（枠なし）。根拠を見るは、条件の帯のあとに置く', async () => {
+  it('比較の要点と未判定の 1 行は本文のすぐ下（枠なし）。根拠を見るは、条件の帯のあとに置く', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('比較です。', [compare])));
     const { input } = setup({ areas });
     await userEvent.type(input(), '比べて{Enter}');
@@ -734,7 +734,7 @@ describe('比較の回答の並び（本文 → 要点 → 条件 → 補足。2
     expect(follows(text, card)).toBe(true);
     expect(follows(card, scope)).toBe(true);
     expect(follows(scope, provenance)).toBe(true);
-    expect(card).toContainElement(screen.getByText(/^判定保留: /));
+    expect(card).toContainElement(screen.getByText(/^未判定: /));
     expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
     // 根拠は、要点のカードの外（図と条件のあと）
     expect(card.contains(provenance)).toBe(false);
@@ -754,7 +754,7 @@ describe('回答の対象・条件の行: 最後の条件（拡大ビューの�
     const scope = await screen.findByRole('group', { name: scopeName });
     expect(within(scope).getByText('地区', { selector: 'dt' }).nextElementSibling).toHaveTextContent('中央区');
     expect(within(scope).queryByText('分類', { selector: 'dt' })).not.toBeInTheDocument();
-    expect(scope).not.toHaveTextContent('判定保留');
+    expect(scope).not.toHaveTextContent('未判定');
     // 比べる地区の行は、比較の結果の名前（条件の行とは別）
     expect(scope).toHaveTextContent('比べる地区');
     expect(scope).toHaveTextContent('テスト地区 01、テスト地区 02');
@@ -1062,9 +1062,9 @@ describe('最初の画面: 地区の大きさ・分類の意味・「候補」�
   it('「候補」は 3 分類の合計の意味で、新築と断定しない。最初の画面は短く、くわしいことは「くわしく」の中（閉じた状態）', () => {
     setup();
     const lead = document.querySelector('.welcome__lead') as HTMLElement;
-    expect(lead).toHaveTextContent('新しく現れた建物の候補');
+    expect(lead).toHaveTextContent('建物データに載っていない建物の候補');
     expect(lead).toHaveTextContent('新築と断定するものではありません');
-    expect(lead).not.toHaveTextContent('新規出現');
+    expect(lead).not.toHaveTextContent('2018 年は未検出');
     expect(document.querySelector('.welcome__caution')).toBeNull(); // 大きな注意書きの枠は出さない
     expect(screen.getByText(/3 つの合計が、候補の数です/)).toBeInTheDocument();
     const more = document.querySelector('details.welcome__more') as HTMLDetailsElement;

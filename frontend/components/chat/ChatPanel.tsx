@@ -620,7 +620,7 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
     <div className="welcome">
       <h2 className="welcome__title">熊本市中心部の変化を、写真と会話で調べる</h2>
       <p className="welcome__lead">
-        熊本市中心部の航空写真（2018 年と 2023 年）から、<b>新しく現れた建物の候補</b>を棟ごとに見つけています（新築と断定するものではありません）。質問すると、件数・表・地図・写真を、根拠つきで返します。
+        熊本市中心部の航空写真（2018 年と 2023 年）から、<b>建物データに載っていない建物の候補</b>を棟ごとに見つけています（新築と断定するものではありません）。質問すると、件数・表・地図・写真を、根拠つきで返します。
       </p>
       <div className="welcome__actions">
         <button type="button" className="btn" onClick={(e) => onShowMap(e.currentTarget)}>

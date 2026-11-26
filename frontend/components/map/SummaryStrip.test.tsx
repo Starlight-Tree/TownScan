@@ -21,7 +21,7 @@ function area(id: string, name: string, counts: [number, number, number]): AreaS
 const areas = [area('a', 'アサヒ地区', [4, 4, 2]), area('b', 'ノース地区', [5, 3, 1]), area('c', 'ミナミ地区', [1200, 0, 0])];
 
 const strip = () => screen.getByRole('group', { name: '件数の集計' });
-/** 「新規出現 5」のように、分類ごとの数字を読む */
+/** 「2018 年は未検出 5」のように、分類ごとの数字を読む */
 const countOf = (label: string) => within(strip()).getByText(label).closest('li')!.querySelector('strong')!.textContent;
 
 function setup(filter: MapFilter = ALL_FILTER, list: AreaSummary[] = areas) {
@@ -34,9 +34,9 @@ describe('集計の帯', () => {
   it('絞り込みが無いとき: 対象は「全 N 地区」（地区数は一覧から数える）。3 分類の件数は全地区の合計。解除のボタンは出さない', () => {
     setup();
     expect(strip()).toHaveTextContent('対象全 3 地区');
-    expect(countOf('新規出現')).toBe('1,209');
-    expect(countOf('既存の描き漏れ')).toBe('7');
-    expect(countOf('判定保留')).toBe('3');
+    expect(countOf('2018 年は未検出')).toBe('1,209');
+    expect(countOf('2018 年も検出')).toBe('7');
+    expect(countOf('未判定')).toBe('3');
     expect(within(strip()).queryByText(/表示中/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '条件を解除' })).not.toBeInTheDocument();
   });
@@ -50,9 +50,9 @@ describe('集計の帯', () => {
     const { onFilterChange } = setup({ ...ALL_FILTER, areaId: 'b' });
     expect(strip()).toHaveTextContent('対象ノース地区');
     expect(strip()).not.toHaveTextContent('全 3 地区');
-    expect(countOf('新規出現')).toBe('5');
-    expect(countOf('既存の描き漏れ')).toBe('3');
-    expect(countOf('判定保留')).toBe('1');
+    expect(countOf('2018 年は未検出')).toBe('5');
+    expect(countOf('2018 年も検出')).toBe('3');
+    expect(countOf('未判定')).toBe('1');
     await userEvent.click(screen.getByRole('button', { name: '条件を解除' }));
     expect(onFilterChange).toHaveBeenCalledWith(ALL_FILTER);
   });
@@ -62,11 +62,11 @@ describe('集計の帯', () => {
     const { onFilterChange } = setup({ areaId: '', classes });
     // 全体: 1209+7+3=1219 件のうち、表示中は 1209+3=1212 件
     expect(strip()).toHaveTextContent('全 1,219 件のうち、表示中 1,212 件');
-    expect(countOf('既存の描き漏れ')).toBe('7');
-    const omit = within(strip()).getByText('既存の描き漏れ').closest('li')!;
+    expect(countOf('2018 年も検出')).toBe('7');
+    const omit = within(strip()).getByText('2018 年も検出').closest('li')!;
     expect(omit).toHaveTextContent('（非表示）');
     expect(omit).toHaveAttribute('data-shown', 'false');
-    expect(within(strip()).getByText('新規出現').closest('li')).not.toHaveTextContent('非表示');
+    expect(within(strip()).getByText('2018 年は未検出').closest('li')).not.toHaveTextContent('非表示');
     await userEvent.click(screen.getByRole('button', { name: '条件を解除' }));
     expect(onFilterChange).toHaveBeenCalledWith(ALL_FILTER);
   });
@@ -80,13 +80,13 @@ describe('集計の帯', () => {
   it('一覧に無い地区の条件・地区の一覧が空のときは、数字を作らず「—」を出す', () => {
     setup({ ...ALL_FILTER, areaId: 'zzz' });
     expect(strip()).toHaveTextContent('対象zzz');
-    expect(countOf('新規出現')).toBe('—');
+    expect(countOf('2018 年は未検出')).toBe('—');
   });
 
   it('地区の一覧が空（未着）のとき', () => {
     setup(ALL_FILTER, []);
     expect(strip()).toHaveTextContent('地区の情報がありません');
-    expect(countOf('判定保留')).toBe('—');
+    expect(countOf('未判定')).toBe('—');
     expect(within(strip()).queryByText(/全 0 地区/)).not.toBeInTheDocument();
   });
 
@@ -103,9 +103,9 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
     setup();
     const boxes = within(group()).getAllByRole('checkbox');
     expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([
-      '新規出現（旧写真に無い）、1,209 件',
-      '既存の描き漏れ（旧写真に既にある）、7 件',
-      '判定保留、3 件',
+      '2018 年は未検出、1,209 件',
+      '2018 年も検出、7 件',
+      '未判定、3 件',
     ]);
     expect(boxes.every((b) => (b as HTMLInputElement).checked)).toBe(true);
     // ふつうの幅で 1 行に並べるため、対象・分類・解除は、同じ帯の直下の子
@@ -114,20 +114,20 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
 
   it('一覧に無い地区・地区が空のとき、件数の名前は「件数不明」（数字を作らない）', () => {
     setup({ ...ALL_FILTER, areaId: 'zzz' });
-    expect(within(group()).getByRole('checkbox', { name: '判定保留、件数不明' })).toBeInTheDocument();
+    expect(within(group()).getByRole('checkbox', { name: '未判定、件数不明' })).toBeInTheDocument();
   });
 
   it('押すと、その分類だけを切り替えて onFilterChange へ渡す（元の集合を書き換えない）', async () => {
     const classes = new Set<CandidateClass>(['confirmed_new', 'existing_omission', 'uncertain']);
     const { onFilterChange } = setup({ areaId: '', classes });
-    await userEvent.click(within(group()).getByRole('checkbox', { name: /判定保留/ }));
+    await userEvent.click(within(group()).getByRole('checkbox', { name: /未判定/ }));
     const off = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect([...off.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
     expect(classes.size).toBe(3);
     // 外れているものを押すと、足される
     cleanup();
     const second = setup({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new']) });
-    await userEvent.click(within(group()).getByRole('checkbox', { name: /判定保留/ }));
+    await userEvent.click(within(group()).getByRole('checkbox', { name: /未判定/ }));
     const on = second.onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect([...on.classes].sort()).toEqual(['confirmed_new', 'uncertain']);
   });
@@ -135,7 +135,7 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
   it('地区（areaId）・複数の地区（areaIds・scope）の条件は、切り替えても保つ', async () => {
     const wardFilter: MapFilter = { areaId: '', areaIds: ['a', 'b'], scope: '中央区', classes: new Set<CandidateClass>(['confirmed_new', 'uncertain']) };
     const { onFilterChange } = setup(wardFilter);
-    await userEvent.click(within(group()).getByRole('checkbox', { name: /新規出現/ }));
+    await userEvent.click(within(group()).getByRole('checkbox', { name: /2018 年は未検出/ }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaIds).toEqual(['a', 'b']);
     expect(next.scope).toBe('中央区');
@@ -144,13 +144,13 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
 
     cleanup();
     const single = setup({ areaId: 'b', classes: new Set<CandidateClass>(['confirmed_new']) });
-    await userEvent.click(within(group()).getByRole('checkbox', { name: /既存の描き漏れ/ }));
+    await userEvent.click(within(group()).getByRole('checkbox', { name: /2018 年も検出/ }));
     expect((single.onFilterChange.mock.calls.at(-1)![0] as MapFilter).areaId).toBe('b');
   });
 
   it('キーボードで操作できる（Tab で届き、Space で切り替わる）。押してもフォーカスは動かない', async () => {
     const { onFilterChange } = setup();
-    const box = within(group()).getByRole('checkbox', { name: /新規出現/ });
+    const box = within(group()).getByRole('checkbox', { name: /2018 年は未検出/ });
     box.focus();
     await userEvent.keyboard(' ');
     expect(onFilterChange).toHaveBeenCalledTimes(1);
@@ -162,7 +162,7 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
     const items = Array.from(group().querySelectorAll('li'));
     expect(items.map((li) => li.getAttribute('data-shown'))).toEqual(['true', 'false', 'true']);
     expect(items.map((li) => li.textContent?.includes('（非表示）'))).toEqual([false, true, false]);
-    expect(within(group()).getByRole('checkbox', { name: /既存の描き漏れ/ })).not.toBeChecked();
+    expect(within(group()).getByRole('checkbox', { name: /2018 年も検出/ })).not.toBeChecked();
   });
 });
 
@@ -173,15 +173,15 @@ describe('複数の地区（区など。areaIds）の条件', () => {
     setup(ward());
     expect(strip()).toHaveTextContent('対象中央区');
     expect(strip()).not.toHaveTextContent('全 3 地区');
-    expect(countOf('新規出現')).toBe('9'); // 4 + 5（ミナミ地区の 1,200 は入らない）
-    expect(countOf('既存の描き漏れ')).toBe('7');
-    expect(countOf('判定保留')).toBe('3');
+    expect(countOf('2018 年は未検出')).toBe('9'); // 4 + 5（ミナミ地区の 1,200 は入らない）
+    expect(countOf('2018 年も検出')).toBe('7');
+    expect(countOf('未判定')).toBe('3');
   });
 
   it('scope が無ければ、名前を作らず「N 地区」と言う', () => {
     setup(ward({ scope: undefined }));
     expect(strip()).toHaveTextContent('対象2 地区');
-    expect(countOf('新規出現')).toBe('9');
+    expect(countOf('2018 年は未検出')).toBe('9');
   });
 
   it('分類の一部だけを表示しているとき: 「全 m 件のうち、表示中 n 件」も、対象の地区の和', () => {
@@ -192,7 +192,7 @@ describe('複数の地区（区など。areaIds）の条件', () => {
   it('対象の地区が一覧に 1 つでも無ければ、足りない和を出さず「—」', () => {
     setup(ward({ areaIds: ['a', 'zzz'] }));
     expect(strip()).toHaveTextContent('対象中央区');
-    expect(countOf('新規出現')).toBe('—');
+    expect(countOf('2018 年は未検出')).toBe('—');
   });
 
   it('「条件を解除」を出し、押すと ALL_FILTER（areaIds・scope も消える）に戻す', async () => {

@@ -243,7 +243,7 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
     setup();
     const strip = screen.getByRole('group', { name: '件数の集計' });
     expect(strip).toHaveTextContent('全 2 地区');
-    expect(strip).toHaveTextContent('新規出現9');
+    expect(strip).toHaveTextContent('2018 年は未検出9');
     // 表示の切り替え（チェックボックス）が、数字のそばにある
     const classes = within(strip).getByRole('group', { name: /表示する分類/ });
     expect(within(classes).getAllByRole('checkbox')).toHaveLength(3);
@@ -255,9 +255,9 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
     expect(document.querySelector('fieldset')).toBeNull();
     expect(document.querySelector('legend')).toBeNull();
     expect(document.querySelector('.legend')).toBeNull();
-    expect(screen.getAllByRole('checkbox', { name: /新規出現/ })).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox', { name: /2018 年は未検出/ })).toHaveLength(1);
     const stage = document.querySelector<HTMLElement>('.map-stage')!;
-    expect(within(stage).queryByRole('checkbox', { name: /新規出現|既存の描き漏れ|判定保留/ })).not.toBeInTheDocument();
+    expect(within(stage).queryByRole('checkbox', { name: /2018 年は未検出|2018 年も検出|未判定/ })).not.toBeInTheDocument();
     // 「表示する分類」は 1 つのグループで、集計の帯の中にある
     const group = screen.getByRole('group', { name: '表示する分類（色・線・形で区別）' });
     expect(screen.getByRole('group', { name: '件数の集計' })).toContainElement(group);
@@ -273,26 +273,26 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
       expect(label.querySelector('input[type="checkbox"]')).not.toBeNull();
       expect(label.querySelector('svg.class-swatch')).not.toBeNull();
     }
-    expect(screen.getByRole('checkbox', { name: /新規出現/ })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /既存の描き漏れ/ })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /判定保留/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /2018 年は未検出/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /2018 年も検出/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /未判定/ })).toBeChecked();
     // 分類の全文（旧写真に無い、など）は、ラベルの title に残す
-    expect(items[0]!.querySelector('label')).toHaveAttribute('title', '新規出現（旧写真に無い）');
+    expect(items[0]!.querySelector('label')).toHaveAttribute('title', '2018 年は未検出');
   });
 
   it('チェックの状態は、渡された絞り込みに従う。外した分類は（非表示）と言う（チェックが外れているので、読み上げでは重ねない）', () => {
     setup({ filter: { areaId: '', classes: new Set<CandidateClass>(['confirmed_new']) } });
-    expect(screen.getByRole('checkbox', { name: /新規出現/ })).toBeChecked();
-    const omit = screen.getByRole('checkbox', { name: /既存の描き漏れ/ });
+    expect(screen.getByRole('checkbox', { name: /2018 年は未検出/ })).toBeChecked();
+    const omit = screen.getByRole('checkbox', { name: /2018 年も検出/ });
     expect(omit).not.toBeChecked();
     expect(omit.closest('li')).toHaveTextContent('（非表示）');
-    expect(omit).toHaveAccessibleName('既存の描き漏れ（旧写真に既にある）、7 件');
+    expect(omit).toHaveAccessibleName('2018 年も検出、7 件');
   });
 
   it('分類を外すと、集計の帯に「表示中」の差と「条件を解除」が出る。解除すると全部に戻る（親が持つ絞り込みにも伝える）', async () => {
     const onFilterChange = vi.fn();
     setup({ onFilterChange });
-    await userEvent.click(screen.getByRole('checkbox', { name: /判定保留/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     expect(onFilterChange).toHaveBeenLastCalledWith(expect.objectContaining({ areaId: '' }));
     const strip = screen.getByRole('group', { name: '件数の集計' });
     expect(strip).toHaveTextContent('全 19 件のうち、表示中 16 件');
@@ -338,7 +338,7 @@ describe('地図の寄せ方（詳細は地図に重ならない）', () => {
   });
 });
 
-// 分類ごとの件数（集計の帯の中の数字）を、表示順（新規出現・既存の描き漏れ・判定保留）で読む
+// 分類ごとの件数（集計の帯の中の数字）を、表示順（2018 年は未検出・2018 年も検出・未判定）で読む
 const classCounts = () =>
   Array.from(screen.getByRole('group', { name: /表示する分類/ }).querySelectorAll('li strong')).map((e) => e.textContent);
 
@@ -357,7 +357,7 @@ describe('地区を選んだときの件数と絞り込み', () => {
     setup({ onFilterChange });
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '地区' }), 'b');
     expect(onFilterChange).toHaveBeenLastCalledWith(expect.objectContaining({ areaId: 'b' }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /判定保留/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaId).toBe('b');
     expect([...next.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
@@ -386,7 +386,7 @@ describe('複数の地区（区など。areaIds）の絞り込み', () => {
     const strip = screen.getByRole('group', { name: '件数の集計' });
     expect(strip).toHaveTextContent('対象中央区');
     expect(strip).not.toHaveTextContent('全 3 地区');
-    expect(strip).toHaveTextContent('新規出現9');
+    expect(strip).toHaveTextContent('2018 年は未検出9');
   });
 
   it('地区の選択ボックスは、先頭に「{scope}（複数の地区）」を選択済みで出す。選び直しても何も変えない', async () => {
@@ -431,7 +431,7 @@ describe('複数の地区（区など。areaIds）の絞り込み', () => {
   it('分類を切り替えても、複数の地区の条件（areaIds・scope）は保つ', async () => {
     const onFilterChange = vi.fn();
     setupWard({ onFilterChange });
-    await userEvent.click(screen.getByRole('checkbox', { name: /判定保留/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaIds).toEqual(['a', 'b']);
     expect(next.scope).toBe('中央区');
@@ -463,7 +463,7 @@ describe('選択中の候補のカード（印・形を選んでも地図に留�
     setup({ selectedId: 'c-3', onComparePhotos });
     expect(group()).toHaveTextContent('選択中の候補');
     expect(group().querySelector('.class-badge')).toHaveAttribute('data-class', 'uncertain');
-    expect(group()).toHaveTextContent('判定保留');
+    expect(group()).toHaveTextContent('未判定');
     expect(group()).toHaveTextContent('c-3');
     await userEvent.click(within(group()).getByRole('button', { name: '写真を比べる' }));
     expect(onComparePhotos).toHaveBeenCalledTimes(1);
@@ -703,12 +703,12 @@ describe('一覧へ渡す分類（API は分類を 1 つしか受けない）', 
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(1));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: null, cls: null, limit: 30 }, expect.anything());
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /既存の描き漏れ/ })); // 2 つ残る: 条件は同じ
-    await userEvent.click(screen.getByRole('checkbox', { name: /判定保留/ })); // 1 つだけ残る
+    await userEvent.click(screen.getByRole('checkbox', { name: /2018 年も検出/ })); // 2 つ残る: 条件は同じ
+    await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ })); // 1 つだけ残る
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(2));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: null, cls: 'confirmed_new', limit: 30 }, expect.anything());
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /判定保留/ })); // 2 つに戻す
+    await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ })); // 2 つに戻す
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(3));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: null, cls: null, limit: 30 }, expect.anything());
   });
@@ -902,7 +902,7 @@ describe('回答の中の図として使う（inline）と、2 つの地図パ�
     expect(screen.queryByRole('group', { name: '地図の種類' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText('候補を一覧で見る（面積の大きい順）')).not.toBeInTheDocument();
-    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['新規出現', '既存の描き漏れ', '判定保留']);
+    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['2018 年は未検出', '2018 年も検出', '未判定']);
     expect(screen.getByTestId('leaflet')).toBeInTheDocument();
     unmount();
     render(<MapPanel {...propsFor()} />);
@@ -924,7 +924,7 @@ describe('回答の中の図として使う（inline）と、2 つの地図パ�
 
   it('inline の凡例は、絞り込みで出している分類だけ', () => {
     render(<MapPanel {...propsFor()} filter={{ areaId: '', classes: new Set(['confirmed_new'] as const) }} inline />);
-    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['新規出現']);
+    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['2018 年は未検出']);
   });
 
   it('地図のパネルが 2 つ同時にあっても、地区の選択の id は重ならない。ラベルは、自分の選択を指す', () => {

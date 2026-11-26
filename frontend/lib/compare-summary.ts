@@ -9,7 +9,7 @@ import { formatNumber } from './format';
 export interface CompareSummary {
   /** 最も多い地区。並びの基準の分類があれば、その分類で */
   lead: string;
-  /** 全地区の合計と、分類ごとの内訳。判定保留が過半のときは、そう言う。合計が 0 のときは無し */
+  /** 全地区の合計と、分類ごとの内訳。未判定が過半のときは、そう言う。合計が 0 のときは無し */
   sub: string | null;
 }
 
@@ -61,6 +61,6 @@ export function compareSummary(result: CompareResult): CompareSummary | null {
   const classSum = byClass.reduce((acc, b) => acc + b.n, 0);
   const head = `全 ${formatNumber(items.length)} 地区の合計は ${formatNumber(sum)} 件`;
   let sub = classSum === sum ? `${head}（${breakdown}）。` : `${head}。`;
-  if (classSum === sum && uncertain * 2 > sum) sub += '判定保留が過半を占めます。目で確かめる候補が多めです。';
+  if (classSum === sum && uncertain * 2 > sum) sub += '未判定が過半を占めます。目で確かめる候補が多めです。';
   return { lead, sub };
 }

@@ -29,7 +29,7 @@ const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push }), usePathname: () => '/' }));
 
 const c = (id: string, title: string): ConversationSummary => ({ id, title, created_at: '2026-11-25T01:00:00+00:00', updated_at: '2026-11-25T01:05:00+00:00' });
-const LIST = [c('c1', '新規出現の候補は何件ありますか？'), c('c2', '地区ごとの候補数を比べて')];
+const LIST = [c('c1', '2018 年は未検出の候補は何件ありますか？'), c('c2', '地区ごとの候補数を比べて')];
 
 const reply = (content: string, results: ToolResult[] = []): ChatResponse => ({
   message: { role: 'assistant', content, results, tool_calls: [{ name: 'count_candidates', args: {} }] },
@@ -157,7 +157,7 @@ describe('ログイン中: 保存（conversation_id）', () => {
 
   it('回答が届いたら、一覧を取り直す（最初の 1 回 + 回答のあとの 1 回）', async () => {
     render(<Harness />);
-    await screen.findByTitle('新規出現の候補は何件ありますか？');
+    await screen.findByTitle('2018 年は未検出の候補は何件ありますか？');
     expect(router.count('GET /api/conversations')).toBe(1);
     await ask('何件ありますか？');
     await screen.findByText('回答です。');
@@ -196,18 +196,18 @@ describe('ログイン中: 保存（conversation_id）', () => {
     const gate = deferred<Response>();
     router.on('GET /api/conversations/c1/messages', () => jsonResponse({ messages: [user('前の質問'), answer('前の回答')] }));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await screen.findByText('前の回答');
     router.on('POST /api/chat', () => gate.promise);
     await ask('続きの質問');
     await waitFor(() => expect(router.count('POST /api/chat')).toBe(1));
     expect(screen.getByTitle('地区ごとの候補数を比べて')).toBeDisabled();
-    expect(screen.getByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '「地区ごとの候補数を比べて」を削除' })).toBeEnabled();
     gate.resolve(jsonResponse(reply('続きの回答')));
     await screen.findByText('続きの回答');
     await waitFor(() => expect(screen.getByTitle('地区ごとの候補数を比べて')).toBeEnabled());
-    expect(screen.getByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' })).toBeEnabled();
   });
 });
 
@@ -349,7 +349,7 @@ describe('ログインの確認が通らないとき（仕様 §7.1.7）', () =>
 
   it('トークンを取れなかったのが通信・5xx のとき（auth_unavailable）は、ログアウトとは見ない。質問は送らず、「もう一度送る」で再試行を促す', async () => {
     render(<Harness />);
-    await screen.findByTitle('新規出現の候補は何件ありますか？');
+    await screen.findByTitle('2018 年は未検出の候補は何件ありますか？');
     clearAccessToken();
     router.on('GET /api/auth/token', () => jsonResponse({}, 502));
     await ask('ひとつめ');
@@ -383,14 +383,14 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
     router.on('GET /api/conversations/c1/messages', () => gate.promise);
     render(<Harness />);
     expect(welcome()).toBeInTheDocument();
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     const status = await within(chatRegion()).findByRole('status');
     expect(status).toHaveTextContent(MSG_RESTORING);
     expect(MSG_RESTORING).toBe('これまでのやり取りを読み込んでいます…');
     expect(welcome()).not.toBeInTheDocument();
     expect(screen.getByRole('log')).toHaveAttribute('aria-busy', 'true');
     // 開いている会話に印が付き、ID を sessionStorage に書く。拡大ビューは「新しい会話」と同じに閉じる（回答ごとの状態を捨てる）
-    expect(screen.getByTitle('新規出現の候補は何件ありますか？')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTitle('2018 年は未検出の候補は何件ありますか？')).toHaveAttribute('aria-current', 'true');
     expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBe('c1');
     expect(onNewConversation).toHaveBeenCalledTimes(1);
 
@@ -412,7 +412,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
   it('開き直したあとの続きは、画面の発言（保存された分を含む）を送り、同じ conversation_id を付ける', async () => {
     router.on('GET /api/conversations/c1/messages', () => jsonResponse({ messages: [user('前の質問'), answer('前の回答')] }));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await screen.findByText('前の回答');
     await ask('続きの質問');
     await screen.findByText('回答です。');
@@ -428,7 +428,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
   it('失敗: 文（role=alert）と「再試行」「新しい会話」。会話 ID は捨てない。再試行で並べられる', async () => {
     router.on('GET /api/conversations/c1/messages', (_c, nth) => (nth === 0 ? jsonResponse(errorBody('db_unavailable'), 503) : jsonResponse({ messages: [user('前の質問'), answer('前の回答')] })));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     const alert = await within(chatRegion()).findByRole('alert');
     expect(alert).toHaveTextContent(MSG_RESTORE_FAILED);
     expect(MSG_RESTORE_FAILED).toBe('過去のやり取りを読み込めませんでした。もう一度読み込むか、新しい会話を始めてください。');
@@ -442,7 +442,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
   it('失敗のとき「新しい会話」で、会話 ID を忘れて最初の状態へ戻る', async () => {
     router.on('GET /api/conversations/c1/messages', () => jsonResponse(errorBody('internal_error'), 500));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     const alert = await within(chatRegion()).findByRole('alert');
     await userEvent.click(within(alert).getByRole('button', { name: '新しい会話' }));
     expect(welcome()).toBeInTheDocument();
@@ -452,13 +452,13 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
   it('404（会話が無い）は、失敗と分けた文を出し、会話 ID を忘れる（再試行は出さない）。続けて質問すれば、新しい会話になる', async () => {
     router.on('GET /api/conversations/c1/messages', () => jsonResponse(errorBody('not_found', '会話が見つかりません'), 404));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     const alert = await within(chatRegion()).findByRole('alert');
     expect(alert).toHaveTextContent(MSG_RESTORE_NOT_FOUND);
     expect(MSG_RESTORE_NOT_FOUND).toBe('この会話は見つかりませんでした。削除されたか、保存の上限（1 人 50 件・最後の動きから 7 日）で消えた可能性があります。');
     expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
     expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBeNull();
-    expect(screen.getByTitle('新規出現の候補は何件ありますか？')).not.toHaveAttribute('aria-current');
+    expect(screen.getByTitle('2018 年は未検出の候補は何件ありますか？')).not.toHaveAttribute('aria-current');
     await ask('新しい質問');
     await screen.findByText('回答です。');
     expect(chatBody(0).conversation_id).not.toBe('c1');
@@ -471,7 +471,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
     router.on('GET /api/conversations/c1/messages', () => a.promise);
     router.on('GET /api/conversations/c2/messages', () => jsonResponse({ messages: [user('B の質問'), answer('B の回答')] }));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await within(chatRegion()).findByRole('status');
     await userEvent.click(screen.getByTitle('地区ごとの候補数を比べて'));
     expect(await screen.findByText('B の回答')).toBeInTheDocument();
@@ -486,7 +486,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
     const a = deferred<Response>();
     router.on('GET /api/conversations/c1/messages', () => a.promise);
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await within(chatRegion()).findByRole('status');
     await userEvent.click(sideNewConversation());
     a.resolve(jsonResponse({ messages: [user('A の質問'), answer('A の回答')] }));
@@ -529,7 +529,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
   it('形が違う ID（壊れた値）は、取りに行かず消す', async () => {
     window.sessionStorage.setItem(CONVERSATION_ID_KEY, '../etc');
     render(<Harness />);
-    await screen.findByTitle('新規出現の候補は何件ありますか？');
+    await screen.findByTitle('2018 年は未検出の候補は何件ありますか？');
     expect(router.countPrefix('/api/conversations/')).toBe(0);
     expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBeNull();
     expect(welcome()).toBeInTheDocument();
@@ -556,7 +556,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
     });
     router.on('GET /api/conversations/c1/messages', () => jsonResponse({ messages: [user('前の質問'), answer('前の回答')] }));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await screen.findByText('前の回答');
     // 別の会話を消す
     await userEvent.click(screen.getByRole('button', { name: '「地区ごとの候補数を比べて」を削除' }));
@@ -565,7 +565,7 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
     expect(screen.getByText('前の回答')).toBeInTheDocument();
     expect(window.sessionStorage.getItem(CONVERSATION_ID_KEY)).toBe('c1');
     // 開いている会話を消す
-    await userEvent.click(screen.getByRole('button', { name: '「新規出現の候補は何件ありますか？」を削除' }));
+    await userEvent.click(screen.getByRole('button', { name: '「2018 年は未検出の候補は何件ありますか？」を削除' }));
     await userEvent.click(screen.getByRole('button', { name: '削除する' }));
     await waitFor(() => expect(welcome()).toBeInTheDocument());
     expect(screen.queryByText('前の回答')).not.toBeInTheDocument();
@@ -579,7 +579,7 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
   const open = async (messages: StoredMessage[]) => {
     router.on('GET /api/conversations/c1/messages', () => jsonResponse({ messages }));
     render(<Harness />);
-    await userEvent.click(await listItem('新規出現の候補は何件ありますか？'));
+    await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await screen.findByText('回答（保存）');
   };
   const results = [count, table, mapFocus, detectionImage, refusal];

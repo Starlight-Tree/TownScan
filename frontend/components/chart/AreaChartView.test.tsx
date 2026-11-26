@@ -77,9 +77,9 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     const [asahi] = rowButtons() as [HTMLElement];
     const labels = Array.from(asahi.querySelectorAll('.area-chart__seg')).map((seg) => [seg.getAttribute('title'), seg.querySelector('.area-chart__seg-n')?.textContent]);
     expect(labels).toEqual([
-      ['新規出現 4 件', '4'],
-      ['既存の描き漏れ 4 件', '4'],
-      ['判定保留 2 件', '2'],
+      ['2018 年は未検出 4 件', '4'],
+      ['2018 年も検出 4 件', '4'],
+      ['未判定 2 件', '2'],
     ]);
     // 書くかどうかは、棒に対する割合（1 桁は 10% 以上、2 桁は 18% 以上）
     expect(showSegmentCount(1, 10)).toBe(true);
@@ -123,7 +123,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
   it('各行の aria-label に、地区名と 3 分類の件数・合計を書く。選んだ行は aria-pressed', () => {
     setup({ ...ALL_FILTER, areaId: 'c' });
     const north = screen.getByRole('button', { name: /ノース地区/ });
-    expect(north).toHaveAccessibleName('ノース地区（北区）、新規出現 5 件、既存の描き漏れ 3 件、判定保留 1 件、合計 9 件');
+    expect(north).toHaveAccessibleName('ノース地区（北区）、2018 年は未検出 5 件、2018 年も検出 3 件、未判定 1 件、合計 9 件');
     expect(north).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /アサヒ地区/ })).toHaveAttribute('aria-pressed', 'false');
   });
@@ -131,7 +131,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
   it('グラフに出していない分類は、行の aria-label でもそう言う', () => {
     setup(only('confirmed_new'));
     expect(screen.getByRole('button', { name: /ノース地区/ })).toHaveAccessibleName(
-      'ノース地区（北区）、新規出現 5 件、既存の描き漏れ 3 件（グラフには出していません）、判定保留 1 件（グラフには出していません）、合計 5 件',
+      'ノース地区（北区）、2018 年は未検出 5 件、2018 年も検出 3 件（グラフには出していません）、未判定 1 件（グラフには出していません）、合計 5 件',
     );
   });
 
@@ -158,18 +158,18 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     const { onFilterChange, rerender } = setup({ ...ALL_FILTER, areaId: 'c' });
     const legend = screen.getByRole('group', { name: /分類/ });
     const buttons = within(legend).getAllByRole('button');
-    expect(buttons.map((b) => b.textContent)).toEqual(['新規出現', '既存の描き漏れ', '判定保留']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['2018 年は未検出', '2018 年も検出', '未判定']);
     for (const b of buttons) expect(b).toHaveAttribute('aria-pressed', 'true');
 
-    await userEvent.click(within(legend).getByRole('button', { name: '判定保留' }));
+    await userEvent.click(within(legend).getByRole('button', { name: '未判定' }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaId).toBe('c');
     expect([...next.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
 
     // 外した状態から押すと、戻る
     rerender(<AreaChartView areas={areas} filter={next} onFilterChange={onFilterChange} />);
-    expect(within(legend).getByRole('button', { name: '判定保留' })).toHaveAttribute('aria-pressed', 'false');
-    await userEvent.click(within(legend).getByRole('button', { name: '判定保留' }));
+    expect(within(legend).getByRole('button', { name: '未判定' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(within(legend).getByRole('button', { name: '未判定' }));
     expect([...(onFilterChange.mock.calls.at(-1)![0] as MapFilter).classes].sort()).toEqual(['confirmed_new', 'existing_omission', 'uncertain']);
   });
 
@@ -196,7 +196,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
 
     const table = screen.getByRole('table', { name: '地区ごとの件数（合計の多い順）' });
     expect(table.querySelector('caption')).toHaveTextContent('地区ごとの件数');
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '新規出現', '既存の描き漏れ', '判定保留', '合計']);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '2018 年は未検出', '2018 年も検出', '未判定', '合計']);
     const body = within(table).getAllByRole('row').slice(1);
     const cells = body.map((tr) => Array.from(tr.querySelectorAll('th, td')).map((c) => c.textContent));
     expect(cells).toEqual([
@@ -211,7 +211,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     setup(only('uncertain'));
     await userEvent.click(screen.getByText('表で見る'));
     const table = screen.getByRole('table');
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '判定保留', '合計']);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '未判定', '合計']);
     expect(Array.from(within(table).getAllByRole('row')[1]!.querySelectorAll('th, td')).map((c) => c.textContent)).toEqual(['アサヒ地区', '中央区', '2', '2']);
   });
 
@@ -234,7 +234,7 @@ describe('複数の地区（区など。areaIds）の条件', () => {
     expect(screen.queryByRole('button', { name: /ゼロ地区/ })).not.toBeInTheDocument();
     const head = document.querySelector('.area-chart__head')!;
     expect(head).toHaveTextContent('対象: 中央区・北区');
-    // 最大の合計は 10（アサヒ）。ノースの新規出現 5 は 50%
+    // 最大の合計は 10（アサヒ）。ノースの2018 年は未検出 5 は 50%
     expect(widths(rowButtons()[1]!)[0]).toEqual(['confirmed_new', 50]);
   });
 
@@ -265,7 +265,7 @@ describe('複数の地区（区など。areaIds）の条件', () => {
 
   it('凡例（分類）を切り替えても、複数の地区の条件は保つ', async () => {
     const { onFilterChange } = setup(ward());
-    await userEvent.click(within(screen.getByRole('group', { name: /分類/ })).getByRole('button', { name: '判定保留' }));
+    await userEvent.click(within(screen.getByRole('group', { name: /分類/ })).getByRole('button', { name: '未判定' }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaIds).toEqual(['b', 'c']);
     expect(next.scope).toBe('中央区・北区');
@@ -330,10 +330,10 @@ describe('グラフの操作が地図とつながっていることの案内', (
     expect(document.querySelector('.area-chart__note')).toBeNull();
   });
 
-  it('凡例の近くに、判定保留の意味を 1 行で出す（「分類の意味」を開かなくても読める）。判定保留をグラフから外したときは出さない', () => {
+  it('凡例の近くに、未判定の意味を 1 行で出す（「分類の意味」を開かなくても読める）。未判定をグラフから外したときは出さない', () => {
     const first = view(ALL_FILTER);
     const gloss = document.querySelector('.area-chart__gloss')!;
-    expect(gloss).toHaveTextContent('判定保留は、新規か既存かを、写真から判断できませんでした。目で確かめる候補です。');
+    expect(gloss).toHaveTextContent('未判定は、写真の端で切れているもの（端のため未判定）と、どちらとも言えないもの（要確認）です。目で確かめる候補です。');
     // チップの群れの直後
     expect(screen.getByRole('group', { name: /グラフに出す分類/ }).nextElementSibling).toBe(gloss);
     first.unmount();

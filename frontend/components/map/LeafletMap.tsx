@@ -6,7 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { AreaSummary, CandidateClass, CandidateFeature } from '../../lib/api-types';
-import { CLASS_INFO, isCandidateClass } from '../../lib/classes';
+import { CLASS_INFO, classText, isCandidateClass } from '../../lib/classes';
 import {
   areasBBox,
   ATTRIBUTION,
@@ -57,7 +57,7 @@ export interface LeafletMapProps {
 
 interface Entry {
   cls: CandidateClass;
-  /** 印・形の名前（読み上げ・ツールチップ。「新規出現・231.9 m²」） */
+  /** 印・形の名前（読み上げ・ツールチップ。「2018 年は未検出・231.9 m²」） */
   label: string;
   latlngs: L.LatLngExpression[][];
   /** 形（ポリゴン）を入れているグループ。選択・強調の輪を、必要なときだけ足し引きする */
@@ -467,7 +467,7 @@ export default function LeafletMap(props: LeafletMapProps) {
       const info = CLASS_INFO[cls];
       const latlngs = toLatLngs(f.geometry) as L.LatLngExpression[][];
       const id = f.properties.id;
-      const label = `${info.short}・${formatArea(f.properties.area_m2)}`;
+      const label = `${classText(cls, f.properties.reason)}・${formatArea(f.properties.area_m2)}`;
       const casing = L.polygon(latlngs, { color: colors.casing, weight: 5, opacity: 0.9, fill: false, interactive: false });
       const lineColor = readCssColor(info.cssVar);
       const poly = L.polygon(latlngs, {

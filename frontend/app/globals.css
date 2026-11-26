@@ -45,9 +45,9 @@
 
   /* ここから TownScan 固有。3 分類の色（文字にも図形にも使うので、--surface に対して 4.5:1 以上。主色の青と紛れないよう、橙・青緑・紫にした）。
      色だけに頼らず、線の種類と形でも区別する（lib/classes.ts。凡例・印・地図の線）。値は lib/classes.ts から var() で参照する */
-  --class-new: #c2410c; /* 新規出現（橙・実線・円） */
-  --class-omit: #047857; /* 既存の描き漏れ（青緑・破線・四角） */
-  --class-unc: #9c27b0; /* 判定保留（紫・点線・三角） */
+  --class-new: #c2410c; /* 2018 年は未検出（橙・実線・円） */
+  --class-omit: #047857; /* 2018 年も検出（青緑・破線・四角） */
+  --class-unc: #9c27b0; /* 未判定（紫・点線・三角） */
   /* 警告の表示（模擬モデル・合成データ・結果なし）。--warn-strong-* と --warn-accent は、合成データのバナーのように、特に目立たせる所 */
   --warn-bg: #fff1dc;
   --warn-border: #f0c98f;
@@ -1427,6 +1427,15 @@ p.banner {
   gap: 8px;
 }
 
+/* 見出しを読み上げだけにした表のカード: 合成データの印があるときだけ、行が見える */
+.result-card__head--quiet {
+  justify-content: flex-end;
+}
+
+.result-card__head--quiet:not(:has(> .pill)) {
+  position: absolute;
+}
+
 .result-card__title {
   font-size: 14px;
   font-weight: 700;
@@ -1443,7 +1452,7 @@ p.banner {
   color: var(--muted);
 }
 
-/* 件数のカード: 聞かれた数は見出しの中。下に、全体の数（または内訳）と、判定保留の 1 行 */
+/* 件数のカード: 表を出せないときは、聞かれた数が見出しの中。下に、全体の数（または内訳） */
 .count-value {
   font-size: 22px;
 }
@@ -2360,7 +2369,7 @@ p.banner {
   gap: 6px 8px;
 }
 
-/* 判定保留は、新規でも既存でもない第 3 の分類で、いちばん多いことがある。意味を、凡例の近くに 1 行で出す（「分類の意味」を開かなくても読める） */
+/* 未判定は、どちらにも分けていない第 3 の分類で、いちばん多いことがある。意味を、凡例の近くに 1 行で出す（「分類の意味」を開かなくても読める） */
 .area-chart__gloss {
   margin-top: -4px;
   font-size: 12px;

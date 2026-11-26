@@ -111,6 +111,7 @@ export interface CandidateFeatureProperties {
   class: CandidateClass;
   area_m2: number;
   area_id: string;
+  reason?: CandidateReason;
 }
 
 export interface CandidateFeature {
@@ -193,8 +194,10 @@ export interface CountResult {
   title: string;
   total: number;
   breakdown: Array<{ key: string; label: string; value: number }>;
-  /** 分類で絞ったときだけ: 同じ地区の候補の全体と、うち判定保留（古い保存済みの回答には無い） */
+  /** 分類で絞ったときだけ: 同じ地区の候補の全体と、うち未判定（古い保存済みの回答には無い） */
   overall?: { total: number; uncertain: number };
+  /** 未判定を理由で分けた内訳（未判定を数えないとき・古い保存済みの回答には無い） */
+  held?: Array<{ key: string; label: string; value: number }>;
   filter: ResultFilter;
   provenance: Provenance;
 }

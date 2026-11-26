@@ -26,12 +26,12 @@ export const provenance: Provenance = {
 
 export const count: CountResult = {
   type: 'count',
-  title: '12 地区の新規出現（旧写真に無い）',
+  title: '12 地区の2018 年は未検出',
   total: 33,
   breakdown: [
-    { key: 'confirmed_new', label: '新規出現（旧写真に無い）', value: 33 },
-    { key: 'existing_omission', label: '既存の描き漏れ（旧写真に既にある）', value: 51 },
-    { key: 'uncertain', label: '判定保留', value: 18 },
+    { key: 'confirmed_new', label: '2018 年は未検出', value: 33 },
+    { key: 'existing_omission', label: '2018 年も検出', value: 51 },
+    { key: 'uncertain', label: '未判定', value: 18 },
   ],
   overall: { total: 102, uncertain: 18 },
   filter: { area_id: null, cls: 'confirmed_new' },
@@ -41,7 +41,7 @@ export const count: CountResult = {
 /** 複数の地区（区）にまたがる件数。backend の _filter_info は、地区が 2 つ以上なら area_id でなく area_ids と scope（表示用の名前）を返す */
 export const countWards: CountResult = {
   ...count,
-  title: '中央区の新規出現（旧写真に無い）',
+  title: '中央区の2018 年は未検出',
   total: 14,
   overall: undefined, // 分類を絞らない件数には、全体の件数は付かない
   filter: { area_ids: ['z18-1-2', 'z18-2-2'], cls: null, scope: '中央区' },
@@ -76,7 +76,7 @@ export const compare: CompareResult = {
 
 export const mapFocus: MapFocusResult = {
   type: 'map_focus',
-  title: '新規出現の候補を地図に表示',
+  title: '2018 年は未検出の候補を地図に表示',
   bbox: [130.7, 32.8, 130.71, 32.81],
   candidate_ids: ['c-1-2-1', 'c-1-2-2', 'c-1-2-3'],
   provenance,
@@ -109,7 +109,7 @@ export const refusal: RefusalResult = {
   type: 'refusal',
   reason: 'out_of_scope',
   message: '熊本市中心部以外の質問には、お答えできません。',
-  suggestions: ['新規出現の候補は何件ありますか？', 'このアプリの精度は？'],
+  suggestions: ['2018 年は未検出の候補は何件ありますか？', 'このアプリの精度は？'],
 };
 
 export const ALL_RESULTS: ToolResult[] = [count, table, compare, mapFocus, detectionImage, accuracy, refusal];

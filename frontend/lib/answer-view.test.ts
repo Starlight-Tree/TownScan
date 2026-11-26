@@ -114,7 +114,7 @@ describe('initialAnswerView（その回答をはじめて開くとき。回答�
     const s = initialAnswerView([narrow, { ...mapFocus, candidate_ids: ['c-1-2-1', 'c-3-3-1'] }], ctx);
     expect([...s.highlightIds]).toEqual(['c-1-2-1', 'c-3-3-1']);
     expect(s.mapFocus).toMatchObject({ bbox: mapFocus.bbox, ids: ['c-1-2-1', 'c-3-3-1'] });
-    // 新規出現・描き漏れが足され、地区 z18-3-3 は対象の外なので全地区へ戻る
+    // 2018 年は未検出・描き漏れが足され、地区 z18-3-3 は対象の外なので全地区へ戻る
     expect(s.filter.areaId).toBe('');
     expect(s.filter.classes).toEqual(new Set(['uncertain', 'confirmed_new', 'existing_omission']));
     // 複数あれば最後のもの

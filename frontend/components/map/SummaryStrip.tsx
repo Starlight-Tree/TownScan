@@ -16,7 +16,7 @@ interface Props {
 }
 
 /**
- * 地図の上の集計の帯。「対象 | 新規出現 n | 既存の描き漏れ n | 判定保留 n」を、質問しなくても常に見せる。
+ * 地図の上の集計の帯。「対象 | 2018 年は未検出 n | 2018 年も検出 n | 未判定 n」を、質問しなくても常に見せる。
  * 分類ごとの件数は、そのまま表示の切り替え（チェックボックス）を兼ねる。地図に重ねる凡例をやめ、
  * 同じ内容（分類の印・名前・件数）を 2 か所に出さないため。押すと filter.classes だけを切り替え、地区・複数の地区の条件は保つ。
  * 数字は /api/areas の counts を足したもの（推測しない）。分類の一部だけを表示しているときは、
@@ -83,7 +83,7 @@ export function SummaryStrip({ areas, filter, onFilterChange }: Props) {
             return (
               <li key={c} data-class={c} data-shown={on}>
                 {/* 見た目の名前は短く（全文は title）。選んでいるかは、色だけでなく、チェックの印と枠の太さで見分ける（globals.css）。
-                    読み上げの名前は、分類の全文と件数（見えている文字「新規出現」「9」を含む） */}
+                    読み上げの名前は、分類の全文と件数（見えている文字「2018 年は未検出」「9」を含む） */}
                 <label className="summary-strip__opt" title={CLASS_INFO[c].label}>
                   <input
                     type="checkbox"

@@ -27,7 +27,7 @@ describe('候補の詳細（結果領域の「写真の比較」に埋め込む�
     const dialog = screen.getByRole('region', { name: '候補の詳細' });
     expect(await within(dialog).findAllByRole('img')).toHaveLength(2);
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/candidates/c-1-2-1');
-    expect(within(dialog).getByText('新規出現（旧写真に無い）')).toBeInTheDocument();
+    expect(within(dialog).getByText('2018 年は未検出')).toBeInTheDocument();
     expect(within(dialog).getByText(/2018 年の写真のモデルが、この範囲に建物をほとんど見ていません/)).toBeInTheDocument();
     // 根拠の数字
     expect(within(dialog).getByText('0.912')).toBeInTheDocument();

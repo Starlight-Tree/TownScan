@@ -32,7 +32,7 @@ interface HarnessProps {
  * 親（HomeClient）と同じく、開く・閉じるを親が持つ。外（チャットの入力・開くボタン）も置く。
  * タブの帯（4 つのタブと、右端の「閉じる」）は、拡大ビューの外（チャットの上）にある。同じ baseId で、外に置く
  */
-function Harness({ content = panels(), question = '新規出現は何件？', returnFocusTo, onCloseSpy, onBackSpy }: HarnessProps) {
+function Harness({ content = panels(), question = '2018 年は未検出は何件？', returnFocusTo, onCloseSpy, onBackSpy }: HarnessProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ResultView>('map');
   const [nonce, setNonce] = useState(0);
@@ -140,9 +140,9 @@ describe('拡大ビュー: タブの画面の側の構造。モーダルでも�
 
   it('どの回答かを示す行: 回答の質問（全文は title）と「チャットへ戻る」。質問が無いとき（最初の画面の地図）は「解析した地区」。「チャットへ戻る」は、親へ伝えるだけ（閉じない）', async () => {
     const back = vi.fn();
-    const { unmount } = render(<Harness question="新規出現は何件ありますか？" onBackSpy={back} />);
+    const { unmount } = render(<Harness question="2018 年は未検出は何件ありますか？" onBackSpy={back} />);
     await open();
-    expect(within(root()!).getByText(/新規出現は何件ありますか？/)).toHaveAttribute('title', '新規出現は何件ありますか？');
+    expect(within(root()!).getByText(/2018 年は未検出は何件ありますか？/)).toHaveAttribute('title', '2018 年は未検出は何件ありますか？');
     await userEvent.click(within(root()!).getByRole('button', { name: 'チャットへ戻る' }));
     expect(back).toHaveBeenCalledTimes(1);
     expect(root()).not.toBeNull();

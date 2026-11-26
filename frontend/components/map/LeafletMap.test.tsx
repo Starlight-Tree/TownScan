@@ -99,7 +99,7 @@ describe('Leaflet の地図', () => {
     const marks = container.querySelectorAll<HTMLElement>('.leaflet-marker-icon');
     expect(marks).toHaveLength(3);
     expect(marks[0]).toHaveAttribute('tabindex', '0');
-    expect(marks[0]).toHaveAttribute('title', expect.stringContaining('新規出現'));
+    expect(marks[0]).toHaveAttribute('title', expect.stringContaining('2018 年は未検出'));
     await userEvent.click(marks[1]!);
     expect(onSelect).toHaveBeenCalledWith('c-1-2-2');
     fireEvent.keyDown(marks[0]!, { key: 'Enter' });
@@ -555,8 +555,8 @@ describe('候補の印のキーボード操作（Enter・Space で選ぶ。Tab �
     const { marks } = setup();
     expect(marks).toHaveLength(3);
     for (const m of marks) expect(m).toHaveAttribute('role', 'button');
-    expect(marks[0]).toHaveAttribute('aria-label', expect.stringContaining('新規出現'));
-    expect(marks[1]).toHaveAttribute('aria-label', expect.stringContaining('判定保留'));
+    expect(marks[0]).toHaveAttribute('aria-label', expect.stringContaining('2018 年は未検出'));
+    expect(marks[1]).toHaveAttribute('aria-label', expect.stringContaining('未判定'));
     expect(marks[0]).toHaveAttribute('title', expect.stringContaining('Enter か Space で選ぶ'));
   });
 
@@ -666,8 +666,8 @@ describe('候補の形（拡大したとき）のキーボード操作も、印�
     const { shapes } = setup();
     expect(shapes()).toHaveLength(3);
     expect(shapes().map((e) => e.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
-    expect(shapes()[0]).toHaveAttribute('aria-label', expect.stringContaining('新規出現'));
-    expect(shapes()[1]).toHaveAttribute('aria-label', expect.stringContaining('既存の描き漏れ'));
+    expect(shapes()[0]).toHaveAttribute('aria-label', expect.stringContaining('2018 年は未検出'));
+    expect(shapes()[1]).toHaveAttribute('aria-label', expect.stringContaining('2018 年も検出'));
   });
 
   it('Enter・Space で選ぶ', () => {

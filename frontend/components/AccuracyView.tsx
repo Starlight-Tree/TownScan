@@ -104,7 +104,7 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
         建物の抽出の 2 つの数字（物体単位 F1 と画素 IoU）は、<b>{year} 年の写真</b>から建物を抽出して測った値です。
         {yc && (
           <>
-            新規出現の候補は {yc.compareYear} 年の写真の抽出にも依るので、<b>{yc.compareYear} 年の写真での値</b>も並べています（同じ参照・同じ設定）。
+            「2018 年は未検出」の候補は {yc.compareYear} 年の写真の抽出にも依るので、<b>{yc.compareYear} 年の写真での値</b>も並べています（同じ参照・同じ設定）。
           </>
         )}
       </p>
@@ -136,7 +136,7 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
             <span className="metric-tile__value">{formatNumber(recall)}</span>
           )}
           <span className="metric-tile__note">
-            手でラベルした「本当の新築」がまだ無いため、測れていません。「新規出現」の候補が実際に新築かどうかは、確かめていません。
+            手でラベルした「本当の新築」がまだ無いため、測れていません。「2018 年は未検出」の候補が実際に新築かどうかは、確かめていません。
           </span>
           <span className="metric-tile__note">
             「詳しい測定」の表の「建物の抽出の再現率」（基盤地図情報に対する値）とは別の値です。
@@ -147,7 +147,7 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
       <section className="panel" aria-labelledby="h-thresholds">
         <h2 id="h-thresholds" className="panel__title">3 分類の閾値は、未検証の初期値です</h2>
         <p className="page__p">
-          「新規出現」「既存の描き漏れ」「判定保留」を分ける閾値（旧写真の抽出が覆う割合 0.5・0.10 など）は、手でラベルした正解が無いため、検証できていません。分類の当たり率は、まだ出せません。
+          「2018 年は未検出」「2018 年も検出」「未判定」を分ける閾値（旧写真の抽出が覆う割合 0.5・0.10 など）は、手でラベルした正解が無いため、検証できていません。分類の当たり率は、まだ出せません。
         </p>
       </section>
     </>
@@ -340,7 +340,7 @@ function YearComparePanel({ yc }: { yc: YearCompare }) {
         {yc.baseYear} 年の調整用の地区で選んだ設定{isNum(scale) && isNum(threshold) ? `（倍率 ${formatNumber(scale)}・閾値 ${formatNumber(threshold)}）` : ''}のまま、{yc.compareYear} 年の写真でも建物を抽出し、同じ基盤地図情報（{yc.baseYear} 年 10 月版）と比べた値です。設定の選択には使っていません。
       </p>
       <p className="page__small">
-        新規出現の候補は {yc.compareYear} 年の抽出にも依るので、こちらも見てください。参照は古いままなので、{yc.compareYear} 年の写真にだけ写る新しい建物は「余分（FP）」に数えられ、値が低く出る一因になりえます。写真の撮影条件・季節・モデルの得意不得意も混ざり、原因は分けられません。
+        「2018 年は未検出」の候補は {yc.compareYear} 年の抽出にも依るので、こちらも見てください。参照は古いままなので、{yc.compareYear} 年の写真にだけ写る新しい建物は「余分（FP）」に数えられ、値が低く出る一因になりえます。写真の撮影条件・季節・モデルの得意不得意も混ざり、原因は分けられません。
       </p>
       <div className="table-scroll" role="region" aria-label="写真の年ごとの指標（横にスクロールできます）" tabIndex={0}>
         <table className="data-table data-table--dense">
@@ -499,12 +499,12 @@ function Limits({ m }: { m?: MetricsResponse }) {
         <div>
           <b>タイルの縁</b>
           <br />
-          地区の縁で切れた建物は、判定を保留するか、評価から外しています。
+          地区の縁で切れた建物は、分類しない（端のため未判定）か、評価から外しています。
         </div>
         <div>
           <b>誤検出の可能性</b>
           <br />
-          モデルが 2 つの年で同じ誤検出をすると、「既存の描き漏れ」に入ります。駐車場の屋根や仮設の建物も混ざります。
+          モデルが 2 つの年で同じ誤検出をすると、「2018 年も検出」に入ります。駐車場の屋根や仮設の建物も混ざります。
         </div>
         <div>
           <b>正解が無い</b>
@@ -529,16 +529,16 @@ function Limits({ m }: { m?: MetricsResponse }) {
   );
 }
 
-/** (a) 2018 年の抽出の見落としは、既存の建物が「新規出現」に入る向きの誤り。実測の割合はデータから描く */
+/** (a) 2018 年の抽出の見落としは、既存の建物が「2018 年は未検出」に入る向きの誤り。実測の割合はデータから描く */
 function AbsentLimit({ m }: { m?: MetricsResponse }) {
   const year = m ? evalYearOf(m) : DEFAULT_EVAL_YEAR;
   const all = m ? getAbsentStats(m, 'overall') : null;
   const holdout = m ? getAbsentStats(m, 'holdout') : null;
   return (
     <div data-testid="limit-absent">
-      <b>{year} 年の写真での見落とし（既存の建物が「新規出現」に入る）</b>
+      <b>{year} 年の写真での見落とし（既存の建物が「2018 年は未検出」に入る）</b>
       <br />
-      {year} 年の抽出が既存の建物を見落とすと、その建物は旧写真に無いものとして「新規出現」に入ります。
+      {year} 年の抽出が既存の建物を見落とすと、その建物は旧写真に無いものとして「2018 年は未検出」に入ります。
       {all ? (
         <>
           実測では、基盤地図情報にある既存の建物{all.minAreaM2 !== undefined ? `（${formatNumber(all.minAreaM2)} m² 以上・縁に接しない）` : ' '}{formatNumber(all.n)} 棟のうち、
@@ -579,7 +579,7 @@ function HazeLimit({ m }: { m?: MetricsResponse }) {
       <b>写真の年で、建物の抽出の出来が違う</b>
       <br />
       建物の抽出の画素の再現率（基盤地図情報に対して。{split === 'overall' ? '12 地区全体' : '評価用の地区'}・同じ設定）は、{yc.baseYear} 年の写真で {formatNumber(base)}、{yc.compareYear} 年の写真で {formatNumber(other)} です。
-      年によって抽出の出来が違うので、2 つの年の差分には、モデルの見落としが「新規出現」として混ざります。違いの原因（写真の暗さ・撮影条件など）は確かめていません。
+      年によって抽出の出来が違うので、2 つの年の差分には、モデルの見落としが「2018 年は未検出」として混ざります。違いの原因（写真の暗さ・撮影条件など）は確かめていません。
     </div>
   );
 }

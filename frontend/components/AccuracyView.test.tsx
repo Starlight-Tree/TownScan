@@ -275,7 +275,7 @@ describe('/accuracy', () => {
     it('限界欄: 2018 年の写真での見落としの実測の割合を、データから描く（手ラベルの代わりにはならない）', async () => {
       await renderReal();
       const limit = screen.getByTestId('limit-absent');
-      expect(limit).toHaveTextContent('2018 年の写真での見落とし（既存の建物が「新規出現」に入る）');
+      expect(limit).toHaveTextContent('2018 年の写真での見落とし（既存の建物が「2018 年は未検出」に入る）');
       expect(limit).toHaveTextContent('基盤地図情報にある既存の建物（20 m² 以上・縁に接しない）200 棟のうち、約 3 割（66 棟）で、2018 年の抽出が何も見ていません');
       expect(limit).toHaveTextContent('半分以上を覆っているのは 約 5 割（102 棟）');
       expect(limit).toHaveTextContent('評価用の地区だけでは 110 棟のうち 34 棟（約 3 割）');
@@ -322,7 +322,7 @@ describe('/accuracy', () => {
       await renderReal();
       const limit = screen.getByTestId('limit-haze');
       expect(limit).toHaveTextContent('2018 年の写真で 0.459、2023 年の写真で 0.34');
-      expect(limit).toHaveTextContent('モデルの見落としが「新規出現」として混ざります');
+      expect(limit).toHaveTextContent('モデルの見落としが「2018 年は未検出」として混ざります');
       expect(limit).toHaveTextContent('違いの原因（写真の暗さ・撮影条件など）は確かめていません');
       expect(limit).not.toHaveTextContent('取りこぼしが多い');
       expect(limit).not.toHaveTextContent('霞');
