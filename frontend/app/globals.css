@@ -662,18 +662,45 @@ p.banner {
 }
 
 /* ---- 画面 `/` ----
-   チャットの 1 列だけ。常設の結果領域は無い（地図・グラフは回答の中の図に出て、その「拡大」と、カードのボタンで、拡大ビューを開く。下の .expanded-view）。
+   チャットの 1 列が基本。常設の結果領域は無い（地図・グラフは回答の中の図に出て、その「拡大」と、カードのボタンで、拡大ビューを開く。下の .expanded-view）。
    チャットは、枠も背景も持たず、本文の領域いっぱいに広がる（ページの地が見える）。会話・質問の例の行・入力欄は、幅 46rem（--chat-w）の列を中央に置く（DocuNavi と同じ。左右の余白は --chat-pad）。
+   拡大ビューを開いたとき（ADR 0007。広い・狭いは JS が .home の幅を測って data-layout に入れる。lib/layout-mode.ts）:
+   - 広い（data-layout="wide"）: チャットの右に、横パネル（.home__panel）を並べる。チャットはそのまま操作できる。
+   - 狭い（data-layout="narrow"）: 上にタブの帯（.home__tabs。チャット・地図・グラフ・写真の比較）、その下の同じ場所に、チャット（.home__chat）と画面（.home__panel）を重ねる。選んでいない側は hidden
+     （visibility: hidden で隠す。display: none にすると、チャットのスクロール位置と、地図（Leaflet）の大きさを失う）。
    幅 1000px 以上は、本文の高さいっぱい。それ未満は、下の @media で高さを決める */
 .home {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding: 0;
 }
 
-.home > .chat {
+.home__chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.home__chat > .chat {
+  flex: 1 1 auto;
   height: min(78dvh, 680px);
+}
+
+.home__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 隠すだけで、外さない（スクロール位置・地図の大きさを保つ）。見えず、フォーカスも受けず、押せない */
+.home__chat[hidden],
+.home__panel[hidden] {
+  display: flex;
+  visibility: hidden;
 }
 
 @media (min-width: 1000px) {
@@ -682,7 +709,7 @@ p.banner {
     flex: 1;
     min-height: 0;
   }
-  .home > .chat {
+  .home__chat > .chat {
     height: auto;
     min-height: 0;
   }
@@ -690,46 +717,70 @@ p.banner {
 
 /* 1000px 未満（ページ全体がスクロールする幅）: チャットは、内容が少ないうちは縮み、増えたら 64dvh（上限 640px）で止まって、記録の中でスクロールする */
 @media (max-width: 999px) {
-  .home > .chat {
+  .home__chat > .chat {
     height: auto;
     min-height: min(420px, 64dvh);
     max-height: min(64dvh, 640px);
   }
 }
 
-/* ---- 拡大ビュー（components/ExpandedView.tsx。中身は、下の結果領域 .result-area）----
-   body 直下に置く（後ろのページ全体を inert にするため）。幅 1024px 以上は、窓の四方から 24px あけた大きなダイアログ（幅は最大 1440px、高さは窓の高さ − 48px）。
-   1023px 以下は、窓いっぱいの全面のシート（余白・角丸なし）。後ろの暗い部分（.expanded-view 自身）を押すと閉じる。
-   z-index: サイドパネルのアカウントのメニュー（25）・スキップリンク（3000 未満）より上。中の重なり（地図の 1100）は、isolation でこの中に閉じ込める */
-.expanded-view {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: var(--scrim);
-  isolation: isolate;
+/* 広い: チャットの右に横パネル。幅は 24〜32rem（初期値。実画面で決める） */
+.home[data-layout='wide'][data-open='true'] {
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 32rem);
 }
 
-.expanded-view__dialog {
+.home[data-layout='wide'] > .home__panel {
+  margin: 12px 12px 12px 0;
+}
+
+/* 狭い: 1 行目がタブの帯、2 行目に、チャットと画面を重ねる（選んでいないほうは hidden） */
+.home[data-layout='narrow'][data-open='true'] {
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: 8px;
+}
+
+.home__tabs {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding: 8px 8px 0;
+}
+
+.home[data-layout='narrow'][data-open='true'] > .home__chat,
+.home[data-layout='narrow'][data-open='true'] > .home__panel {
+  grid-area: 2 / 1;
+}
+
+/* 1000px 未満では、画面（パネル）にも高さが要る（ページ全体がスクロールする幅で、チャットの高さに合わせて残りを取らない） */
+@media (max-width: 999px) {
+  .home[data-layout='narrow'][data-open='true'] > .home__panel {
+    height: max(min(78dvh, 680px), 420px);
+  }
+}
+
+/* ---- 拡大ビュー（components/ExpandedView.tsx。中身は、下の結果領域 .result-area）----
+   モーダルではない（ADR 0007）。広い幅は、.home__panel に入る横パネル（枠・角丸あり）。狭い幅は、タブの画面の一部（余白・角丸なし）。
+   中の重なり（地図の z-index 1100）は、.app__main の isolation に閉じ込められている */
+.expanded-view {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  width: 100%;
-  max-width: 1440px;
-  height: calc(100dvh - 48px);
+  min-width: 0;
   min-height: 0;
   padding: 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 12px 40px var(--shadow);
   outline: none;
 }
 
-/* ダイアログの中は、結果領域（タブの帯と、残りの高さをすべて取る 3 つの画面）だけ */
-.expanded-view__dialog > .result-area {
+.expanded-view[data-layout='narrow'] {
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+}
+
+/* 中は、結果領域（タブの帯・質問の行と、残りの高さをすべて取る 3 つの画面） */
+.expanded-view > .result-area {
   flex: 1;
 }
 
@@ -739,18 +790,27 @@ p.banner {
   min-height: 44px;
 }
 
-@media (max-width: 1023px) {
-  .expanded-view {
-    padding: 0;
-  }
-  .expanded-view__dialog {
-    max-width: none;
-    height: 100dvh;
-    padding: 8px;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
+/* どの回答かを示す行（回答の質問と、「チャットへ戻る」）。質問は 1 行で省略する（全文は title） */
+.expanded-view__context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.expanded-view__question {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expanded-view__back {
+  flex: none;
 }
 
 /* ---- 結果領域（拡大ビューの中身。地図・グラフ・写真の比較をタブで切り替える。components/ResultArea.tsx）----
@@ -796,6 +856,10 @@ p.banner {
 .result-area__tab:hover {
   background: var(--tag-bg);
   border-color: var(--primary);
+}
+
+.result-area__mark {
+  margin-left: 0.15em;
 }
 
 .result-area__tab[aria-selected='true'] {
@@ -2762,18 +2826,10 @@ p.banner {
   padding: 16px;
 }
 
-/* 拡大ビューの中は広い。写真の 2 枚が画面いっぱいの正方形にならないよう、中身の幅を読みやすい長さに抑える。
-   窓が 1257px 未満のときは、上限を置かず、拡大ビューの幅いっぱい（ダイアログも、窓の幅から 48px を引いた幅までしか広がらない） */
+/* 拡大ビュー（広い幅の横パネル・狭い幅のタブの画面）の中の詳細は、その幅いっぱいに使う。
+   旧: 窓が 1257px 以上のとき、写真の比較の中身の最大幅を clamp(1040px, 70vw, 1440px) にしていた（ダイアログが広かったため）。横パネルは約 32rem なので、この規則は無い（ADR 0007） */
 .drawer__body > * {
   width: 100%;
-}
-
-/* 窓が 1257px 以上のときは、中身の最大幅を、窓の幅に応じて広げて、2 枚の写真を大きく見せる: 窓の幅の 70%（最小 1040px、最大 1440px）。
-   固定の幅だと、広い窓で余白だけが増える。上限は残す（文の行が間延びしないように） */
-@media (min-width: 1257px) {
-  .expanded-view .drawer__body > * {
-    max-width: clamp(1040px, 70vw, 1440px);
-  }
 }
 
 .drawer__summary {

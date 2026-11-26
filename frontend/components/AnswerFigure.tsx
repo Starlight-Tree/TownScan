@@ -32,6 +32,8 @@ export interface FigureActions {
   clearSelection: (key: string) => void;
   /** その回答の拡大ビューを開く。opener は、閉じたときにフォーカスを戻す要素（図の「拡大」ボタン） */
   expand: (answer: AnswerRef, request: ExpandRequest, opener: HTMLElement | null) => void;
+  /** 広い幅で、その回答をパネルが表示中のとき、図の 1 行を押したら、フォーカスをパネルへ移す */
+  focusPanel: () => void;
 }
 
 interface Props {
@@ -41,6 +43,8 @@ interface Props {
   state: AnswerView | undefined;
   /** 同じ回答に、地図の図もあるか（あれば、グラフの「地図で見る」は要らない。地図が、すぐ近くにある） */
   withMap: boolean;
+  /** 広い幅で、この回答を、横のパネルが表示中か。そのとき、図は「右のパネルで表示中」の 1 行になる（同じ図が 2 つ出て、連動がどちらに効くか曖昧になるのを避ける。ADR 0007） */
+  inPanel: boolean;
   data: FigureData;
   actions: FigureActions;
 }
@@ -54,7 +58,9 @@ const LABEL: Record<FigureKind, string> = { map: '地図', chart: 'グラフ' };
  * 写真の比較は図に入れない（地図の「写真を比べる」・一覧、チャットの「詳細」で、拡大ビューが写真の比較で開く）。
  *
  * - 地図（Leaflet）は、画面に近づくまでマウントしない（チャットを流すだけで、地図を何枚も作らない）。一度マウントしたら保つ。
- *   拡大ビューを開いているあいだも、図は外さずに保つ（後ろのチャットの見た目と、地図の位置を変えない。後ろは inert で、操作も読み上げも届かない）。
+ *   広い幅で、横のパネルがこの回答を表示中のあいだは、図の中身を外し、「右のパネルで表示中」の 1 行にする（`inPanel`。頭の行のボタンが、その 1 行。押すとパネルへフォーカスが移る）。
+ *   パネルを閉じる・別の回答へ切り替えると、図に戻る（地図は、一度近づいた扱いを保つので、すぐマウントする。閉じたあとのフォーカスの戻り先は、同じボタン）。
+ *   狭い幅は、図を外さない（チャットは隠すだけ）。
  * - 名前つきの region（`aria-live="off"`）。回答が増えたとき、図の中身（地図の印・凡例・一覧）を、チャットの読み上げ（role="log"）が読み上げないようにする。
  *   図の中の、自分で知らせる部品（地図の選択の知らせ）は、そのまま読み上げる。キーボードは、図の中を Tab で巡って、そのまま抜けられる（トラップは作らない）
  */
@@ -66,12 +72,13 @@ export const AnswerFigure = memo(AnswerFigureView, (a, b) => {
     a.answer.results === b.answer.results &&
     a.state === b.state &&
     a.withMap === b.withMap &&
+    a.inPanel === b.inPanel &&
     a.data === b.data &&
     a.actions === b.actions
   );
 });
 
-function AnswerFigureView({ kind, answer, state, withMap, data, actions }: Props) {
+function AnswerFigureView({ kind, answer, state, withMap, inPanel, data, actions }: Props) {
   const key = answerKey(answer);
   const label = LABEL[kind];
   const titleId = useId();
@@ -92,7 +99,10 @@ function AnswerFigureView({ kind, answer, state, withMap, data, actions }: Props
   const expand = (request: ExpandRequest) => actions.expand(answer, request, expandRef.current);
 
   let body: ReactNode;
-  if (!state || !near) {
+  if (inPanel) {
+    // 中身は外す（本体の枠 bodyRef は残す。地図が近づいたかの観測は、パネルを閉じたあとも続く）
+    body = null;
+  } else if (!state || !near) {
     body = (
       <p className={`answer-figure__placeholder answer-figure__placeholder--${kind}`}>
         {label}を読み込んでいます…
@@ -142,14 +152,14 @@ function AnswerFigureView({ kind, answer, state, withMap, data, actions }: Props
           ref={expandRef}
           type="button"
           className="btn btn--small"
-          aria-label={`${label}を拡大ビューで開く`}
-          title={`${label}を大きな画面で開きます`}
-          onClick={() => expand({ type: 'view', view: kind })}
+          aria-label={inPanel ? `${label}は右のパネルで表示中。押すとパネルへ移ります` : `${label}を拡大ビューで開く`}
+          title={inPanel ? 'パネルへ移ります' : `${label}を大きな画面で開きます`}
+          onClick={() => (inPanel ? actions.focusPanel() : expand({ type: 'view', view: kind }))}
         >
-          拡大
+          {inPanel ? '右のパネルで表示中' : '拡大'}
         </button>
       </header>
-      <div className="answer-figure__body" ref={bodyRef}>
+      <div className="answer-figure__body" ref={bodyRef} hidden={inPanel}>
         <ResultPanelBoundary name={label}>{body}</ResultPanelBoundary>
       </div>
     </section>

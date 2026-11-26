@@ -231,17 +231,9 @@ describe('結果領域まわりの CSS（空の状態のフォーカスの輪・
     expect(bodies('.area-chart:focus-visible')[0]).toMatch(/outline-offset\s*:\s*-3px/);
   });
 
-  it('拡大ビューの中で、窓が 1257px 以上のとき、詳細の中身の最大幅は、窓の幅に応じて広がる（clamp。固定の幅ではない）。それ未満は、上限なし（拡大ビューの幅いっぱい）', () => {
-    const at = css.indexOf('.expanded-view .drawer__body > *');
-    expect(at).toBeGreaterThan(-1);
-    expect(css.slice(css.lastIndexOf('\n@media', at)).startsWith('\n@media (min-width: 1257px) {')).toBe(true);
-    const [body] = bodies('.expanded-view .drawer__body > *');
-    const m = /max-width\s*:\s*clamp\((\d+)px,\s*(\d+)vw,\s*(\d+)px\)/.exec(body ?? '');
-    expect(m, 'max-width: clamp(最小px, vw, 最大px)').not.toBeNull();
-    // 窓が広いほど広がる（vw の項があり、最大が下限より大きい）。下限は、これまでの上限（880px）より広い
-    expect(Number(m![1])).toBeGreaterThan(880);
-    expect(Number(m![3])).toBeGreaterThan(Number(m![1]));
-    // 1257px 未満の基本の規則は、幅いっぱい（上限の max-width を持たない）
+  it('拡大ビュー（横パネル・タブの画面）の中の詳細は、その幅いっぱい。窓の幅（1257px 以上）で最大幅を決める規則は無い（ADR 0007。横パネルは約 32rem）', () => {
+    expect(css).not.toContain('.expanded-view .drawer__body > *');
+    expect(css).not.toMatch(/max-width\s*:\s*clamp\(\d+px,\s*\d+vw,\s*\d+px\)/);
     const [base] = bodies('.drawer__body > *');
     expect(base).toMatch(/width\s*:\s*100%/);
     expect(base).not.toMatch(/max-width/);

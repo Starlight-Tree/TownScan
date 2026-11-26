@@ -532,7 +532,7 @@ describe('結果カードのボタン: その回答の拡大ビューを開く�
     await userEvent.click(button);
     expect(actions.expand).toHaveBeenCalledTimes(1);
     const [answer, request, opener] = actions.expand.mock.calls[0]!;
-    expect(answer).toEqual({ id: expect.stringMatching(/^m\d+$/), results: [mapFocus] });
+    expect(answer).toEqual({ id: expect.stringMatching(/^m\d+$/), results: [mapFocus], question: '見せて' }); // question: その回答の直前の質問（拡大ビューの「この回答の質問」の行に出す）
     expect(request).toEqual({ type: 'focus', bbox: mapFocus.bbox, candidateIds: mapFocus.candidate_ids });
     expect(opener).toBe(button);
   });
@@ -557,8 +557,9 @@ describe('結果カードのボタン: その回答の拡大ビューを開く�
     await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
     const [second, first] = actions.expand.mock.calls.map((c) => c[0]);
-    expect(second).toEqual({ id: expect.any(String), results: [table] });
-    expect(first).toEqual({ id: expect.any(String), results: [mapFocus] });
+    // question: その回答の直前の質問（回答ごとに別）
+    expect(second).toEqual({ id: expect.any(String), results: [table], question: 'ふたつめ' });
+    expect(first).toEqual({ id: expect.any(String), results: [mapFocus], question: 'ひとつめ' });
     expect(first!.id).not.toBe(second!.id);
   });
 
@@ -568,7 +569,7 @@ describe('結果カードのボタン: その回答の拡大ビューを開く�
     await userEvent.type(input(), '見せて{Enter}');
     await userEvent.click(await screen.findByRole('button', { name: /詳細.*c-1-2-1/ }));
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
-    expect(actions.expand.mock.calls[0]![0]).toEqual({ id: expect.any(String), results: [table, mapFocus] });
+    expect(actions.expand.mock.calls[0]![0]).toEqual({ id: expect.any(String), results: [table, mapFocus], question: '見せて' });
     expect(actions.expand.mock.calls[1]![0]!.id).toBe(actions.expand.mock.calls[0]![0]!.id);
   });
 
@@ -651,8 +652,8 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
       await screen.findByText(a);
     }
     const [first, second] = figure.mock.calls.filter((c, i, all) => all.findIndex((x) => x[0].id === c[0].id) === i).map((c) => c[0]);
-    expect(first).toEqual({ id: expect.any(String), results: [count, table] });
-    expect(second).toEqual({ id: expect.any(String), results: [compare] });
+    expect(first).toEqual({ id: expect.any(String), results: [count, table], question: 'ひとつめ' });
+    expect(second).toEqual({ id: expect.any(String), results: [compare], question: 'ふたつめ' });
     expect(kindsShown()).toEqual(['figure-map', 'figure-chart', 'figure-chart']);
     const ids = screen.getAllByTestId(/^figure-/).map((el) => el.dataset.answer);
     expect(ids[0]).toBe(ids[1]);

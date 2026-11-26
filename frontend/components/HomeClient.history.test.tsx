@@ -18,6 +18,10 @@ import { NewConversationProvider } from './NewConversation';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 vi.mock('./map/LeafletMap', () => ({ default: () => <div data-testid="leaflet" /> }));
+// 結果パネルの置き方は、本文の幅を JS で測って決める。jsdom には幅が無いので、広い幅に固定する（モーダルではなく、チャットの右の横パネル）
+vi.mock('../lib/layout-mode', async (importOriginal) => ({ ...(await importOriginal<typeof import('../lib/layout-mode')>()), useLayoutMode: () => 'wide' as const }));
+/** 拡大ビュー（横パネル。名前つきの領域）。開いていなければ null */
+const panel = () => screen.queryByRole('region', { name: '結果' });
 
 const c = (id: string, title: string): ConversationSummary => ({ id, title, created_at: '2026-11-25T01:00:00+00:00', updated_at: '2026-11-25T01:05:00+00:00' });
 const LIST = [c('c1', '新規出現の候補は何件ありますか？'), c('c2', '地区ごとの候補数を比べて')];
@@ -66,7 +70,7 @@ describe('開き直した会話（画面全体）', () => {
     const item = await screen.findByTitle('新規出現の候補は何件ありますか？');
     await userEvent.click(item);
     expect(await screen.findByText('件数です。')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(panel()).not.toBeInTheDocument();
     // 回答の中の図は、回答が届いたときと同じく、回答の中に出る（件数: 地図とグラフ・比較: グラフ。同じ回答の中では、種類ごとに 1 つ）
     expect(await screen.findAllByRole('region', { name: 'グラフ' })).toHaveLength(1);
     expect(screen.getAllByRole('region', { name: '地図' })).toHaveLength(1);
@@ -86,7 +90,7 @@ describe('開き直した会話（画面全体）', () => {
     const button = screen.getByRole('button', { name: '地図で見る' });
     expect(button).toBeDisabled();
     await userEvent.click(button);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(panel()).not.toBeInTheDocument();
   });
 
   it('いまの解析結果の回答は、「地図で見る」で拡大ビューを開ける（押したときだけ）。開き直すとき、開いていた拡大ビューは閉じる前提（サイドパネルは後ろで操作できない）', async () => {
@@ -96,7 +100,7 @@ describe('開き直した会話（画面全体）', () => {
     await screen.findByText('地図です。');
     await waitFor(() => expect(screen.getByRole('button', { name: '地図で見る' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: '地図で見る' }));
-    expect(await screen.findByRole('dialog', { name: '結果' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: '結果' })).toBeInTheDocument();
   });
 
   it('再読み込み（立ち上がり）の自動の開き直しは、React の StrictMode（開発の二重実行）でも、並べ終える', async () => {

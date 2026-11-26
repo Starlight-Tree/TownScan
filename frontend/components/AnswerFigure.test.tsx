@@ -75,24 +75,24 @@ function data(over: Partial<FigureData> = {}): FigureData {
   };
 }
 function makeActions(): { [K in keyof FigureActions]: ReturnType<typeof vi.fn> } & FigureActions {
-  return { ensure: vi.fn(), setFilter: vi.fn(), clearHighlight: vi.fn(), selectOnMap: vi.fn(), clearSelection: vi.fn(), expand: vi.fn() } as never;
+  return { ensure: vi.fn(), setFilter: vi.fn(), clearHighlight: vi.fn(), selectOnMap: vi.fn(), clearSelection: vi.fn(), expand: vi.fn(), focusPanel: vi.fn() } as never;
 }
 
 function setup(over: Partial<ComponentProps<typeof AnswerFigure>> = {}) {
   const actions = makeActions();
-  render(<AnswerFigure kind="map" answer={answer} state={state} withMap data={data()} actions={actions} {...over} />);
+  render(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel={false} data={data()} actions={actions} {...over} />);
   return actions;
 }
 
 describe('AnswerFigure（回答の中の図の枠）', () => {
   it('名前つきの region（名前は「地図」「グラフ」）。aria-live="off"。頭の行に、名前と「拡大」ボタン（名前は「地図を拡大」「グラフを拡大」）', () => {
-    const { unmount } = render(<AnswerFigure kind="map" answer={answer} state={state} withMap data={data()} actions={makeActions()} />);
+    const { unmount } = render(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel={false} data={data()} actions={makeActions()} />);
     const map = screen.getByRole('region', { name: '地図' });
     expect(map).toHaveAttribute('aria-live', 'off');
     expect(map).toHaveClass('result-card', 'answer-figure');
     expect(within(map).getByRole('button', { name: '地図を拡大ビューで開く' })).toHaveTextContent('拡大');
     unmount();
-    render(<AnswerFigure kind="chart" answer={answer} state={state} withMap data={data()} actions={makeActions()} />);
+    render(<AnswerFigure kind="chart" answer={answer} state={state} withMap inPanel={false} data={data()} actions={makeActions()} />);
     const chart = screen.getByRole('region', { name: 'グラフ' });
     expect(chart).toHaveAttribute('aria-live', 'off');
     expect(within(chart).getByRole('button', { name: 'グラフを拡大ビューで開く' })).toBeInTheDocument();
@@ -141,7 +141,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
     // 再描画（図の中身を入れ替える）
     document.body.innerHTML = '';
     const actions = makeActions();
-    render(<AnswerFigure kind="chart" answer={answer} state={state} withMap={false} data={data()} actions={actions} />);
+    render(<AnswerFigure kind="chart" answer={answer} state={state} withMap={false} inPanel={false} data={data()} actions={actions} />);
     await userEvent.click(screen.getByRole('button', { name: 'show-map' }));
     expect(actions.expand).toHaveBeenCalledWith(answer, { type: 'view', view: 'map' }, screen.getByRole('button', { name: 'グラフを拡大ビューで開く' }));
     expect(opener).not.toBe(screen.getByRole('button', { name: 'グラフを拡大ビューで開く' }));
@@ -150,7 +150,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
   it('その回答の状態が無いあいだは、読み込み中の枠だけ（中身は出さない）。地区・候補が届いた（失敗も含む）ら、状態を作るよう頼む。状態が有れば、頼まない', () => {
     const loading = makeActions();
     const { unmount } = render(
-      <AnswerFigure kind="map" answer={answer} state={undefined} withMap data={data({ candidatesState: { status: 'loading' } })} actions={loading} />,
+      <AnswerFigure kind="map" answer={answer} state={undefined} withMap inPanel={false} data={data({ candidatesState: { status: 'loading' } })} actions={loading} />,
     );
     expect(screen.getByText('地図を読み込んでいます…')).toBeInTheDocument();
     expect(screen.queryByTestId('map-panel')).toBeNull();
@@ -158,7 +158,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
     unmount();
 
     const done = makeActions();
-    const second = render(<AnswerFigure kind="chart" answer={answer} state={undefined} withMap data={data()} actions={done} />);
+    const second = render(<AnswerFigure kind="chart" answer={answer} state={undefined} withMap inPanel={false} data={data()} actions={done} />);
     expect(screen.getByText('グラフを読み込んでいます…')).toBeInTheDocument();
     expect(done.ensure).toHaveBeenCalledTimes(1);
     expect(done.ensure).toHaveBeenCalledWith(answer);
@@ -169,6 +169,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
       <AnswerFigure
         kind="map"
         answer={answer}
+        inPanel={false}
         state={undefined}
         withMap
         data={data({ candidatesState: { status: 'error', error: new Error('x') as never } })}
@@ -179,7 +180,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
     third.unmount();
 
     const has = makeActions();
-    render(<AnswerFigure kind="map" answer={answer} state={state} withMap data={data()} actions={has} />);
+    render(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel={false} data={data()} actions={has} />);
     expect(has.ensure).not.toHaveBeenCalled();
   });
 
@@ -198,5 +199,31 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
       boom.on = false;
       spy.mockRestore();
     }
+  });
+
+  it('広い幅で、横のパネルがこの回答を表示中（inPanel）のとき、図の中身は外し、頭の行のボタンが「右のパネルで表示中」の 1 行になる。押すと、パネルへフォーカスを移す操作を呼ぶ（拡大は呼ばない）', async () => {
+    const actions = makeActions();
+    render(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel data={data()} actions={actions} />);
+    const region = screen.getByRole('region', { name: '地図' });
+    expect(screen.queryByTestId('map-panel')).toBeNull();
+    const line = within(region).getByRole('button', { name: '地図は右のパネルで表示中。押すとパネルへ移ります' });
+    expect(line).toHaveTextContent('右のパネルで表示中');
+    expect(within(region).queryByRole('button', { name: '地図を拡大ビューで開く' })).toBeNull();
+    await userEvent.click(line);
+    expect(actions.focusPanel).toHaveBeenCalledTimes(1);
+    expect(actions.expand).not.toHaveBeenCalled();
+  });
+
+  it('inPanel が false に戻ると、図に戻り、同じボタン（要素）が「拡大」に戻る（閉じたあとのフォーカスの戻し先が、同じ要素のまま）。一度近づいた地図は、すぐ出る', () => {
+    const actions = makeActions();
+    const { rerender } = render(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel={false} data={data()} actions={actions} />);
+    const button = within(screen.getByRole('region', { name: '地図' })).getByRole('button', { name: '地図を拡大ビューで開く' });
+    expect(screen.getByTestId('map-panel')).toBeInTheDocument();
+    rerender(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel data={data()} actions={actions} />);
+    expect(screen.queryByTestId('map-panel')).toBeNull();
+    expect(button).toHaveTextContent('右のパネルで表示中');
+    rerender(<AnswerFigure kind="map" answer={answer} state={state} withMap inPanel={false} data={data()} actions={actions} />);
+    expect(button).toHaveTextContent('拡大');
+    expect(screen.getByTestId('map-panel')).toBeInTheDocument();
   });
 });

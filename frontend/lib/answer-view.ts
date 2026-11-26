@@ -41,6 +41,8 @@ export interface AnswerView {
 export interface AnswerRef {
   id: string;
   results: readonly ToolResult[];
+  /** その回答の質問（直前の利用者の発言）。拡大ビューの「この回答の質問」の行に出す。無いとき（質問が見つからない）は省く */
+  question?: string;
 }
 
 /** 押したボタンが頼む、拡大ビューの開き方 */

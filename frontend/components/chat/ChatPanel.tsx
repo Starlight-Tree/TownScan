@@ -64,6 +64,11 @@ interface Props {
   renderFigure?: (answer: AnswerRef, kind: FigureKind) => ReactNode;
   /** 「新しい会話」（チャットの中のボタンも、サイドパネルのボタンも）で会話を空にしたあとに呼ぶ。親が、拡大ビューを閉じ、回答ごとの状態を捨てる */
   onNewConversation?: () => void;
+  /**
+   * この画面で、回答が届いて並べたときに呼ぶ（保存した会話を開き直して並べたときは呼ばない）。狭い幅で、チャット以外のタブにいる利用者へ、新着を知らせるため。
+   * 親は、ここでフォーカスも画面も動かしてはいけない
+   */
+  onAnswer?: () => void;
 }
 
 interface Failure {
@@ -125,7 +130,7 @@ function prefersTouch(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 }
 
-export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
+export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }: Props) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -159,6 +164,11 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
   // 最後に押されたボタン（結果カードの「地図で見る」・「詳細」など）。拡大ビューを閉じたとき、フォーカスをここへ戻す。
   // ボタンを押してもフォーカスが移らないブラウザー（macOS の Safari・Firefox）でも、押したボタンを正しく指すため、押した時点の対象を控える
   const pressedRef = useRef<HTMLElement | null>(null);
+  // request（再作成しない）の中から、最新の onAnswer を呼ぶための控え
+  const onAnswerRef = useRef(onAnswer);
+  useEffect(() => {
+    onAnswerRef.current = onAnswer;
+  });
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -239,6 +249,7 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
           },
         ]);
         retryRef.current = null;
+        onAnswerRef.current?.();
         if (conversationId !== null) {
           // 保存された（サーバーが回答と一緒に保存する）。ID を sessionStorage に書くのは、conversation_id つきで送った最初の回答が届いたとき（失敗・保存を飛ばした送信では書かない）
           if (!record.saved) {
@@ -385,10 +396,26 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
   useRegisterConversationOpen(openFromList);
   usePublishConversationStatus(currentId, sending);
 
+  // 回答ごとの質問（その回答の直前の、利用者の発言）。拡大ビューが、どの回答かを示すのに使う
+  const questionByAnswer = useMemo(() => {
+    const map = new Map<string, string>();
+    let last: string | undefined;
+    for (const e of entries) {
+      if (e.role === 'user') last = e.content;
+      else if (last !== undefined) map.set(e.id, last);
+    }
+    return map;
+  }, [entries]);
+  const refFor = (entry: ChatEntry): AnswerRef => {
+    const question = questionByAnswer.get(entry.id);
+    return { id: entry.id, results: entry.results ?? [], ...(question ? { question } : {}) };
+  };
+
   // 結果カードの操作を、その回答に束ねる。状態の単位は回答 1 件で、どの回答のカードを押したかを、親へ渡す
   const actionsFor = useCallback(
     (entry: ChatEntry): ResultActions => {
-      const answer: AnswerRef = { id: entry.id, results: entry.results ?? [] };
+      const question = questionByAnswer.get(entry.id);
+      const answer: AnswerRef = { id: entry.id, results: entry.results ?? [], ...(question ? { question } : {}) };
       const expand = (req: ExpandRequest) => actions.expand(answer, req, pressedRef.current);
       return {
         ask: send,
@@ -396,7 +423,7 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
         focusMap: (target) => expand({ type: 'focus', bbox: target.bbox, candidateIds: target.candidateIds }),
       };
     },
-    [actions, send],
+    [actions, send, questionByAnswer],
   );
 
   // 入力欄から送る。送信ボタンで送ると、ボタンが押せなくなってフォーカスが body へ落ちるので、入力欄へ戻す（指で触る端末では移さない）
@@ -508,7 +535,7 @@ export function ChatPanel({ actions, renderFigure, onNewConversation }: Props) {
               {renderFigure &&
                 !staleRun &&
                 figureKinds(entry.results ?? []).map((kind) => (
-                  <Fragment key={kind}>{renderFigure({ id: entry.id, results: entry.results ?? [] }, kind)}</Fragment>
+                  <Fragment key={kind}>{renderFigure(refFor(entry), kind)}</Fragment>
                 ))}
               {entry.notice && (
                 // 保存を飛ばして送り直した回答にだけ、1 回出す（以降の回答には繰り返さない。仕様 §7.1.7）

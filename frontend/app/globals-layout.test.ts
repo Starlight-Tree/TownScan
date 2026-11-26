@@ -46,13 +46,13 @@ const decl = (body: string, property: string): string | null => {
   return m ? m[1]!.trim() : null;
 };
 
-describe('チャット（`/`）は 1 列だけ（常設の結果領域も、左右に並べる・縦に積む切り替えも無い）', () => {
+describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いたときだけ、広い幅は右に横パネル、狭い幅は 4 つのタブ（ADR 0007）', () => {
   it('基本は 1 列で、枠も余白も持たない。幅 1000px 以上も同じ 1 列で、本文の高さいっぱい（幅の上限は .home に無い。会話の本文を 46rem の列に収めるのは、チャットの中の --chat-pad）', () => {
     const home = ruleIn(css, '.home');
     expect(decl(home, 'grid-template-columns')).toBe('minmax(0, 1fr)');
     expect(decl(home, 'padding')).toBe('0');
     // 同じ条件の @media が複数ある（本文の高さの規則など）。チャットの 1 列の規則を持つ方を取る
-    const wide = mediaBlocks('@media (min-width: 1000px)').find((b) => b.includes('.home > .chat'))!;
+    const wide = mediaBlocks('@media (min-width: 1000px)').find((b) => b.includes('.home__chat > .chat'))!;
     expect(wide).toBeDefined();
     const body = ruleIn(wide, '.home');
     // 列の幅（旧: minmax(0, 760px)）と、それを中央に置く指定は無い。幅いっぱいの 1 列のまま
@@ -60,25 +60,44 @@ describe('チャット（`/`）は 1 列だけ（常設の結果領域も、左�
     expect(decl(body, 'justify-content')).toBeNull();
     expect(decl(body, 'padding')).toBeNull();
     expect(decl(body, 'flex')).toBe('1');
-    expect(decl(ruleIn(wide, '.home > .chat'), 'height')).toBe('auto');
+    expect(decl(ruleIn(wide, '.home__chat > .chat'), 'height')).toBe('auto');
     expect(css).not.toContain('760px');
   });
 
   it('1000px 未満（ページ全体がスクロールする幅）: チャットは、内容が少なければ縮み、増えたら 64dvh（640px）で止まって中でスクロールする', () => {
-    const chat = ruleIn(mediaBlock('@media (max-width: 999px)'), '.home > .chat');
+    const chat = ruleIn(mediaBlock('@media (max-width: 999px)'), '.home__chat > .chat');
     expect(decl(chat, 'height')).toBe('auto');
     expect(decl(chat, 'max-height')).toBe('min(64dvh, 640px)');
     expect(decl(chat, 'min-height')).toBe('min(420px, 64dvh)');
   });
 
-  it('無くした規則が、残っていない: 結果領域を本文に並べる・積む規則、「拡大」の列の規則、サイドパネルの開閉での縦積み', () => {
+  it('広い幅で拡大ビューを開くと、チャットの右に横パネルが並ぶ（幅は 24〜32rem の初期値）', () => {
+    expect(decl(ruleIn(css, ".home[data-layout='wide'][data-open='true']"), 'grid-template-columns')).toBe('minmax(0, 1fr) minmax(24rem, 32rem)');
+  });
+
+  it('狭い幅で開くと、1 行目がタブの帯、2 行目にチャットと画面が重なる。隠すほうは visibility: hidden のまま（display: none にしない。チャットのスクロール位置と、地図の大きさを保つ）', () => {
+    expect(decl(ruleIn(css, ".home[data-layout='narrow'][data-open='true']"), 'grid-template-rows')).toBe('auto minmax(0, 1fr)');
+    expect(decl(ruleIn(css, '.home__tabs'), 'grid-area')).toBe('1 / 1');
+    const stacked = /\.home\[data-layout='narrow'\]\[data-open='true'\] > \.home__chat,\s*\.home\[data-layout='narrow'\]\[data-open='true'\] > \.home__panel\s*\{([^}]*)\}/.exec(css);
+    expect(stacked, '狭い幅で、チャットと画面を同じ場所に重ねる規則が無い').not.toBeNull();
+    expect(decl(stacked![1]!, 'grid-area')).toBe('2 / 1');
+    const hidden = /\.home__chat\[hidden\],\s*\.home__panel\[hidden\]\s*\{([^}]*)\}/.exec(css);
+    expect(hidden, 'チャット・画面を隠す規則が無い').not.toBeNull();
+    expect(decl(hidden![1]!, 'visibility')).toBe('hidden');
+    expect(decl(hidden![1]!, 'display')).toBe('flex');
+  });
+
+  it('無くした規則が、残っていない: 結果領域を本文に並べる・積む規則、「拡大」の列の規則、サイドパネルの開閉での縦積み、モーダルのダイアログ・暗い背景', () => {
     for (const gone of [
       '.home--expanded',
       '.home--chat-only',
       '.result-area__expand',
       '.home > .result-area',
+      '.home > .chat',
+      '.expanded-view__dialog',
       '.result-area__panel:not([hidden])',
       '@media (min-width: 1024px) and (max-width: 1256px)',
+      '@media (min-width: 1257px)',
       '86dvh',
       'min-height: 560px',
     ]) {
@@ -88,41 +107,26 @@ describe('チャット（`/`）は 1 列だけ（常設の結果領域も、左�
   });
 });
 
-describe('拡大ビュー（.expanded-view。結果領域を入れるダイアログ）', () => {
-  it('窓全体を覆う固定の層で、後ろを暗くする（色は変数 --scrim）。サイドパネルのメニュー（25）より上、スキップリンク（3000）より下。中の重なりは閉じ込める', () => {
+describe('拡大ビュー（.expanded-view。モーダルではない。結果領域を入れる）', () => {
+  it('窓を覆わない（固定の層・暗い背景・z-index を持たない）。チャットを操作できるまま、横に並ぶ・タブの画面になる', () => {
     const root = ruleIn(css, '.expanded-view');
-    expect(decl(root, 'position')).toBe('fixed');
-    expect(decl(root, 'inset')).toBe('0');
-    expect(decl(root, 'background')).toBe('var(--scrim)');
-    expect(decl(root, 'isolation')).toBe('isolate');
-    const z = Number(decl(root, 'z-index'));
-    expect(z).toBeGreaterThan(25);
-    expect(z).toBeLessThan(3000);
-    // ライト・ダークの両方で定義されている（定義漏れで、暗くならない）
-    expect(css.match(/--scrim\s*:/g)).toHaveLength(3);
+    expect(decl(root, 'position')).toBeNull();
+    expect(decl(root, 'inset')).toBeNull();
+    expect(decl(root, 'z-index')).toBeNull();
+    expect(decl(root, 'background')).toBe('var(--bg)');
+    expect(decl(root, 'display')).toBe('flex');
+    expect(decl(root, 'flex-direction')).toBe('column');
   });
 
-  it('幅 1024px 以上: 窓の四方から 24px あけた大きなダイアログ（幅は最大 1440px、高さは窓の高さ − 48px）', () => {
-    expect(decl(ruleIn(css, '.expanded-view'), 'padding')).toBe('24px');
-    const dialog = ruleIn(css, '.expanded-view__dialog');
-    expect(decl(dialog, 'max-width')).toBe('1440px');
-    expect(decl(dialog, 'height')).toBe('calc(100dvh - 48px)');
-    expect(decl(dialog, 'width')).toBe('100%');
+  it('広い幅は枠・角丸のある横パネル、狭い幅はタブの画面の一部（余白を詰め、枠・角丸なし）', () => {
+    expect(decl(ruleIn(css, '.expanded-view'), 'border')).toBe('1px solid var(--border)');
+    const narrow = ruleIn(css, ".expanded-view[data-layout='narrow']");
+    expect(decl(narrow, 'border')).toBe('0');
+    expect(decl(narrow, 'border-radius')).toBe('0');
   });
 
-  it('幅 1023px 以下: 窓いっぱいの全面のシート（余白・角丸なし）', () => {
-    const block = mediaBlocks('@media (max-width: 1023px)').find((b) => b.includes('.expanded-view {'))!;
-    expect(block).toBeDefined();
-    expect(decl(ruleIn(block, '.expanded-view'), 'padding')).toBe('0');
-    const dialog = ruleIn(block, '.expanded-view__dialog');
-    expect(decl(dialog, 'max-width')).toBe('none');
-    expect(decl(dialog, 'height')).toBe('100dvh');
-    expect(decl(dialog, 'border-radius')).toBe('0');
-    expect(decl(dialog, 'border')).toBe('0');
-  });
-
-  it('中の結果領域は、ダイアログの高さをすべて使い、3 つの画面は置き場いっぱいに重なる（選んでいない画面は、visibility: hidden のまま。display: none にしない）', () => {
-    expect(decl(ruleIn(css, '.expanded-view__dialog > .result-area'), 'flex')).toBe('1');
+  it('中の結果領域は、パネルの高さをすべて使い、3 つの画面は置き場いっぱいに重なる（選んでいない画面は、visibility: hidden のまま。display: none にしない）', () => {
+    expect(decl(ruleIn(css, '.expanded-view > .result-area'), 'flex')).toBe('1');
     expect(decl(ruleIn(css, '.result-area__panels'), 'flex')).toBe('1');
     expect(decl(ruleIn(css, '.result-area__panel'), 'position')).toBe('absolute');
     expect(decl(ruleIn(css, '.result-area__panel'), 'inset')).toBe('0');
@@ -140,9 +144,12 @@ describe('拡大ビュー（.expanded-view。結果領域を入れるダイア�
     expect(css.replace(/\.answer-figure__map \.map-stage/g, '')).not.toMatch(/\.map-stage\s*\{[^}]*clamp\(/);
   });
 
-  it('「閉じる」は、タブの帯の右端（タブと同じ高さ 44px）', () => {
+  it('「閉じる」は、タブの帯の右端（タブと同じ高さ 44px）。質問の行は 1 行で省略する', () => {
     expect(decl(ruleIn(css, '.expanded-view__close'), 'min-height')).toBe('44px');
     expect(decl(ruleIn(css, '.expanded-view__close'), 'flex')).toBe('none');
+    const q = ruleIn(css, '.expanded-view__question');
+    expect(decl(q, 'white-space')).toBe('nowrap');
+    expect(decl(q, 'text-overflow')).toBe('ellipsis');
   });
 });
 

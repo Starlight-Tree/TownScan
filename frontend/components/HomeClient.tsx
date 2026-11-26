@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   answerKey,
   applyExpandRequest,
@@ -24,15 +24,17 @@ import {
 import { getAreas, getCandidatesGeoJson } from '../lib/api';
 import type { AreaSummary, CandidateDetail, CandidateFeature } from '../lib/api-types';
 import { AreasProvider } from '../lib/areas-context';
-import type { MapFilter, ResultView } from '../lib/result-view';
+import { useLayoutMode } from '../lib/layout-mode';
+import { RESULT_VIEW_ORDER, type MapFilter, type ResultView } from '../lib/result-view';
 import { useAsync } from '../lib/use-api';
 import { AnswerFigure, type FigureActions, type FigureData } from './AnswerFigure';
 import { CandidateDrawer } from './CandidateDrawer';
 import { AreaChartView } from './chart/AreaChartView';
 import { ChatPanel } from './chat/ChatPanel';
-import type { ChatActions } from './chat/types';
+import { CHAT_INPUT_ID, type ChatActions } from './chat/types';
 import { ExpandedView } from './ExpandedView';
 import { MapPanel } from './map/MapPanel';
+import { ResultTabs, resultPanelId, resultTabId, type TabId } from './ResultArea';
 
 const loadAreas = (signal: AbortSignal) => getAreas(signal);
 const loadFeatures = async (signal: AbortSignal): Promise<CandidateFeature[]> => (await getCandidatesGeoJson({}, signal)).features;
@@ -91,10 +93,14 @@ function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLo
   );
 }
 
+const NARROW_TABS: readonly TabId[] = ['chat', ...RESULT_VIEW_ORDER];
+
 /**
  * `/`: チャットの 1 列。結果のうち、グラフ・地図は、回答の中に図として出る（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図。AnswerFigure）。
  * 図の「拡大」、結果カードの「詳細」「詳細を開く」「地図で見る」（地図の表示）、最初の画面の「解析した地区を地図で見る」を押したときだけ、
- * 拡大ビュー（ダイアログ。地図・グラフ・写真の比較）が開く。回答が届いただけでは、何も開かず、何も替えない。
+ * 拡大ビュー（地図・グラフ・写真の比較）が開く。回答が届いただけでは、何も開かず、何も替えない。
+ * 拡大ビューは、モーダルではない（ADR 0007）。本文の幅が足りる（広い）ときは、チャットの右の横パネル（チャットは操作できる。パネルが表示中の回答の図は「右のパネルで表示中」の 1 行になる）、
+ * 足りない（狭い）ときは、チャット・地図・グラフ・写真の 4 つのタブ（タブの帯はチャットの上。チャットは隠すだけで外さない）。幅は、本文の枠（.home）を JS で測って決める（lib/layout-mode.ts）。
  * 状態の単位は回答 1 件: 回答ごとに、タブ・絞り込み・強調・選んだ候補・地図の寄せ先を持ち、会話のあいだ保つ（保存しない。地図の拡大・移動は保たない）。
  * 回答の中の図と、その回答の拡大ビューは、同じ状態を読み書きする（図で変えた絞り込みは拡大ビューに引き継がれ、逆も同じ）。
  * 拡大ビューは同時に 1 つだけ。開いているあいだだけマウントする（図は、回答の中に残る）。「新しい会話」で閉じ、回答ごとの状態を捨てる
@@ -112,6 +118,25 @@ export function HomeClient() {
   const resettingRef = useRef(false);
   // ユーザーが押したボタン（チャットの「詳細」・一覧・「写真を比べる」）で詳細を開くたびに +1。すでに同じ候補の詳細が開いていて、マウントし直されないときも、見出しへ移す合図にする
   const [focusNonce, setFocusNonce] = useState(0);
+  // ---- 結果パネルの置き方（ADR 0007）----
+  const homeRef = useRef<HTMLDivElement>(null);
+  const mode = useLayoutMode(homeRef);
+  const baseId = useId();
+  // 狭い幅で、チャットのタブを選んでいるか（開いたとき・ボタンで開き直したときは false＝開いた画面。「チャットへ戻る」・チャットのタブで true）
+  const [showChat, setShowChat] = useState(false);
+  // 利用者の操作で開く・別の回答へ切り替えるたびに +1（拡大ビューが、フォーカスを中へ移す合図）
+  const [openNonce, setOpenNonce] = useState(0);
+  // いま開いている回答の質問（どの回答かを示す行に出す）
+  const [openQuestion, setOpenQuestion] = useState<string | null>(null);
+  // 狭い幅で、チャット以外のタブにいる間に回答が届いた（チャットのタブに文字の印を出す）。announcement は、空のまま先に置いてあるライブ領域へ入れる 1 文
+  const [unread, setUnread] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
+  // コールバックの中で、最新の置き方・画面を読むための控え
+  const modeRef = useRef(mode);
+  const showChatRef = useRef(showChat);
+  const viewRef = useRef<ResultView>('map');
+  // 「チャットへ戻る」（狭い幅）を押したあと、フォーカスをチャットのタブへ移す合図
+  const backFocusRef = useRef(false);
 
   const areas = areasQ.state.status === 'ready' ? areasQ.state.data : NO_AREAS;
   const features = candQ.state.status === 'ready' ? candQ.state.data : null;
@@ -129,7 +154,8 @@ export function HomeClient() {
   const expand = useCallback((answer: AnswerRef | null, request: ExpandRequest, from: HTMLElement | null) => {
     const key = answerKey(answer);
     const ctx = contextRef.current;
-    if (openKeyRef.current === null) openerRef.current = from;
+    // 開き直し・別の回答への切り替えも「新しく開いた」扱い: 閉じたとき、フォーカスは、いま押したボタンへ戻る
+    if (from || openKeyRef.current === null) openerRef.current = from;
     resettingRef.current = false;
     openKeyRef.current = key;
     setStates((prev) => {
@@ -137,12 +163,20 @@ export function HomeClient() {
       return new Map(prev).set(key, applyExpandRequest(base, request, ctx));
     });
     setOpenKey(key);
+    setOpenQuestion(answer?.question ?? null);
+    setShowChat(false);
+    setUnread(false);
+    setAnnouncement('');
+    setOpenNonce((n) => n + 1);
     if (request.type === 'candidate' || request.type === 'compare') setFocusNonce((n) => n + 1);
   }, []);
 
   const close = useCallback(() => {
     openKeyRef.current = null;
     setOpenKey(null);
+    setShowChat(false);
+    setUnread(false);
+    setAnnouncement('');
   }, []);
 
   /** 「新しい会話」: 拡大ビューを閉じ、回答ごとの状態をすべて捨てる（前の会話の絞り込み・強調・選んだ候補・タブ・寄せ先が、次の会話に残らないように） */
@@ -208,8 +242,10 @@ export function HomeClient() {
       selectOnMap: (key, id) => updateAt(key, (s, ctx) => selectFromMap(s, id, ctx)),
       clearSelection: (key) => updateAt(key, clearSelection),
       expand,
+      /** 広い幅で、パネルが表示中の回答の図の 1 行から: フォーカスを、パネルの選んでいるタブへ移す */
+      focusPanel: () => document.getElementById(resultTabId(baseId, viewRef.current))?.focus(),
     }),
-    [updateAt, expand],
+    [updateAt, expand, baseId],
   );
   const figureData = useMemo<FigureData>(
     () => ({ areas, areasState: areasQ.state, candidatesState: candQ.state, reloadAreas: areasQ.reload, reloadCandidates: candQ.reload }),
@@ -221,59 +257,144 @@ export function HomeClient() {
       answer={answer}
       state={states.get(answerKey(answer))}
       withMap={figureKinds(answer.results).includes('map')}
+      inPanel={mode === 'wide' && openKey !== null && answerKey(answer) === openKey}
       data={figureData}
       actions={figureActions}
     />
   );
 
   const current = openKey !== null ? states.get(openKey) : undefined;
+  useEffect(() => {
+    modeRef.current = mode;
+    showChatRef.current = showChat;
+    if (current) viewRef.current = current.view;
+  });
+
+  const narrowOpen = current !== undefined && mode === 'narrow';
+  const chatHidden = narrowOpen && !showChat;
+
+  /** 狭い幅のタブの帯から選ぶ。チャットのタブは、チャットを見せるだけ（拡大ビューは開いたまま）。ほかは、その画面を選ぶ */
+  const selectTab = useCallback(
+    (id: TabId) => {
+      if (id === 'chat') {
+        setShowChat(true);
+        setUnread(false);
+        setAnnouncement('');
+      } else {
+        setShowChat(false);
+        chooseView(id);
+      }
+    },
+    [chooseView],
+  );
+
+  /** 「チャットへ戻る」: 広い幅は入力欄へ、狭い幅はチャットのタブへ（拡大ビューは閉じない） */
+  const backToChat = useCallback(() => {
+    if (modeRef.current === 'wide') {
+      document.getElementById(CHAT_INPUT_ID)?.focus();
+      return;
+    }
+    backFocusRef.current = true;
+    selectTab('chat');
+  }, [selectTab]);
+  useLayoutEffect(() => {
+    if (!showChat || !backFocusRef.current) return;
+    backFocusRef.current = false;
+    document.getElementById(resultTabId(baseId, 'chat'))?.focus();
+  }, [showChat, baseId]);
+
+  /** 回答が届いたとき（チャットが知らせる）。狭い幅で、チャット以外のタブにいるときだけ、文字の印と 1 文の知らせを出す（フォーカスも画面も動かさない） */
+  const onAnswer = useCallback(() => {
+    if (modeRef.current !== 'narrow' || openKeyRef.current === null || showChatRef.current) return;
+    setUnread(true);
+    setAnnouncement('新しい回答が届きました');
+  }, []);
+
+  const closeButton = (
+    <button type="button" className="btn expanded-view__close" title="拡大ビューを閉じます（Esc でも閉じます）" onClick={close}>
+      閉じる
+    </button>
+  );
 
   return (
     <AreasProvider areas={areas}>
-      <div className="home">
-        <ChatPanel actions={chatActions} renderFigure={renderFigure} onNewConversation={resetAll} />
+      <div ref={homeRef} className="home" data-layout={mode} data-open={current ? 'true' : 'false'}>
+        {narrowOpen && current && (
+          // 狭い幅: チャット・地図・グラフ・写真の 4 つのタブ。拡大ビューを開いているあいだだけ出す（最初の画面は、チャットだけ）
+          <div className="home__tabs">
+            <ResultTabs
+              baseId={baseId}
+              tabs={NARROW_TABS}
+              selected={showChat ? 'chat' : current.view}
+              onSelect={selectTab}
+              marks={unread ? { chat: '（新着）' } : undefined}
+              trailing={closeButton}
+              onEscape={showChat ? undefined : close}
+            />
+          </div>
+        )}
+        <div
+          className="home__chat"
+          hidden={chatHidden}
+          // 狭い幅のタブの画面になるときだけ、tabpanel にする（チャットは、いつも同じ場所に置き、外さない。入力中の文・受信・スクロール位置を保つ）
+          {...(narrowOpen ? { id: resultPanelId(baseId, 'chat'), role: 'tabpanel', 'aria-labelledby': resultTabId(baseId, 'chat') } : {})}
+        >
+          <ChatPanel actions={chatActions} renderFigure={renderFigure} onNewConversation={resetAll} onAnswer={onAnswer} />
+        </div>
+        {current && (
+          // 開いているあいだだけマウントする（Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す。
+          // 狭い幅でチャットのタブを選んでいるあいだは、隠すだけ（地図の位置・拡大を保つ）
+          <div className="home__panel" hidden={narrowOpen && showChat}>
+            <ExpandedView
+              layout={mode}
+              baseId={baseId}
+              view={current.view}
+              onViewChange={chooseView}
+              question={openQuestion}
+              onClose={close}
+              onBackToChat={backToChat}
+              returnFocusTo={returnFocusTo}
+              openNonce={openNonce}
+              panels={{
+                map: (
+                  <MapPanel
+                    areas={areas}
+                    areasState={areasQ.state}
+                    candidatesState={candQ.state.status === 'ready' ? { status: 'ready', data: candQ.state.data } : candQ.state}
+                    reloadCandidates={candQ.reload}
+                    reloadAreas={areasQ.reload}
+                    focus={current.mapFocus}
+                    selectedId={current.selected?.id ?? null}
+                    highlightIds={current.highlightIds}
+                    onSelect={selectOnMap}
+                    onOpen={openFromList}
+                    onClearHighlight={clearHighlight}
+                    filter={current.filter}
+                    onFilterChange={changeFilter}
+                    onComparePhotos={compare}
+                    onClearSelection={closeDrawer}
+                  />
+                ),
+                chart: <AreaChartView areas={areas} filter={current.filter} onFilterChange={changeFilter} onShowMap={showMap} />,
+                photos: (
+                  <PhotosPanel
+                    selected={current.selected}
+                    focusNonce={focusNonce}
+                    visible={current.view === 'photos'}
+                    onClose={closeDrawer}
+                    onShowOnMap={showOnMap}
+                    onLoaded={onDetailLoaded}
+                  />
+                ),
+              }}
+            />
+          </div>
+        )}
+        {/* 新着の知らせ（狭い幅）。空のまま先に置き、1 文だけ入れる（role="status"。フォーカスは移さない） */}
+        <p role="status" className="visually-hidden">
+          {announcement}
+        </p>
       </div>
-      {current && (
-        // 開いているあいだだけマウントする（Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す
-        <ExpandedView
-          view={current.view}
-          onViewChange={chooseView}
-          onClose={close}
-          returnFocusTo={returnFocusTo}
-          panels={{
-            map: (
-              <MapPanel
-                areas={areas}
-                areasState={areasQ.state}
-                candidatesState={candQ.state.status === 'ready' ? { status: 'ready', data: candQ.state.data } : candQ.state}
-                reloadCandidates={candQ.reload}
-                reloadAreas={areasQ.reload}
-                focus={current.mapFocus}
-                selectedId={current.selected?.id ?? null}
-                highlightIds={current.highlightIds}
-                onSelect={selectOnMap}
-                onOpen={openFromList}
-                onClearHighlight={clearHighlight}
-                filter={current.filter}
-                onFilterChange={changeFilter}
-                onComparePhotos={compare}
-                onClearSelection={closeDrawer}
-              />
-            ),
-            chart: <AreaChartView areas={areas} filter={current.filter} onFilterChange={changeFilter} onShowMap={showMap} />,
-            photos: (
-              <PhotosPanel
-                selected={current.selected}
-                focusNonce={focusNonce}
-                visible={current.view === 'photos'}
-                onClose={closeDrawer}
-                onShowOnMap={showOnMap}
-                onLoaded={onDetailLoaded}
-              />
-            ),
-          }}
-        />
-      )}
     </AreasProvider>
   );
 }
