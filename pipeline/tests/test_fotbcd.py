@@ -232,6 +232,63 @@ def test_edge_and_small_counts_once_as_edge():
     assert _excluded([("NEW", (500, 300, 512, 312))], []) == (0, 0, [1, 0, 0], [0, 0, 0])
 
 
+# ---- 併記（端の除外だけを外した値） ----
+
+EDGE_NEW, EDGE_OLD = (464, 200, 512, 248), (0, 400, 48, 448)  # 右の端・左の端に接する 92.16 m²
+EDGE_SMALL = (500, 300, 512, 312)  # 端に接する 5.76 m²
+
+
+def _with_edge(c):
+    return {k.removeprefix("with_edge."): v for k, v in c.items() if k.startswith("with_edge.")}
+
+
+def _after_excluded(c, who):
+    return [c[f"after.excluded.{who}.{k}"] for k in ev.EXCLUDE_KINDS]
+
+
+@pytest.mark.parametrize("size", [256, 320, 512])
+def test_with_edge_adds_edge_buildings_without_changing_the_main_values(size):
+    p = pair(
+        [("UNCHANGED", U1), ("NEW", N1), ("NEW", N2), ("NEW", N3), ("DEMOLISHED", D1), ("NEW", EDGE_NEW), ("UNCHANGED", EDGE_OLD)]
+    )
+    before = prob([U1, D1, N3_UPPER_THIRD, EDGE_OLD], size)
+    after = prob([U1, N1, N3, F1, EDGE_NEW, EDGE_OLD], size)
+    c = ev.pair_counts(p, before, after, threshold=0.5)
+    main = ev.pair_counts(*_scene(size), threshold=0.5)
+    for key in ("before.tp", "before.fp", "before.fn", "after.tp", "after.fp", "after.fn"):
+        assert c[key] == main[key]
+    assert (c["new.n_ref"], c["new.n_pred"], c["new.tp"], c["new.unc.n_pred"], c["new.unc.tp"]) == (3, 2, 1, 3, 2)
+    w = _with_edge(c)
+    # 端の 2 件が、抽出に加わる。EDGE_OLD は前でも検出（候補にしない）。EDGE_NEW は「未検出」の候補になる（端でも未判定にしない）
+    assert (w["before.tp"], w["before.fp"], w["before.fn"]) == (3, 1, 0)
+    assert (w["after.tp"], w["after.fp"], w["after.fn"]) == (5, 1, 1)
+    assert (w["new.n_ref"], w["new.n_pred"], w["new.tp"]) == (4, 3, 2)
+    assert (w["new.unc.n_pred"], w["new.unc.tp"]) == (4, 3)
+
+
+def test_with_edge_still_excludes_small_buildings_on_the_edge():
+    c = ev.pair_counts(pair([("NEW", EDGE_SMALL)]), prob([]), prob([EDGE_SMALL]), threshold=0.5)
+    assert (_after_excluded(c, "reference"), _after_excluded(c, "prediction")) == ([1, 0, 0], [1, 0, 0])
+    w = _with_edge(c)
+    assert (_after_excluded(w, "reference"), _after_excluded(w, "prediction")) == ([0, 1, 0], [0, 1, 0])
+    assert (w["after.tp"], w["after.fp"], w["after.fn"], w["new.n_ref"], w["new.n_pred"]) == (0, 0, 0, 0, 0)
+
+
+def test_with_edge_is_reported_per_department_and_does_not_choose_the_setting():
+    pairs, probs = _two_pairs()
+    for size in ev.SCALE_SIZES.values():
+        probs[("000000001", "after", size)] = prob([(F1, 0.35), (EDGE_OLD, 0.9)], size)  # 端の誤検出を足す
+    r = ev.run_evaluation(pairs, lambda k, s, n: probs[(k, s, n)])
+    assert (r["chosen"]["scale"], r["chosen"]["threshold"]) == (0.5, 0.5)
+    assert {row["after_object_f1"] for row in r["sweep"] if row["threshold"] == 0.5} == {1.0}  # 端の誤検出は入らない
+    o = r["overall"]
+    assert (o["extraction"]["after"]["fp"], o["with_edge"]["extraction"]["after"]["fp"]) == (0, 1)
+    assert (o["new_building"]["n_pred"], o["with_edge"]["new_building"]["n_pred"]) == (1, 2)
+    assert o["with_edge"]["new_building"]["precision"] == 0.5
+    assert r["by_dep"]["13"]["with_edge"]["new_building"]["precision"] == 0.0
+    assert r["by_dep"]["92"]["with_edge"]["new_building"]["precision"] == 1.0
+
+
 # ---- 設定の選び方と、全体の流れ ----
 
 def _two_pairs():
@@ -313,6 +370,8 @@ def test_command_writes_the_same_result_twice(tmp_path, capsys):
     assert r["used_for_tuning"] is True and r["notes"][0].startswith("調整に使ったデータの値")
     assert r["inference"] == {"model": "dummy"}
     assert (r["chosen"]["scale"], r["chosen"]["threshold"]) == (0.5, 0.5)
+    assert r["overall"]["with_edge"]["new_building"] == r["overall"]["new_building"]  # 端の建物が無い入力
+    assert "併記（端の建物も含む）: 新築の再現率" in capsys.readouterr().out
 
 
 def test_test_split_requires_fixed_setting(tmp_path):

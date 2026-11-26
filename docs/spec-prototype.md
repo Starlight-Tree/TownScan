@@ -454,7 +454,7 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
   - `protocol`: 除外・対応づけ・分類の閾値など、計算の取り決め
   - `sweep`: `[{scale, threshold, after_object_f1, after_object_precision, after_object_recall}]`。**新築の指標は入れない**（選んだ値でだけ計算する）
   - `chosen`: `{scale, threshold, selected_by}`
-  - `overall` と `by_dep.{県}`: `{pairs, years:[{before,after,pairs}], extraction:{before,after}, new_building, excluded:{before,after}}`
+  - `overall` と `by_dep.{県}`: `{pairs, years:[{before,after,pairs}], extraction:{before,after}, new_building, excluded:{before,after}, with_edge:{extraction, new_building, excluded}}`。`with_edge` は、端の除外だけを外した併記（中の形は同じ。`excluded.*.edge` は 0 で、端に接する 20 m² 未満は `small` に数える）。設定の選択と `sweep` には使わない
     - `extraction.*`: `{f1, precision, recall, tp, fp, fn, n_ref, n_pred}`
     - `new_building`: `{recall, precision, tp, n_ref, n_pred, with_uncertain:{recall, tp, n_pred}}`。割れない値は `null`
     - `excluded.*`: `{reference:{edge, small, overlap}, prediction:{edge, small, overlap}}`。両方に当たるものは `edge` に数える

@@ -28,6 +28,7 @@ SIMPLIFY_M = 0.2
 DIFF_PARAMS = diff.DiffParams(drop_present_before=True)  # アプリの候補の作り方と同じ
 SPLITS = ("val", "test")
 EXCLUDE_KINDS = ("edge", "small", "overlap")
+WITH_EDGE = "with_edge"  # 併記（端の除外だけを外した値）の、出力と数のキー
 
 LoadProb = Callable[[str, str, int], np.ndarray]  # (組の番号, "before"|"after", 一辺) → 確率の配列
 
@@ -53,9 +54,9 @@ def predict_buildings(prob: np.ndarray, threshold: float) -> list[Predicted]:
     return out
 
 
-def _seed_kind(item, area_m2: float) -> str | None:
-    """それ自体が除外になる理由。縁と小ささの両方に当たるものは edge。"""
-    if item.edge_touch:
+def _seed_kind(item, area_m2: float, drop_edge: bool) -> str | None:
+    """それ自体が除外になる理由。縁と小ささの両方に当たるものは edge（drop_edge が False なら、縁は理由にしない）。"""
+    if drop_edge and item.edge_touch:
         return "edge"
     return "small" if round(area_m2, 2) < DIFF_PARAMS.min_area_m2 else None
 
@@ -69,22 +70,22 @@ def _drop(own: Sequence, own_kinds: list, other_seeds: Sequence) -> tuple[list, 
     return kept, counts
 
 
-def exclude(refs: Sequence[fotbcd.Footprint], preds: Sequence[Predicted]):
+def exclude(refs: Sequence[fotbcd.Footprint], preds: Sequence[Predicted], *, drop_edge: bool = True):
     """正解と予測で対称な除外。戻り値は (残した正解, 残した予測, 正解の除外の数, 予測の除外の数)。
 
-    1. 組の端に接するもの・20 m² 未満のものを、両方から外す。
+    1. 組の端に接するもの（drop_edge のとき）・20 m² 未満のものを、両方から外す。
     2. 1 で外したものと、自分の面積の半分以上が重なる反対側のものも外す（1 段だけ。2 で外したものからは広げない）。
     """
-    ref_kinds = [_seed_kind(r, r.geom.area) for r in refs]
-    pred_kinds = [_seed_kind(p, p.area_m2) for p in preds]
+    ref_kinds = [_seed_kind(r, r.geom.area, drop_edge) for r in refs]
+    pred_kinds = [_seed_kind(p, p.area_m2, drop_edge) for p in preds]
     kept_refs, ref_counts = _drop(refs, ref_kinds, [p for p, k in zip(preds, pred_kinds) if k])
     kept_preds, pred_counts = _drop(preds, pred_kinds, [r for r, k in zip(refs, ref_kinds) if k])
     return kept_refs, kept_preds, ref_counts, pred_counts
 
 
-def side_counts(side: str, refs: Sequence[fotbcd.Footprint], preds: Sequence[Predicted]):
+def side_counts(side: str, refs: Sequence[fotbcd.Footprint], preds: Sequence[Predicted], *, drop_edge: bool = True):
     """1 組の片側の抽出。戻り値は (数, 残した正解, 残した予測)。数のキーは "{side}.tp" など。"""
-    kept_refs, kept_preds, ref_ex, pred_ex = exclude(refs, preds)
+    kept_refs, kept_preds, ref_ex, pred_ex = exclude(refs, preds, drop_edge=drop_edge)
     tp = evaluate.match_objects([p.geom for p in kept_preds], [r.geom for r in kept_refs])
     c = Counter({f"{side}.tp": tp, f"{side}.fp": len(kept_preds) - tp, f"{side}.fn": len(kept_refs) - tp})
     for kind in EXCLUDE_KINDS:
@@ -96,7 +97,8 @@ def side_counts(side: str, refs: Sequence[fotbcd.Footprint], preds: Sequence[Pre
 def classify_after(pred: Predicted, cover_before, prob_before: np.ndarray) -> str | None:
     """後の写真の建物 1 つの分類（diff.classify）。None は候補にしない（前の写真でも検出した）。
 
-    cover_before は、前の写真の建物の全部（除外の前）の和。端に接するものは除外で消えているので、edge_touch は常に False。
+    cover_before は、前の写真の建物の全部（除外の前）の和。edge_touch は常に False。本体の値では、端に接するものは除外で
+    消えている。併記では、端の建物もほかと同じ写真の比較で分類する（アプリの「端のため未判定」は使わない）。
     """
     res = fotbcd.PATCH_M / prob_before.shape[0]
     poly_px = affinity.scale(pred.geom, 1 / res, 1 / res, origin=(0, 0))
@@ -110,16 +112,12 @@ def classify_after(pred: Predicted, cover_before, prob_before: np.ndarray) -> st
     ).cls
 
 
-def pair_counts(pair: fotbcd.Pair, prob_before: np.ndarray, prob_after: np.ndarray, threshold: float) -> Counter:
-    """1 組の、両側の抽出と、新築の候補の数。"""
-    p0 = vectorize.as_prob_array(prob_before)
-    before_preds = predict_buildings(p0, threshold)
-    counts, _, _ = side_counts("before", pair.refs("before"), before_preds)
-    after, kept_refs, kept_preds = side_counts("after", pair.refs("after"), predict_buildings(prob_after, threshold))
+def _count_pair(pair: fotbcd.Pair, before_preds, after_preds, cover_before, prob_before, *, drop_edge: bool) -> Counter:
+    counts, _, _ = side_counts("before", pair.refs("before"), before_preds, drop_edge=drop_edge)
+    after, kept_refs, kept_preds = side_counts("after", pair.refs("after"), after_preds, drop_edge=drop_edge)
     counts.update(after)
 
-    cover_before = diff.cover_of([p.geom for p in before_preds])
-    classes = [(p, classify_after(p, cover_before, p0)) for p in kept_preds]
+    classes = [(p, classify_after(p, cover_before, prob_before)) for p in kept_preds]
     new_refs = [r.geom for r in kept_refs if r.label == "NEW"]
     new = [p.geom for p, c in classes if c == diff.CLASS_NEW]
     new_or_uncertain = [p.geom for p, c in classes if c in (diff.CLASS_NEW, diff.CLASS_UNCERTAIN)]
@@ -132,6 +130,18 @@ def pair_counts(pair: fotbcd.Pair, prob_before: np.ndarray, prob_after: np.ndarr
             "new.unc.tp": evaluate.match_objects(new_or_uncertain, new_refs),
         }
     )
+    return counts
+
+
+def pair_counts(pair: fotbcd.Pair, prob_before: np.ndarray, prob_after: np.ndarray, threshold: float) -> Counter:
+    """1 組の、両側の抽出と、新築の候補の数。併記（端の除外だけを外した数）は、キーの頭に "with_edge." を付ける。"""
+    p0 = vectorize.as_prob_array(prob_before)
+    before_preds = predict_buildings(p0, threshold)
+    after_preds = predict_buildings(prob_after, threshold)
+    cover_before = diff.cover_of([p.geom for p in before_preds])
+    counts = _count_pair(pair, before_preds, after_preds, cover_before, p0, drop_edge=True)
+    with_edge = _count_pair(pair, before_preds, after_preds, cover_before, p0, drop_edge=False)
+    counts.update({f"{WITH_EDGE}.{k}": v for k, v in with_edge.items()})
     return counts
 
 
@@ -150,29 +160,41 @@ def choose_setting(totals: dict[tuple[float, float], Counter]) -> tuple[float, f
     return min(totals, key=key)
 
 
-def _summary(pairs: Sequence[fotbcd.Pair], c: Counter) -> dict:
+def _metrics(c: Counter, prefix: str = "") -> dict:
+    """数 → 抽出・新築の指標・除外の数。prefix は数のキーの頭（併記は "with_edge."）。"""
     ratio = evaluate._ratio
+
+    def n(key: str) -> int:
+        return c[prefix + key]
+
+    return {
+        "extraction": {s: evaluate.object_metrics(n(f"{s}.tp"), n(f"{s}.fp"), n(f"{s}.fn")) for s in fotbcd.SIDES},
+        "new_building": {
+            "recall": ratio(n("new.tp"), n("new.n_ref")),
+            "precision": ratio(n("new.tp"), n("new.n_pred")),
+            "tp": n("new.tp"),
+            "n_ref": n("new.n_ref"),
+            "n_pred": n("new.n_pred"),
+            "with_uncertain": {
+                "recall": ratio(n("new.unc.tp"), n("new.n_ref")),
+                "tp": n("new.unc.tp"),
+                "n_pred": n("new.unc.n_pred"),
+            },
+        },
+        "excluded": {
+            s: {who: {k: n(f"{s}.excluded.{who}.{k}") for k in EXCLUDE_KINDS} for who in ("reference", "prediction")}
+            for s in fotbcd.SIDES
+        },
+    }
+
+
+def _summary(pairs: Sequence[fotbcd.Pair], c: Counter) -> dict:
     years = Counter((p.before_year, p.after_year) for p in pairs)
     return {
         "pairs": len(pairs),
         "years": [{"before": b, "after": a, "pairs": n} for (b, a), n in sorted(years.items())],
-        "extraction": {s: evaluate.object_metrics(c[f"{s}.tp"], c[f"{s}.fp"], c[f"{s}.fn"]) for s in fotbcd.SIDES},
-        "new_building": {
-            "recall": ratio(c["new.tp"], c["new.n_ref"]),
-            "precision": ratio(c["new.tp"], c["new.n_pred"]),
-            "tp": c["new.tp"],
-            "n_ref": c["new.n_ref"],
-            "n_pred": c["new.n_pred"],
-            "with_uncertain": {
-                "recall": ratio(c["new.unc.tp"], c["new.n_ref"]),
-                "tp": c["new.unc.tp"],
-                "n_pred": c["new.unc.n_pred"],
-            },
-        },
-        "excluded": {
-            s: {who: {k: c[f"{s}.excluded.{who}.{k}"] for k in EXCLUDE_KINDS} for who in ("reference", "prediction")}
-            for s in fotbcd.SIDES
-        },
+        **_metrics(c),
+        WITH_EDGE: _metrics(c, f"{WITH_EDGE}."),
     }
 
 
@@ -233,6 +255,7 @@ def run_evaluation(
             "scales": scales,
             "thresholds": thresholds,
             "diff": DIFF_PARAMS.to_dict(),
+            WITH_EDGE: "端の除外だけを外した併記。端の建物も写真の比較で分類する。設定の選択には使わない",
         },
         "sweep": sweep,
         "chosen": {
@@ -278,6 +301,7 @@ def _notes(split: str) -> list[str]:
     notes = [
         "配布ページによると、人が選んで確認した組で、無作為の標本ではない。県や地区の全体の実力ではない。",
         "組の端に接する建物と 20 m² 未満の建物は、正解と予測の両方から外した（それと半分以上重なる反対側も外した）。",
+        "with_edge は、端の除外だけを外した併記の値（端で切れた形どうしを比べる）。倍率と閾値の選択には使っていない。",
     ]
     if split == "val":
         notes.insert(0, "調整に使ったデータの値。val は、倍率と閾値の選択と、アプリの地区選びに使った。")
@@ -336,13 +360,14 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(a.out) if a.out else REPO_ROOT / "data" / "fr" / f"eval_{a.split}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    o = result["overall"]
-    print(
-        f"書き出し: {out}\n"
-        f"建物の抽出の物体単位 F1: 前 {o['extraction']['before']['f1']} / 後 {o['extraction']['after']['f1']}\n"
-        f"新築の再現率 {o['new_building']['recall']}・精度 {o['new_building']['precision']}"
-        f"（未判定も含めた再現率 {o['new_building']['with_uncertain']['recall']}）"
-    )
+    print(f"書き出し: {out}")
+    for title, m in (("", result["overall"]), ("併記（端の建物も含む）: ", result["overall"][WITH_EDGE])):
+        new = m["new_building"]
+        print(
+            f"{title}建物の抽出の物体単位 F1: 前 {m['extraction']['before']['f1']} / 後 {m['extraction']['after']['f1']}\n"
+            f"{title}新築の再現率 {new['recall']}・精度 {new['precision']}"
+            f"（未判定も含めた再現率 {new['with_uncertain']['recall']}・対象 {new['n_ref']} 件）"
+        )
     return 0
 
 
