@@ -119,9 +119,10 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 			content = s.compose(results)
 		}
 	}
-	// 件数だけ・候補 1 件の写真だけの回答の本文は、実 LLM の文も使わず、結果からコードで組み立てる（毎回同じ形にする）。
+	// 件数だけ・候補 1 件の写真だけ・精度だけの回答の本文は、実 LLM の文も使わず、結果からコードで組み立てる（毎回同じ形にする）。
 	// 写真は、結果の説明（地区・面積・輪郭の注記）にする。どう選んだか（いちばん大きい、など）は結果に無いので言わない。画面は、本文にある説明をカードで繰り返さない。
-	// 模擬モデルの写真の文は替えない（模擬の振り分けは、前の本文に書かれた候補の ID で対象を引き継ぐ。実 LLM には ID を書かせない）
+	// 模擬モデルの写真の文は替えない（模擬の振り分けは、前の本文に書かれた候補の ID で対象を引き継ぐ。実 LLM には ID を書かせない）。
+	// 模擬モデルの精度の文も替えない（契約の検査と凍結した期待値の対象）
 	composed := false
 	if len(results) == 1 {
 		switch r := results[0].(type) {
@@ -131,10 +132,14 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 			if s.gemini != nil {
 				content, composed = r.Caption, true
 			}
+		case AccuracyResult:
+			if s.gemini != nil {
+				content, composed = renderAccuracyBrief(r), true
+			}
 		}
 	}
 	// 返答文の数字は、結果の値だけから出ていること。満たさなければ返さず、安全なテンプレートにする。
-	// 実 LLM が書いた文は、強い検査（地区名の漢数字は数として見ない）。コードで組み立てた文（模擬モデル・件数と写真の本文）は、Python と同じ範囲の検査
+	// 実 LLM が書いた文は、強い検査（地区名の漢数字は数として見ない）。コードで組み立てた文（模擬モデル・件数と写真と精度の本文）は、Python と同じ範囲の検査
 	var guarded string
 	var replaced bool
 	if s.gemini != nil && !composed {

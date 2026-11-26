@@ -267,6 +267,27 @@ func TestPhotoOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	}
 }
 
+// 精度だけの回答の本文は、LLM の文でなく、F1 と「新築の再現率は未測定」を必ず言う文。数字の検査も通る
+func TestAccuracyOnlyAnswerIgnoresTheModelText(t *testing.T) {
+	f := newFakeGemini(t,
+		call("get_accuracy", map[string]any{}, nil),
+		say("精度の詳しい数字を表にまとめました。"))
+	s, logs := geminiService(t, f, newFakeData())
+	r := mustAsk(t, s, "このアプリの精度は？")
+	want := renderAccuracyBrief(r.Results[0].(AccuracyResult))
+	if r.Content != want || r.Content == SafeTemplate {
+		t.Errorf("content = %q（期待 %q）", r.Content, want)
+	}
+	for _, s := range []string{"物体単位 F1", "未測定"} {
+		if !strings.Contains(r.Content, s) {
+			t.Errorf("content に %q が無い: %q", s, r.Content)
+		}
+	}
+	if strings.Contains(logs.text(), "安全なテンプレートに差し替えました") {
+		t.Errorf("ログ = %s", logs.text())
+	}
+}
+
 // ---- (a) 件数の質問: functionCall → 結果 → 文 ----
 
 func TestCountQuestionRunsTheFunctionCallingLoop(t *testing.T) {

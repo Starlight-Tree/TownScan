@@ -229,6 +229,34 @@ func renderDetectionImage(r DetectionImageResult) string {
 	return fmt.Sprintf("候補 %s の写真を、%d 年と %d 年で並べます。%s", r.CandidateID, r.Images[0].Year, r.Images[1].Year, r.Caption)
 }
 
+// renderAccuracyBrief は、精度の結果 1 件だけの回答の本文（実 LLM のとき。service.go）。
+// 実 LLM の文は、F1 と「新築の再現率は未測定」を言わない回があったので、この 2 つを必ず言う。ほかの数字はカードが出す。
+func renderAccuracyBrief(r AccuracyResult) string {
+	byKey := map[string]Metric{}
+	for _, m := range r.Metrics {
+		byKey[m.Key] = m
+	}
+	var text string
+	if f1 := byKey["holdout_object_f1"].Value; f1 == nil {
+		text = "建物抽出の精度の値が、評価ファイルにありません。"
+	} else {
+		measured := ""
+		if len(r.Provenance.PhotoYears) > 0 {
+			measured = fmt.Sprintf("（基盤地図情報を参照にして、%d 年の写真で測った値）", r.Provenance.PhotoYears[0])
+		}
+		text = fmt.Sprintf("建物抽出の物体単位 F1 は、評価用の地区で %s です%s。", ratio(float64(*f1)), measured)
+	}
+	if recall := byKey["new_building_recall"].Value; recall == nil {
+		text += "新築の再現率（本当の新築のうち候補に出せた割合）は、手ラベルが無いため未測定です。"
+	} else {
+		text += fmt.Sprintf("新築の再現率（本当の新築のうち候補に出せた割合）は %s です。", ratio(float64(*recall)))
+	}
+	if r.Provenance.RunKind == "synthetic" {
+		text += "なお、これは合成データ（テスト用）の値です。"
+	}
+	return text
+}
+
 func renderAccuracy(r AccuracyResult) string {
 	byKey := map[string]Metric{}
 	for _, m := range r.Metrics {
