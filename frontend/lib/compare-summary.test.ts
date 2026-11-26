@@ -21,16 +21,11 @@ const SAMPLE: CompareResult = {
 };
 
 describe('compareSummary', () => {
-  it('最も多い地区と、全地区の合計・内訳を、結果の数字だけから言う。未判定が過半なら、そう言う', () => {
+  it('最も多い地区と、全地区の合計を、結果の数字だけから言う（分類の内訳は言わない）', () => {
     expect(compareSummary(SAMPLE)).toEqual({
       lead: '候補が最も多いのは薄場一丁目で、6 件です。',
-      sub: '全 12 地区の合計は 18 件（2018 年は未検出 7・2018 年も検出 1・未判定 10）。未判定が過半を占めます。目で確かめる候補が多めです。',
+      sub: '全 12 地区の合計は 18 件。',
     });
-  });
-
-  it('未判定が過半でなければ、過半とは言わない（ちょうど半分も言わない）', () => {
-    const half: CompareResult = { ...SAMPLE, items: [item('A', { total: 4, confirmed_new: 2, existing_omission: 0, uncertain: 2 })] };
-    expect(compareSummary(half)?.sub).toBe('全 1 地区の合計は 4 件（2018 年は未検出 2・2018 年も検出 0・未判定 2）。');
   });
 
   it('同数のいちばん多い地区は、3 つまで並べ、それより多ければ「ほか N 地区」', () => {
@@ -51,9 +46,9 @@ describe('compareSummary', () => {
     expect(compareSummary({ ...none, filter: { cls: 'uncertain' } })?.lead).toBe('どの地区にも、未判定の候補はありません。');
   });
 
-  it('合計が結果に無ければ、3 分類の和を使う。分類の和と合計が合わないときは、内訳を言わない', () => {
+  it('合計が結果に無ければ、3 分類の和を使う。合計があれば、そちらを使う', () => {
     const noTotal: CompareResult = { ...SAMPLE, items: [item('A', { confirmed_new: 2, existing_omission: 1, uncertain: 1 })] };
-    expect(compareSummary(noTotal)?.sub).toBe('全 1 地区の合計は 4 件（2018 年は未検出 2・2018 年も検出 1・未判定 1）。');
+    expect(compareSummary(noTotal)?.sub).toBe('全 1 地区の合計は 4 件。');
     const mismatch: CompareResult = { ...SAMPLE, items: [item('A', { total: 5, confirmed_new: 2, existing_omission: 1, uncertain: 1 })] };
     expect(compareSummary(mismatch)?.sub).toBe('全 1 地区の合計は 5 件。');
   });

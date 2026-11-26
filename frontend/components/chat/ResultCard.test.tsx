@@ -12,23 +12,23 @@ function makeActions(): ResultActions {
 }
 
 describe('結果カード: 型ごとの描画', () => {
-  it('count: 表を出せないときは、見出しに聞かれた数と地区、下に全体の数・根拠。未判定の説明の行・大きな数字・内訳の棒は無い', () => {
+  it('count: 写真を出せないときは、見出しに聞かれた数と地区、下に全体の数。根拠の箱・未判定の説明の行・大きな数字・内訳の棒は無い', () => {
     render(<ResultCard result={count} actions={makeActions()} />);
     const card = screen.getByRole('region', { name: count.title });
     expect(within(card).getByRole('heading')).toHaveTextContent('2018 年は未検出 33 件（全地区）');
-    expect(within(card).getByText('候補は全部で 102 件（うち未判定 18 件）')).toBeInTheDocument();
+    expect(within(card).getByText('候補は全部で 102 件')).toBeInTheDocument();
     expect(card.querySelector('.uncertain-note')).toBeNull();
     expect(card).not.toHaveClass('result-card--plain');
     expect(within(card).queryByRole('list')).not.toBeInTheDocument();
     expect(card.querySelector('.bar')).toBeNull();
-    expect(within(card).getByText('根拠を見る')).toBeInTheDocument();
-    expect(within(card).getByText(count.provenance.model)).toBeInTheDocument();
+    expect(within(card).queryByText('根拠を見る')).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent(count.provenance.model);
   });
 
-  it('count: 分類を絞らなければ、見出しは「候補」で、下に分類ごとの内訳', () => {
+  it('count: 分類を絞らなければ、見出しは「候補」。分類ごとの内訳は出さない', () => {
     render(<ResultCard result={{ ...count, total: 102, overall: undefined, filter: {} }} actions={makeActions()} />);
     expect(screen.getByRole('heading')).toHaveTextContent('候補 102 件（全地区）');
-    expect(screen.getByText('2018 年は未検出 33 件・2018 年も検出 51 件・未判定 18 件')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/未検出|も検出|未判定/);
     expect(screen.queryByText(/候補は全部で/)).not.toBeInTheDocument();
   });
 
@@ -104,7 +104,7 @@ describe('結果カード: 型ごとの描画', () => {
       expect(screen.queryByText(/候補は全部で/)).not.toBeInTheDocument();
     });
 
-    it('分類を絞らないときは、2018 年は未検出 → 要確認 → 端のため未判定 → 2018 年も検出の順（同じ中は面積の大きい順）で、分類の見出しで区切る。カードの分類は未判定の理由だけ', async () => {
+    it('分類を絞らないときは、2018 年は未検出 → 要確認 → 端のため未判定 → 2018 年も検出の順（同じ中は面積の大きい順）。分類の見出しも、カードの分類の札も出さない', async () => {
       const mixed = [
         feature(1, 'existing_omission', 900, 'z18-1-2', 'present_2018'),
         feature(2, 'uncertain', 800, 'z18-1-2', 'edge'),
@@ -113,17 +113,18 @@ describe('結果カード: 型ごとの描画', () => {
         feature(5, 'confirmed_new', 20, 'z18-1-2', 'new_absent_2018'),
       ];
       show({ ...count, total: 5, overall: undefined, filter: {} }, { data: mixed });
-      // 見出しの件数は、隠れているぶんも含む。まだ 1 件も出ていない分類の見出しは出ない
-      expect(headings()).toEqual(['2018 年は未検出（2 件）', '未判定（2 件）']);
+      expect(headings()).toEqual([]);
       await userEvent.click(screen.getByRole('button', { name: '全 5 件を表示' }));
       expect(ids()).toEqual(['c-9-9-5', 'c-9-9-4', 'c-9-9-3', 'c-9-9-2', 'c-9-9-1']);
-      expect(headings()).toEqual(['2018 年は未検出（2 件）', '未判定（2 件）', '2018 年も検出（1 件）']);
-      expect(photoCards().map((c) => c.querySelector('.photo-card__tag')?.textContent ?? null)).toEqual([null, null, '要確認', '端のため未判定', null]);
+      expect(headings()).toEqual([]);
+      for (const card of photoCards()) expect(card.textContent).not.toMatch(/未検出|も検出|未判定|要確認/);
     });
 
-    it('「根拠を見る」は、写真の下。カードの「詳細」は、その候補を開く', async () => {
+    it('写真の下に出典の 1 行（根拠の箱と「詳細」の文字のリンクは無い）。写真を含むカードを押すと、その候補を開く', async () => {
       const { actions } = show(seven);
-      expect(document.querySelector('.photo-grid')!.compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(document.querySelector('.photo-grid')!.compareDocumentPosition(screen.getByText('出典：国土地理院')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByText('根拠を見る')).not.toBeInTheDocument();
+      expect(screen.queryByText('詳細', { exact: true })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: /詳細.*c-9-9-2/ }));
       expect(actions.openCandidate).toHaveBeenCalledWith('c-9-9-2');
     });
@@ -131,7 +132,7 @@ describe('結果カード: 型ごとの描画', () => {
     it('地区の条件があれば、その地区のカードだけ。4 件以下なら、開くボタンは無い', () => {
       show({ ...count, total: 1, overall: undefined, filter: { area_id: 'z18-2-2' } });
       expect(ids()).toEqual(['c-9-9-9']);
-      expect(headings()).toEqual(['2018 年も検出（1 件）']);
+      expect(headings()).toEqual([]);
       expect(screen.queryByRole('button', { name: /件を表示/ })).not.toBeInTheDocument();
     });
 
@@ -153,8 +154,7 @@ describe('結果カード: 型ごとの描画', () => {
       const card = screen.getByRole('region', { name: result.title });
       expect(within(card).queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
       expect(within(card).queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
-      // グラフ・地図のボタンの代わりに、根拠の箱（「根拠を見る」）がある
-      expect(within(card).getByText('根拠を見る')).toBeInTheDocument();
+      expect(within(card).queryByText('根拠を見る')).not.toBeInTheDocument();
       unmount();
     }
     expect(actions.focusMap).not.toHaveBeenCalled();
@@ -188,12 +188,12 @@ describe('結果カード: 型ごとの描画', () => {
     }
   });
 
-  it('table: 候補の一覧は、API の順の写真カード。分類は各カードに添え、「全 N 件中、上位 M 件」を出して、カードから詳細を開く', async () => {
+  it('table: 候補の一覧は、API の順の写真カード。分類は添えず、「全 N 件中、上位 M 件」を出して、カードから詳細を開く', async () => {
     const actions = makeActions();
     render(<ResultCard result={table} actions={actions} />);
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.getAllByRole('listitem').filter((li) => li.classList.contains('photo-card'))).toHaveLength(2);
-    expect([...document.querySelectorAll('.photo-card__tag')].map((t) => t.textContent)).toEqual(['2018 年は未検出', '未判定']);
+    for (const card of document.querySelectorAll('.photo-card')) expect(card.textContent).not.toMatch(/未検出|も検出|未判定/);
     expect(screen.getByText('全 102 件中、上位 2 件')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
     expect(actions.openCandidate).toHaveBeenCalledWith('c-1-2-1');
@@ -215,14 +215,17 @@ describe('結果カード: 型ごとの描画', () => {
       })),
     });
 
-    it('表は出さず、最も多い地区と、全地区の合計・内訳を、結果の数字から言う', () => {
+    it('表は出さず、全地区の合計を結果の数字から言う（内訳は言わない）。最も多い地区は、グラフが出ない回答（別の解析結果）だけで言う', () => {
       render(<ResultCard result={compare} actions={makeActions()} />);
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
       const card = screen.getByRole('region', { name: compare.title });
-      // テスト地区 02 が合計 10 で最多。2 地区の合計は 19 件（2018 年は未検出 7・2018 年も検出 9・未判定 3）
-      expect(card).toHaveTextContent('候補が最も多いのはテスト地区 02で、10 件です。');
-      expect(card).toHaveTextContent('全 2 地区の合計は 19 件（2018 年は未検出 7・2018 年も検出 9・未判定 3）。');
-      expect(card).not.toHaveTextContent('未判定が過半');
+      // テスト地区 02 が合計 10 で最多。2 地区の合計は 19 件
+      expect(card).toHaveTextContent('全 2 地区の合計は 19 件。');
+      expect(card).not.toHaveTextContent('最も多い');
+      expect(card.textContent).not.toMatch(/未検出|も検出|未判定/);
+      cleanup();
+      render(<ResultCard result={compare} actions={makeActions()} staleRun />);
+      expect(screen.getByRole('region', { name: compare.title })).toHaveTextContent('候補が最も多いのはテスト地区 02で、10 件です。全 2 地区の合計は 19 件。');
     });
 
     it('地区の数が多くても、カードの大きさは同じ（地区の行を並べない。「N 地区中 5 地区を表示」とは言わない）', () => {
@@ -233,15 +236,8 @@ describe('結果カード: 型ごとの描画', () => {
     });
 
     it('並びの基準の分類（filter.cls）があれば、その分類で最多を言う', () => {
-      render(<ResultCard result={{ ...compare, filter: { cls: 'uncertain' } }} actions={makeActions()} />);
-      expect(screen.getByText('未判定の候補が最も多いのはテスト地区 02で、2 件です。')).toBeInTheDocument();
-    });
-
-    it('要点は、未判定の 1 行・根拠より前', () => {
-      render(<ResultCard result={compare} actions={makeActions()} />);
-      const lead = screen.getByText(/候補が最も多いのは/);
-      expect(lead.compareDocumentPosition(screen.getByText(/^未判定: /)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(lead.compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      render(<ResultCard result={{ ...compare, filter: { cls: 'uncertain' } }} actions={makeActions()} staleRun />);
+      expect(screen.getByRole('region', { name: compare.title })).toHaveTextContent('未判定の候補が最も多いのはテスト地区 02で、2 件です。');
     });
 
     it('比べる地区が無いときは、その旨だけ', () => {
@@ -269,7 +265,7 @@ describe('結果カード: 型ごとの描画', () => {
     expect(screen.getByRole('region', { name: mapFocus.title })).toHaveTextContent('地図で、この範囲を表示します。');
   });
 
-  it('detection_image: 2018・2023 の 2 枚と、詳細を開く操作', async () => {
+  it('detection_image: 2018・2023 の 2 枚と出典。写真を押すと詳細を開く。分類の印は無い', async () => {
     const actions = makeActions();
     render(<ResultCard result={detectionImage} actions={actions} />);
     const imgs = screen.getAllByRole('img');
@@ -277,8 +273,16 @@ describe('結果カード: 型ごとの描画', () => {
     expect(imgs[0]).toHaveAttribute('src', '/api/candidates/c-1-2-1/image?year=2018&size=512');
     expect(imgs[1]).toHaveAccessibleName(/2023 年の写真/);
     expect(screen.getByText('輪郭が候補の位置です。')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '詳細を開く' }));
+    expect(screen.getByText('出典：国土地理院')).toBeInTheDocument();
+    expect(document.querySelector('.class-badge')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '詳細を開く（c-1-2-1）' }));
     expect(actions.openCandidate).toHaveBeenCalledWith('c-1-2-1');
+    cleanup();
+    // 別の解析結果の回答は、写真も、写真を押すボタンも、写真の出典も出さない
+    render(<ResultCard result={detectionImage} actions={makeActions()} staleRun />);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByText('出典：国土地理院')).not.toBeInTheDocument();
   });
 
   it('detection_image: 画像の取得に失敗しても、理由を文字で出す', () => {
@@ -385,14 +389,14 @@ const realTable: TableResult = {
 };
 
 describe('結果カード: 候補の一覧と、使い方の表', () => {
-  it('一覧: 地区と面積を出す。分類は、表示名で届いても、印つきの短い名前で添える。全件を返したときは「上位」の行を出さない', async () => {
+  it('一覧: 地区と面積を出す（分類は添えない）。全件を返したときは「上位」の行を出さない', async () => {
     const actions = makeActions();
     render(<ResultCard result={{ ...realTable, total: 3, shown: 3 }} actions={actions} />);
     const cards = [...document.querySelectorAll<HTMLElement>('.photo-card')];
     expect(cards).toHaveLength(3);
     expect(cards[0]).toHaveTextContent('薄場一丁目');
     expect(cards[0]).toHaveTextContent('232.4 m²');
-    expect(cards.map((c) => c.querySelector('.photo-card__tag')!.textContent)).toEqual(['2018 年は未検出', '未判定', '2018 年も検出']);
+    for (const card of cards) expect(card.textContent).not.toMatch(/未検出|も検出|未判定/);
     expect(screen.queryByText(/上位/)).not.toBeInTheDocument();
     await userEvent.click(within(cards[0]!).getByRole('button', { name: /詳細.*c-226274-105752-9/ }));
     expect(actions.openCandidate).toHaveBeenCalledWith('c-226274-105752-9');
@@ -405,10 +409,13 @@ describe('結果カード: 候補の一覧と、使い方の表', () => {
     expect(document.querySelector('.photo-card__tag')).toBeNull();
   });
 
-  it('一覧: 別の解析結果の回答は、写真を読み込まず、「詳細」を押せない', () => {
+  it('一覧: 別の解析結果の回答は、写真を読み込まず、詳細を開くボタンを押せない', () => {
     render(<ResultCard result={realTable} actions={makeActions()} staleRun />);
     expect(document.querySelector('img')).toBeNull();
-    for (const button of screen.getAllByRole('button', { name: /詳細（c-/ })) expect(button).toBeDisabled();
+    const buttons = screen.getAllByRole('button', { name: /詳細を開く（c-/ });
+    expect(buttons).toHaveLength(3);
+    for (const button of buttons) expect(button).toBeDisabled();
+    expect(screen.queryByText('出典：国土地理院')).not.toBeInTheDocument();
   });
 
   it('一覧: 「詳細」のボタンが無い表（候補 ID の無い行）は、列をそのまま出す', () => {
@@ -438,15 +445,12 @@ describe('結果カード: 候補の一覧と、使い方の表', () => {
 describe('結果カード: 分類の説明', () => {
   const note = '未判定: 写真の端で切れているもの（端のため未判定）と、どちらとも言えないもの（要確認）です。';
 
-  it('未判定を含む比較にだけ、畳まずに 1 行の説明を出す。件数と一覧には出さない。「分類の意味」の折りたたみは、どの型にも無い', () => {
-    const shown = render(<ResultCard result={compare} actions={makeActions()} />);
-    expect(screen.getByText(note).closest('details')).toBeNull();
-    expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
-    shown.unmount();
-    for (const result of [count, realTable]) {
+  it('どの型のカードにも、分類の説明の行・「分類の意味」の折りたたみ・「根拠を見る」は無い', () => {
+    for (const result of [compare, count, realTable, detectionImage, accuracy]) {
       const { unmount } = render(<ResultCard result={result} actions={makeActions()} />);
       expect(screen.queryByText(note)).not.toBeInTheDocument();
       expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
+      expect(screen.queryByText('根拠を見る'), result.type).not.toBeInTheDocument();
       unmount();
     }
   });
@@ -543,12 +547,11 @@ describe('結果カード: 回答の本文と同じ文は、カードで繰り�
     expect(screen.queryByText(refusal.message)).not.toBeInTheDocument();
   });
 
-  it('検出画像: 写真の説明が本文にすでにあれば、カードには出さない（分類の印・写真・「詳細を開く」は残す）', () => {
+  it('検出画像: 写真の説明が本文にすでにあれば、カードには出さない（写真と、写真を押して詳細を開く操作は残す）', () => {
     render(<ResultCard result={detectionImage} actions={makeActions()} answerText={`候補 c-1-2-1 の写真を、2018 年と 2023 年で並べます。${detectionImage.caption}`} />);
     expect(screen.queryByText(detectionImage.caption)).not.toBeInTheDocument();
     expect(screen.getAllByRole('img')).toHaveLength(2);
-    expect(screen.getByRole('button', { name: '詳細を開く' })).toBeInTheDocument();
-    expect(document.querySelector('.class-badge')).not.toBeNull();
+    expect(screen.getByRole('button', { name: '詳細を開く（c-1-2-1）' })).toBeInTheDocument();
   });
 
   it('検出画像: 本文に説明が無ければ、カードに出す', () => {

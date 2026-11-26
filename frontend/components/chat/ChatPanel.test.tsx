@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AreaSummary, ChatResponse } from '../../lib/api-types';
 import { AreasProvider } from '../../lib/areas-context';
-import { accuracy, areas, compare, count, countWards, detectionImage, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
+import { accuracy, areas, compare, count, detectionImage, jsonResponse, mapFocus, refusal, table } from '../../tests/fixtures';
 import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
 import { NewConversationProvider, useStartNewConversation } from '../NewConversation';
 import type { AnswerRef, FigureKind } from '../../lib/answer-view';
@@ -67,10 +67,10 @@ describe('チャット', () => {
     expect(url).toBe('/api/chat');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ messages: [{ role: 'user', content: '何件ありますか？' }] });
-    // 使ったツールは、回答の下の別の行ではなく、結果カードの「根拠を見る」の中で見られる
+    // 使ったツール・モデル・実行などの内部の情報は、回答に出さない
     expect(screen.queryByText('使ったツール')).not.toBeInTheDocument();
-    const box = screen.getByText('根拠を見る').closest('details') as HTMLElement;
-    expect(within(box).getByText('ツール').nextElementSibling).toHaveTextContent('count_candidates{"cls":null}');
+    expect(screen.queryByText('根拠を見る')).not.toBeInTheDocument();
+    expect(screen.getByRole('log').textContent).not.toContain('count_candidates');
   });
 
   it('2 回目の質問には、これまでの会話（役割と本文だけ）を付ける', async () => {
@@ -381,9 +381,10 @@ describe('回答が届いても、拡大ビューは開かず、何も頼まな�
     const { input, actions } = setup();
     await userEvent.type(input(), '見せて{Enter}');
     await screen.findByText('件数と地図と写真です');
-    expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
+    // 出すカードは、順位が 1 位の 1 つ（地図の表示）。ほかは、切り替えを押すまで出さない
     expect(screen.getByRole('region', { name: mapFocus.title })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: detectionImage.title })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: count.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: detectionImage.title })).not.toBeInTheDocument();
     expect(actions.expand).not.toHaveBeenCalled();
   });
 
@@ -400,26 +401,6 @@ describe('回答が届いても、拡大ビューは開かず、何も頼まな�
     await userEvent.type(input(), 'ふたつめ{Enter}');
     await screen.findByText('2 回目');
     expect(actions.expand).not.toHaveBeenCalled();
-  });
-
-  it('使ったツールは、結果と同じ順番の「根拠を見る」に付く。数が合わないときは、どこにも出さない', async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        jsonResponse({
-          message: { role: 'assistant', content: '2 つ', results: [count, count], tool_calls: [{ name: 'first_tool', args: {} }, { name: 'second_tool', args: { n: 2 } }] },
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ message: { role: 'assistant', content: '合わない', results: [count], tool_calls: [{ name: 'a', args: {} }, { name: 'b', args: {} }] } }),
-      );
-    const { input } = setup();
-    await userEvent.type(input(), 'ひとつめ{Enter}');
-    await screen.findByText('2 つ');
-    const tools = screen.getAllByText('ツール').map((dt) => dt.nextElementSibling?.textContent);
-    expect(tools).toEqual(['first_tool{}', 'second_tool{"n":2}']);
-    await userEvent.type(input(), 'ふたつめ{Enter}');
-    await screen.findByText('合わない');
-    expect(screen.getAllByText('ツール')).toHaveLength(2);
   });
 
   it('results が配列でない回答でも、画面は壊れず、呼ばない', async () => {
@@ -456,71 +437,75 @@ describe('回答が届いても、拡大ビューは開かず、何も頼まな�
   });
 });
 
-describe('回答の対象・条件の行', () => {
-  const scopeName = 'この回答の対象・条件';
-
-  it('件数の回答の文とカードのあと（図があれば図のあと）に、地区・分類・写真の年を出す（地区名は地区の一覧から）', async () => {
-    const filtered = { ...count, filter: { area_id: 'z18-1-2', cls: 'uncertain' as const } };
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [filtered])));
-    const { input } = setup({ areas });
-    await userEvent.type(input(), '保留は？{Enter}');
-    const scope = await screen.findByRole('group', { name: scopeName });
-    expect(scope).toHaveTextContent('テスト地区 01');
-    expect(scope).toHaveTextContent('未判定');
-    expect(scope).toHaveTextContent('2018・2023 年');
-    const text = screen.getByText('件数です。');
-    const card = screen.getByRole('region', { name: count.title });
-    expect(text.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(card.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // 前提の帯は、本文とカードのあと（2026-11-26）
-  });
-
-  it('比較の回答には、比べる地区を出す', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('比べました。', [compare])));
-    const { input } = setup();
-    await userEvent.type(input(), '比べて{Enter}');
-    const scope = await screen.findByRole('group', { name: scopeName });
-    expect(scope).toHaveTextContent('比べる地区');
-    expect(scope).toHaveTextContent('テスト地区 01、テスト地区 02');
-  });
-
-  it('お断り・一覧・結果なしの回答には出さない', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(reply('範囲外です', [refusal])))
-      .mockResolvedValueOnce(jsonResponse(reply('一覧です', [table])))
-      .mockResolvedValueOnce(jsonResponse(reply('ただの返事です')));
-    const { input } = setup();
-    for (const [q, answer] of [
-      ['渋谷の新築は？', '範囲外です'],
-      ['一覧', '一覧です'],
-      ['こんにちは', 'ただの返事です'],
-    ] as const) {
-      await userEvent.type(input(), `${q}{Enter}`);
-      await screen.findByText(answer);
+describe('回答に「対象・条件」の帯と根拠の箱は出さない', () => {
+  it('件数・比較・地図の表示の回答のどれにも出さない', async () => {
+    for (const result of [count, compare, mapFocus]) {
+      fetchMock.mockResolvedValueOnce(jsonResponse(reply('答えです。', [result])));
+      const { input } = setup({ areas });
+      await userEvent.type(input(), '見せて{Enter}');
+      await screen.findByText('答えです。');
+      expect(screen.queryByRole('group', { name: 'この回答の対象・条件' }), result.type).not.toBeInTheDocument();
+      expect(screen.queryByText('根拠を見る'), result.type).not.toBeInTheDocument();
+      cleanup();
     }
-    expect(screen.queryByRole('group', { name: scopeName })).not.toBeInTheDocument();
   });
 
-  it('結果の形が壊れていても、会話は壊れない（条件の行は出さない）', async () => {
+  it('結果の形が壊れていても、会話は壊れない', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const broken = { type: 'count', title: '壊れた件数', total: 1 } as unknown as ChatResponse['message']['results'][number];
     fetchMock.mockResolvedValue(jsonResponse(reply('壊れた結果です', [broken])));
     const { input } = setup();
     await userEvent.type(input(), '壊れる{Enter}');
     await screen.findByText('壊れた結果です');
-    expect(screen.queryByRole('group', { name: scopeName })).not.toBeInTheDocument();
     expect(screen.getByRole('note', { name: '表示できない結果' })).toBeInTheDocument();
     spy.mockRestore();
   });
 });
 
+describe('表示を切り替える（最新の回答の、ほかの見方。質問は送らない）', () => {
+  const group = () => screen.queryByRole('group', { name: '表示を切り替える' });
+  const names = () => within(group()!).getAllByRole('button').map((b) => b.textContent);
+
+  it('2 位以下の結果は隠して切り替えに出す。押すと、その場に出て、そのボタンは消える。API は呼ばない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('件数と一覧です。', [count, table])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), '何件？一覧も{Enter}');
+    await screen.findByRole('region', { name: table.title });
+    expect(screen.queryByRole('region', { name: count.title })).not.toBeInTheDocument();
+    expect(names()).toEqual([`${count.title}の写真を見る`, '地図で見る']);
+    await userEvent.click(within(group()!).getByRole('button', { name: `${count.title}の写真を見る` }));
+    expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
+    expect(names()).toEqual(['地図で見る']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(actions.expand).not.toHaveBeenCalled();
+  });
+
+  it('地図・グラフの切り替えは、その回答の拡大ビューを開く（押したボタンが戻し先）。出すのは最新の回答だけ', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(reply('1 回目', [count]))).mockResolvedValueOnce(jsonResponse(reply('2 回目', [table])));
+    const { input, actions } = setup();
+    await userEvent.type(input(), 'ひとつめ{Enter}');
+    await screen.findByText('1 回目');
+    expect(names()).toEqual(['地図で見る', 'グラフで見る']);
+    const chart = within(group()!).getByRole('button', { name: 'グラフで見る' });
+    await userEvent.click(chart);
+    expect(actions.expand).toHaveBeenLastCalledWith(expect.objectContaining({ results: [count] }), { type: 'view', view: 'chart' }, chart);
+    await userEvent.type(input(), 'ふたつめ{Enter}');
+    await screen.findByText('2 回目');
+    expect(names()).toEqual(['地図で見る']);
+    await userEvent.click(within(group()!).getByRole('button', { name: '地図で見る' }));
+    expect(actions.expand).toHaveBeenLastCalledWith(expect.objectContaining({ results: [table] }), { type: 'candidates', ids: ['c-1-2-1', 'c-1-2-2'] }, expect.anything());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('結果カードのボタン: その回答の拡大ビューを開く（状態の単位は回答 1 件）', () => {
-  it('グラフ・地図そのものは回答の中の図に出る。件数・比較のカードに、「グラフで見る」「地図で見る」は無い', async () => {
+  it('件数・比較のカードの中に、「グラフで見る」「地図で見る」は無い（切り替えは、回答の下の 1 か所）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('件数と比較です。', [count, compare])));
     const { input, actions } = setup();
     await userEvent.type(input(), '何件？{Enter}');
-    await screen.findByRole('region', { name: count.title });
-    expect(screen.queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
+    const card = await screen.findByRole('region', { name: compare.title });
+    expect(within(card).queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
     expect(actions.expand).not.toHaveBeenCalled();
   });
 
@@ -567,21 +552,25 @@ describe('結果カードのボタン: その回答の拡大ビューを開く�
     fetchMock.mockResolvedValue(jsonResponse(reply('表と地図です。', [table, mapFocus])));
     const { input, actions } = setup();
     await userEvent.type(input(), '見せて{Enter}');
-    await userEvent.click(await screen.findByRole('button', { name: /詳細.*c-1-2-1/ }));
+    // 一覧は 2 位なので、切り替えで出してから押す
+    await userEvent.click(await screen.findByRole('button', { name: `${table.title}を見る` }));
+    await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
     await userEvent.click(within(screen.getByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
     expect(actions.expand.mock.calls[0]![0]).toEqual({ id: expect.any(String), results: [table, mapFocus], question: '見せて' });
     expect(actions.expand.mock.calls[1]![0]!.id).toBe(actions.expand.mock.calls[0]![0]!.id);
   });
 
-  it('地図の表示の「地図で見る」: 範囲と候補 ID を渡す。表の「詳細」・検出画像の「詳細を開く」: 候補 ID を渡す', async () => {
+  it('地図の表示の「地図で見る」: 範囲と候補 ID を渡す。一覧の写真・検出画像の写真を押すと、候補 ID を渡す', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('いろいろです。', [mapFocus, table, detectionImage])));
     const { input, actions } = setup();
     await userEvent.type(input(), '見せて{Enter}');
     await userEvent.click(within(await screen.findByRole('region', { name: mapFocus.title })).getByRole('button', { name: '地図で見る' }));
     expect(actions.expand.mock.calls[0]![1]).toEqual({ type: 'focus', bbox: mapFocus.bbox, candidateIds: mapFocus.candidate_ids });
+    await userEvent.click(screen.getByRole('button', { name: `${table.title}を見る` }));
     await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-2/ }));
     expect(actions.expand.mock.calls[1]![1]).toEqual({ type: 'candidate', id: 'c-1-2-2' });
-    await userEvent.click(screen.getByRole('button', { name: '詳細を開く' }));
+    await userEvent.click(screen.getByRole('button', { name: '候補 1 件の写真を見る' }));
+    await userEvent.click(screen.getByRole('button', { name: `詳細を開く（${detectionImage.candidate_id}）` }));
     expect(actions.expand.mock.calls[2]![1]).toEqual({ type: 'candidate', id: detectionImage.candidate_id });
   });
 });
@@ -599,37 +588,25 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
 
   const kindsShown = () => screen.queryAllByTestId(/^figure-/).map((el) => el.dataset.testid);
 
-  it('件数: 地図だけ。結果カードの並びの下（根拠の箱より後）に出る', async () => {
+  it('件数: 図は出さない（本文の下は写真のカード）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
     const { input } = setupFigures();
     await userEvent.type(input(), '何件？{Enter}');
     await screen.findByRole('region', { name: count.title });
-    expect(kindsShown()).toEqual(['figure-map']);
-    const card = screen.getByRole('region', { name: count.title });
-    for (const f of screen.getAllByTestId(/^figure-/)) {
-      expect(card.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(f.closest('[data-entry="assistant"]')).toContainElement(card);
-    }
+    expect(kindsShown()).toEqual([]);
+    expect(figure).not.toHaveBeenCalled();
   });
 
-  it('比較: グラフだけ。地図の表示: 地図だけ。1 つの回答に両方あれば、地図・グラフの順に 1 つずつ', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(reply('比較です。', [compare])));
-    const { input } = setupFigures();
-    await userEvent.type(input(), '比べて{Enter}');
-    await screen.findByText('比較です。');
-    expect(kindsShown()).toEqual(['figure-chart']);
-    cleanup();
-    fetchMock.mockResolvedValueOnce(jsonResponse(reply('地図です。', [mapFocus])));
-    const second = setupFigures();
-    await userEvent.type(second.input(), '地図で{Enter}');
-    await screen.findByText('地図です。');
-    expect(kindsShown()).toEqual(['figure-map']);
-    cleanup();
-    fetchMock.mockResolvedValueOnce(jsonResponse(reply('両方です。', [mapFocus, compare])));
-    const third = setupFigures();
-    await userEvent.type(third.input(), '両方{Enter}');
-    await screen.findByText('両方です。');
-    expect(kindsShown()).toEqual(['figure-map', 'figure-chart']);
+  it('比較: グラフ。地図の表示: 地図（同じことを言うカードは出さない）。両方あっても、順位が上の地図の 1 つだけ', async () => {
+    for (const [results, expected] of [[[compare], 'figure-chart'], [[mapFocus], 'figure-map'], [[mapFocus, compare], 'figure-map']] as const) {
+      fetchMock.mockResolvedValueOnce(jsonResponse(reply('答えです。', [...results])));
+      const { input } = setupFigures();
+      await userEvent.type(input(), '見せて{Enter}');
+      await screen.findByText('答えです。');
+      expect(kindsShown()).toEqual([expected]);
+      if (expected === 'figure-map') expect(screen.queryByRole('region', { name: mapFocus.title })).not.toBeInTheDocument();
+      cleanup();
+    }
   });
 
   it('表・検出画像・精度・お断りは、図を出さない（写真の比較は図に入れない）。比較で地区が 0 件のときも出さない', async () => {
@@ -643,7 +620,7 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
 
   it('図に渡す回答は、カードの操作と同じ（回答の ID と結果すべて）。回答ごとに別の ID。結果の無い回答には、図を出さない', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(reply('1 回目', [count, table])))
+      .mockResolvedValueOnce(jsonResponse(reply('1 回目', [table, mapFocus])))
       .mockResolvedValueOnce(jsonResponse(reply('2 回目', [compare])))
       .mockResolvedValueOnce(jsonResponse(reply('3 回目')));
     const { input } = setupFigures();
@@ -652,7 +629,7 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
       await screen.findByText(a);
     }
     const [first, second] = figure.mock.calls.filter((c, i, all) => all.findIndex((x) => x[0].id === c[0].id) === i).map((c) => c[0]);
-    expect(first).toEqual({ id: expect.any(String), results: [count, table], question: 'ひとつめ' });
+    expect(first).toEqual({ id: expect.any(String), results: [table, mapFocus], question: 'ひとつめ' });
     expect(second).toEqual({ id: expect.any(String), results: [compare], question: 'ふたつめ' });
     expect(kindsShown()).toEqual(['figure-map', 'figure-chart']);
     const ids = screen.getAllByTestId(/^figure-/).map((el) => el.dataset.answer);
@@ -669,11 +646,11 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
   });
 
   it('図は、チャットの記録（role="log"）の中に出る（回答のすぐ下。読み上げの扱いは、図の側で決める）', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
+    fetchMock.mockResolvedValue(jsonResponse(reply('比較です。', [compare])));
     const { input } = setupFigures();
-    await userEvent.type(input(), '何件？{Enter}');
-    await screen.findByRole('region', { name: count.title });
-    expect(screen.getByRole('log')).toContainElement(screen.getByTestId('figure-map'));
+    await userEvent.type(input(), '比べて{Enter}');
+    await screen.findByText('比較です。');
+    expect(screen.getByRole('log')).toContainElement(screen.getByTestId('figure-chart'));
   });
 });
 
@@ -720,53 +697,19 @@ describe('チャットのスクロール位置（開いた直後は説明の見�
   });
 });
 
-describe('比較の回答の並び（本文 → 要点 → 条件 → 補足。2026-11-26）', () => {
-  it('比較の要点と未判定の 1 行は本文のすぐ下（枠なし）。根拠を見るは、条件の帯のあとに置く', async () => {
+describe('比較の回答の並び（本文 → 合計の 1 行 → グラフ）', () => {
+  it('合計の 1 行は本文のすぐ下（枠なし）で、そのあとにグラフ。未判定の説明・対象と条件の帯・根拠の箱は無い', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('比較です。', [compare])));
-    const { input } = setup({ areas });
-    await userEvent.type(input(), '比べて{Enter}');
+    render(<ChatPanel actions={makeActions()} renderFigure={(_a, kind) => <div data-testid={`figure-${kind}`} />} />);
+    await userEvent.type(screen.getByRole('textbox', { name: '質問を入力' }), '比べて{Enter}');
     const card = await screen.findByRole('region', { name: compare.title });
-    const scope = screen.getByRole('group', { name: 'この回答の対象・条件' });
-    const provenance = screen.getByText('根拠を見る', { selector: 'summary' });
-    const text = screen.getByText('比較です。');
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(card).toHaveClass('result-card--plain');
-    expect(follows(text, card)).toBe(true);
-    expect(follows(card, scope)).toBe(true);
-    expect(follows(scope, provenance)).toBe(true);
-    expect(card).toContainElement(screen.getByText(/^未判定: /));
-    expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
-    // 根拠は、要点のカードの外（図と条件のあと）
-    expect(card.contains(provenance)).toBe(false);
-    expect(provenance.closest('.answer-notes')).not.toBeNull();
-  });
-});
-
-describe('回答の対象・条件の行: 最後の条件（拡大ビューの絞り込みと同じ）', () => {
-  const scopeName = 'この回答の対象・条件';
-
-  it('件数のあとに比較がある回答は、比較の条件（地区だけ。分類の行は出さない）。先の件数の条件を出さない', async () => {
-    const narrow = { ...count, filter: { area_id: 'z18-1-2', cls: 'uncertain' as const } };
-    const byWard = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: 'confirmed_new' as const } };
-    fetchMock.mockResolvedValue(jsonResponse(reply('件数と比較です。', [narrow, byWard])));
-    const { input } = setup({ areas });
-    await userEvent.type(input(), '件数と比較{Enter}');
-    const scope = await screen.findByRole('group', { name: scopeName });
-    expect(within(scope).getByText('地区', { selector: 'dt' }).nextElementSibling).toHaveTextContent('中央区');
-    expect(within(scope).queryByText('分類', { selector: 'dt' })).not.toBeInTheDocument();
-    expect(scope).not.toHaveTextContent('未判定');
-    // 比べる地区の行は、比較の結果の名前（条件の行とは別）
-    expect(scope).toHaveTextContent('比べる地区');
-    expect(scope).toHaveTextContent('テスト地区 01、テスト地区 02');
-  });
-
-  it('比較のあとに件数がある回答は、件数の条件（地区と分類）', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(reply('比較と件数です。', [compare, countWards])));
-    const { input } = setup({ areas });
-    await userEvent.type(input(), '比較と件数{Enter}');
-    const scope = await screen.findByRole('group', { name: scopeName });
-    expect(within(scope).getByText('地区', { selector: 'dt' }).nextElementSibling).toHaveTextContent('中央区');
-    expect(within(scope).getByText('分類', { selector: 'dt' }).nextElementSibling).toHaveTextContent('すべて');
+    expect(follows(screen.getByText('比較です。'), card)).toBe(true);
+    expect(follows(card, screen.getByTestId('figure-chart'))).toBe(true);
+    expect(screen.queryByText(/^未判定: /)).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'この回答の対象・条件' })).not.toBeInTheDocument();
+    expect(screen.queryByText('根拠を見る')).not.toBeInTheDocument();
   });
 });
 
@@ -894,16 +837,19 @@ describe('キーボードの操作: 押したボタンが消えても、フォ�
       expect(g).not.toBeNull();
       // 入力欄の上の行ではなく、回答と同じ会話の中（role="log"）の、回答の次
       expect(g.closest('[role="log"]')).not.toBeNull();
-      expect(answer.nextElementSibling).toBe(g);
+      expect(answer.nextElementSibling).toHaveClass('follow-ups');
+      expect(answer.nextElementSibling).toContainElement(g);
+      // 見出しの文字は出さない（読み上げの名前だけ）
+      expect(g).not.toHaveTextContent('続けて聞く');
     });
 
-    it('まだ聞いていない質問の例を、最大 3 件。聞いたばかりの質問は出さない', async () => {
+    it('まだ聞いていない質問の例を、最大 2 件。聞いたばかりの質問は出さない', async () => {
       fetchMock.mockResolvedValue(jsonResponse(reply('答えです')));
       setup();
       await userEvent.type(input(), `${SUGGESTIONS[0]!}{Enter}`);
       await screen.findByText('答えです');
       const names = within(group()!).getAllByRole('button').map((b) => b.textContent);
-      expect(names).toEqual([SUGGESTIONS[1], SUGGESTIONS[2], SUGGESTIONS[3]]);
+      expect(names).toEqual([SUGGESTIONS[1], SUGGESTIONS[2]]);
     });
 
     it('失敗のあとは出さない（「もう一度送る」だけ）。押すと、その質問を送る', async () => {
@@ -1015,7 +961,7 @@ describe('同じ文を 2 回出さない（本文とカード）', () => {
     expect(screen.getAllByText(long.message)).toHaveLength(1);
   });
 
-  it('写真の回答: 本文の中の説明（caption）は、カードでは繰り返さない。カードの写真・分類の印・詳細は出す', async () => {
+  it('写真の回答: 本文の中の説明（caption）は、カードでは繰り返さない。カードの写真と、写真を押して詳細を開く操作は出す', async () => {
     const body = `候補 c-1-2-1 の写真を、2018 年と 2023 年で並べます。${detectionImage.caption}`;
     fetchMock.mockResolvedValue(jsonResponse(reply(body, [detectionImage])));
     const { input } = setup();
@@ -1023,7 +969,7 @@ describe('同じ文を 2 回出さない（本文とカード）', () => {
     const card = await screen.findByRole('region', { name: detectionImage.title });
     expect(screen.getAllByText(new RegExp(detectionImage.caption))).toHaveLength(1);
     expect(within(card).getAllByRole('img')).toHaveLength(2);
-    expect(within(card).getByRole('button', { name: '詳細を開く' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: `詳細を開く（${detectionImage.candidate_id}）` })).toBeInTheDocument();
   });
 
   it('本文が別の言い方なら（実 LLM など）、カードの文も出す（情報を落とさない）', async () => {

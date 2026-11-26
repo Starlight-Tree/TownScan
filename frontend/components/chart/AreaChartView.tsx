@@ -6,7 +6,7 @@ import { CLASS_INFO, CLASS_ORDER } from '../../lib/classes';
 import { formatNumber } from '../../lib/format';
 import { areaScopeIds, isAllFilter, type MapFilter } from '../../lib/result-view';
 import { ClassSwatch } from '../ClassBadge';
-import { buildRows, multiAreaName, type AreaRow } from './area-stats';
+import { allClassesShown, buildRows, multiAreaName, type AreaRow } from './area-stats';
 
 interface Props {
   areas: AreaSummary[];
@@ -18,6 +18,8 @@ interface Props {
   onFilterChange: (next: MapFilter) => void;
   /** 地図の画面へ切り替える。渡されたときだけ、絞り込み中に「地図で見る」を出す（グラフの操作は、地図の絞り込みと同じものを替えるため） */
   onShowMap?: () => void;
+  /** 回答の中の図として出すとき。分類で分けず 1 色の棒にして、分類の切り替えと「表で見る」を出さない（操作の説明も短くする） */
+  inline?: boolean;
 }
 
 /**
@@ -43,7 +45,7 @@ function rowLabel(row: AreaRow, classes: ReadonlySet<CandidateClass>): string {
  * 棒は HTML と CSS だけで描く（幅は、表示している行のうち最大の合計に対する割合）。
  * 分類は色だけでなく、棒の縁の線（実線・破線・点線）と塗りの模様でも区別する（lib/classes.ts の方針）。
  */
-export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Props) {
+export function AreaChartView({ areas, filter, onFilterChange, onShowMap, inline = false }: Props) {
   const { classes, areaId } = filter;
   const titleId = useId();
   const shown = CLASS_ORDER.filter((c) => classes.has(c));
@@ -86,7 +88,9 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
         )}
         {/* 右の数字・並び順は、表示している分類だけの合計（分類のチップを替えると、数字も並びも変わる）。分類・行の操作が地図にも効くことも、ここで 1 回だけ言う */}
         <p className="area-chart__hint">
-          表示中の分類の合計が多い順です。行を押すとその地区に絞り込み、もう一度押すと全地区に戻ります。分類・地区の絞り込みは、地図と集計の帯にも反映されます。
+          {inline
+            ? '多い順です。行を押すと地区を絞り込めます（もう一度押すと戻ります）。'
+            : '表示中の分類の合計が多い順です。行を押すとその地区に絞り込み、もう一度押すと全地区に戻ります。分類・地区の絞り込みは、地図と集計の帯にも反映されます。'}
         </p>
       </header>
 
@@ -96,22 +100,28 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
         </p>
       ) : (
         <>
-          <div className="area-chart__legend" role="group" aria-label="グラフに出す分類（押すと切り替え。地図・集計の帯にも、同じ分類が効きます）">
-            {CLASS_ORDER.map((c) => (
-              <button key={c} type="button" className="area-chart__legend-btn" aria-pressed={classes.has(c)} onClick={() => toggleClass(c)}>
-                <ClassSwatch cls={c} size={16} />
-                <span>{CLASS_INFO[c].short}</span>
-              </button>
-            ))}
-          </div>
-          {classes.has('uncertain') && (
-            <p className="area-chart__gloss">
-              <strong>{CLASS_INFO.uncertain.short}</strong>は、{CLASS_INFO.uncertain.summary}目で確かめる候補です。
-            </p>
+          {!inline && (
+            <>
+              <div className="area-chart__legend" role="group" aria-label="グラフに出す分類（押すと切り替え。地図・集計の帯にも、同じ分類が効きます）">
+                {CLASS_ORDER.map((c) => (
+                  <button key={c} type="button" className="area-chart__legend-btn" aria-pressed={classes.has(c)} onClick={() => toggleClass(c)}>
+                    <ClassSwatch cls={c} size={16} />
+                    <span>{CLASS_INFO[c].short}</span>
+                  </button>
+                ))}
+              </div>
+              {classes.has('uncertain') && (
+                <p className="area-chart__gloss">
+                  <strong>{CLASS_INFO.uncertain.short}</strong>は、{CLASS_INFO.uncertain.summary}目で確かめる候補です。
+                </p>
+              )}
+            </>
           )}
+          {/* 回答の中の図は凡例が無いので、絞り込んでいるときは、そのことを言う */}
+          {inline && !allClassesShown(classes) && <p className="area-chart__gloss">一部の候補に絞って表示しています。</p>}
           {onShowMap && !isAllFilter(filter) && (
             <div className="area-chart__linked">
-              <span>いまの絞り込み（地区・分類）は、地図にも反映されています。</span>
+              <span>いまの絞り込み{inline ? '' : '（地区・分類）'}は、地図にも反映されています。</span>
               <button type="button" className="btn btn--small" onClick={onShowMap}>
                 地図で見る
               </button>
@@ -134,7 +144,7 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
                         type="button"
                         className="area-chart__row"
                         aria-pressed={selected}
-                        aria-label={rowLabel(row, classes)}
+                        aria-label={inline ? `${row.area.name}（${row.area.ward}）、${formatNumber(row.total)} 件` : rowLabel(row, classes)}
                         onClick={() => selectArea(row.area.id)}
                       >
                         <span className="area-chart__name">
@@ -142,8 +152,11 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
                           <span className="area-chart__ward">（{row.area.ward}）</span>
                         </span>
                         <span className="area-chart__bar" aria-hidden="true">
-                          {shown.map((c) =>
-                            row.byClass[c] > 0 ? (
+                          {inline ? (
+                            row.total > 0 && <span className="area-chart__seg area-chart__seg--plain" style={{ width: `${(row.total * 100) / scale}%` }} />
+                          ) : (
+                            shown.map((c) =>
+                              row.byClass[c] > 0 ? (
                               <span
                                 key={c}
                                 className="area-chart__seg"
@@ -153,7 +166,8 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
                               >
                                 {showSegmentCount(row.byClass[c], scale) && <span className="area-chart__seg-n">{formatNumber(row.byClass[c])}</span>}
                               </span>
-                            ) : null,
+                              ) : null,
+                            )
                           )}
                         </span>
                         <span className="area-chart__total">
@@ -167,7 +181,7 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
               )}
               {barRows.length === 0 && (
                 <p className="empty-note" role="status">
-                  表示中の分類の候補は、どの地区にもありません。
+                  {inline ? '条件に合う候補は、どの地区にもありません。' : '表示中の分類の候補は、どの地区にもありません。'}
                 </p>
               )}
               {zeroRows.length > 0 && (
@@ -177,42 +191,45 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
                 </p>
               )}
 
-              <details className="area-chart__details">
-                <summary>表で見る</summary>
-                <div className="table-scroll" role="region" aria-label="地区ごとの件数の表（横にスクロールできます）" tabIndex={0}>
-                  <table className="data-table">
-                    <caption>地区ごとの件数（合計の多い順）</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">地区</th>
-                        <th scope="col">区</th>
-                        {shown.map((c) => (
-                          <th key={c} scope="col" className="is-num">
-                            {CLASS_INFO[c].short}
-                          </th>
-                        ))}
-                        <th scope="col" className="is-num">
-                          合計
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row) => (
-                        <tr key={row.area.id} className={row.area.id === areaId ? 'is-chosen' : undefined}>
-                          <th scope="row">{row.area.name}</th>
-                          <td>{row.area.ward}</td>
+              {/* 回答の中の図は、グラフだけを出す（同じ数字を表でも出さない）。表は拡大ビューで読める */}
+              {!inline && (
+                <details className="area-chart__details">
+                  <summary>表で見る</summary>
+                  <div className="table-scroll" role="region" aria-label="地区ごとの件数の表（横にスクロールできます）" tabIndex={0}>
+                    <table className="data-table">
+                      <caption>地区ごとの件数（合計の多い順）</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">地区</th>
+                          <th scope="col">区</th>
                           {shown.map((c) => (
-                            <td key={c} className="is-num">
-                              {formatNumber(row.byClass[c])}
-                            </td>
+                            <th key={c} scope="col" className="is-num">
+                              {CLASS_INFO[c].short}
+                            </th>
                           ))}
-                          <td className="is-num">{formatNumber(row.total)}</td>
+                          <th scope="col" className="is-num">
+                            合計
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
+                      </thead>
+                      <tbody>
+                        {rows.map((row) => (
+                          <tr key={row.area.id} className={row.area.id === areaId ? 'is-chosen' : undefined}>
+                            <th scope="row">{row.area.name}</th>
+                            <td>{row.area.ward}</td>
+                            {shown.map((c) => (
+                              <td key={c} className="is-num">
+                                {formatNumber(row.byClass[c])}
+                              </td>
+                            ))}
+                            <td className="is-num">{formatNumber(row.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
             </>
           )}
         </>

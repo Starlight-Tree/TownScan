@@ -14,19 +14,16 @@ import {
 } from './cards';
 import type { ResultActions } from './types';
 
-/** 件数と比較のカードは、本文（body）と補足（notes）に分けて置ける。ほかの種類は、いつも全部（all）を 1 か所に出す */
-export type ResultPart = 'all' | 'body' | 'notes';
-
-function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean, part: ResultPart) {
+function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean, chipOnly: boolean) {
   switch (result.type) {
     case 'count':
-      return <CountCard result={result} actions={actions} staleRun={staleRun} part={part} />;
+      return <CountCard result={result} actions={actions} staleRun={staleRun} />;
     case 'table':
       return <TableCard result={result} actions={actions} staleRun={staleRun} />;
     case 'compare':
-      return <CompareCard result={result} part={part} />;
+      return <CompareCard result={result} staleRun={staleRun} />;
     case 'map_focus':
-      return <MapFocusCard result={result} actions={actions} staleRun={staleRun} />;
+      return <MapFocusCard result={result} actions={actions} staleRun={staleRun} chipOnly={chipOnly} />;
     case 'detection_image':
       return <DetectionImageCard result={result} actions={actions} answerText={answerText} staleRun={staleRun} />;
     case 'accuracy':
@@ -46,20 +43,21 @@ function renderResult(result: ToolResult, actions: ResultActions, answerText: st
  * answerText は、このカードを含む回答の本文。カードの中の文（お断りの理由・写真の説明）が本文にすでにあれば、カードでは出さない
  * （同じ文が 2 回並ばないように）。渡さなければ、カードは自分の文をすべて出す。
  * staleRun は、開き直した会話の回答が、いまとは別の解析結果に基づくとき（仕様 §7.1.5）: 拡大ビューへ進むボタン（地図の表示の「地図で見る」・表の行の「詳細」・検出画像の「詳細を開く」）を押せなくし、
- * 検出画像は写真も読み込まない。カードの数字・文は、保存された値のまま読める。質問の例のボタン（ask）は、新しい質問を送るだけなので、そのまま使える
+ * 検出画像は写真も読み込まない。カードの数字・文は、保存された値のまま読める。質問の例のボタン（ask）は、新しい質問を送るだけなので、そのまま使える。
+ * chipOnly は地図の表示だけに効く: カードの代わりに、合成データの印だけを出す
  */
 export function ResultCard({
   result,
   actions,
   answerText,
   staleRun = false,
-  part = 'all',
+  chipOnly = false,
 }: {
   result: ToolResult;
   actions: ResultActions;
   answerText?: string;
   staleRun?: boolean;
-  part?: ResultPart;
+  chipOnly?: boolean;
 }) {
   if (!result || typeof result !== 'object' || typeof (result as { type?: unknown }).type !== 'string') {
     return <UnknownResultCard raw={result} reason="結果の形が正しくありません。" />;
@@ -68,7 +66,7 @@ export function ResultCard({
     <ErrorBoundary
       fallback={(error) => <UnknownResultCard raw={result} reason={`表示中にエラーが起きました（${error.message}）。`} />}
     >
-      {renderResult(result, actions, answerText, staleRun, part)}
+      {renderResult(result, actions, answerText, staleRun, chipOnly)}
     </ErrorBoundary>
   );
 }

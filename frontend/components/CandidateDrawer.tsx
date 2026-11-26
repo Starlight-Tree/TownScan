@@ -13,7 +13,6 @@ import { ProvenanceBox } from './chat/ProvenanceBox';
 
 interface Props {
   candidateId: string;
-  onClose: () => void;
   onShowOnMap: (detail: CandidateDetail) => void;
   onLoaded?: (detail: CandidateDetail) => void;
   /** 開いたとき見出しへフォーカスを移す（既定 true）。チャットの回答から自動で開くときは false（入力欄のフォーカスを奪わない） */
@@ -29,7 +28,7 @@ interface Props {
  * 候補の詳細。拡大ビューの「写真の比較」の中に収まる、流れの中の部品（地図に重ならない）。
  * 2018・2023 の切り出し、分類の説明、根拠の数字。重なりの表示（ドロワー）をやめたが、名前は変えない（差分を小さく保つ）
  */
-export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, autoFocus = true, focusNonce = 0 }: Props) {
+export function CandidateDrawer({ candidateId, onShowOnMap, onLoaded, autoFocus = true, focusNonce = 0 }: Props) {
   const rootRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const openerRef = useRef<Element | null>(null);
@@ -75,45 +74,16 @@ export function CandidateDrawer({ candidateId, onClose, onShowOnMap, onLoaded, a
     if (state.status === 'ready') onLoadedRef.current?.(state.data);
   }, [state]);
 
-  /**
-   * 閉じる（「閉じる」ボタン・Esc）。閉じる直前にフォーカスが詳細の中にあれば、先に、開く前の場所（覚えていれば。チャットの「詳細」ボタンなど）へ、
-   * 覚えていない・戻せないときは、この詳細が入っている tabpanel を名づけているタブ（aria-labelledby。結果領域では「写真の比較」のタブ）へ移す。
-   * 詳細が外れると、フォーカスのあった要素ごと消えて、フォーカスが body に落ちるため
-   * （開いたとき戻し先を覚えなかった autoFocus=false の詳細、たとえば検出画像の回答で自動で開いたものは、戻し先が無いのでタブへ移す）。
-   * 外れるときの後始末は、フォーカスが body に落ちたときだけ戻すので、ここで移したフォーカスは、そのまま残る
-   */
-  const close = () => {
-    const root = rootRef.current;
-    if (root?.contains(document.activeElement)) {
-      const opener = openerRef.current;
-      if (opener instanceof HTMLElement && document.contains(opener) && !root.contains(opener)) opener.focus();
-      if (root.contains(document.activeElement)) {
-        const tabId = root.closest('[role="tabpanel"]')?.getAttribute('aria-labelledby')?.split(/\s+/)[0];
-        (tabId ? document.getElementById(tabId) : null)?.focus();
-      }
-    }
-    onClose();
-  };
-
   return (
     <section
       ref={rootRef}
       className="drawer"
       aria-labelledby="drawer-title"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation();
-          close();
-        }
-      }}
     >
       <header className="drawer__head">
         <h2 id="drawer-title" ref={headingRef} tabIndex={-1} className="drawer__title">
           候補の詳細
         </h2>
-        <button type="button" className="btn" onClick={close}>
-          閉じる
-        </button>
       </header>
       <div className="drawer__body">
         {state.status === 'loading' && (

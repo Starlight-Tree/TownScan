@@ -39,8 +39,6 @@ interface Props {
   answer: AnswerRef;
   /** その回答の状態。まだ無いあいだ（地区・候補の読み込み中、または作る前の 1 描画）は undefined */
   state: AnswerView | undefined;
-  /** 同じ回答に、地図の図もあるか（あれば、グラフの「地図で見る」は要らない。地図が、すぐ近くにある） */
-  withMap: boolean;
   data: FigureData;
   actions: FigureActions;
 }
@@ -65,13 +63,12 @@ export const AnswerFigure = memo(AnswerFigureView, (a, b) => {
     a.answer.id === b.answer.id &&
     a.answer.results === b.answer.results &&
     a.state === b.state &&
-    a.withMap === b.withMap &&
     a.data === b.data &&
     a.actions === b.actions
   );
 });
 
-function AnswerFigureView({ kind, answer, state, withMap, data, actions }: Props) {
+function AnswerFigureView({ kind, answer, state, data, actions }: Props) {
   const key = answerKey(answer);
   const label = LABEL[kind];
   const titleId = useId();
@@ -124,10 +121,11 @@ function AnswerFigureView({ kind, answer, state, withMap, data, actions }: Props
   } else {
     body = (
       <AreaChartView
+        inline
         areas={data.areas}
         filter={state.filter}
         onFilterChange={(next) => actions.setFilter(key, next)}
-        onShowMap={withMap ? undefined : () => expand({ type: 'view', view: 'map' })}
+        onShowMap={() => expand({ type: 'view', view: 'map' })}
       />
     );
   }

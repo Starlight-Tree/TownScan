@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { AreaSummary, CandidateClass, CandidateFeature } from '../../lib/api-types';
-import { CLASS_ORDER, isCandidateClass } from '../../lib/classes';
+import { isCandidateClass } from '../../lib/classes';
 import { formatNumber } from '../../lib/format';
 import {
   BASE_LAYERS,
@@ -18,7 +18,7 @@ import {
 } from '../../lib/map-config';
 import type { AsyncState } from '../../lib/use-api';
 import { ClassBadge } from '../ClassBadge';
-import { multiAreaName } from '../chart/area-stats';
+import { allClassesShown, multiAreaName } from '../chart/area-stats';
 import { CandidateList } from './CandidateList';
 import { ALL_FILTER, areaScopeIds, type MapFilter } from '../../lib/result-view';
 import { SummaryStrip } from './SummaryStrip';
@@ -237,16 +237,8 @@ export function MapPanel(props: Props) {
       </div>
       )}
 
-      {/* 回答の中の地図は、印の凡例だけ。切り替えは「拡大」で開く地図にある。拡大ビューは、分類の件数と表示の切り替え（チェックボックス）を兼ねる帯。地図に重ねる凡例は無い */}
-      {props.inline ? (
-        <div className="map-legend" role="group" aria-label="地図の印">
-          {CLASS_ORDER.filter((c) => filter.classes.has(c)).map((c) => (
-            <ClassBadge key={c} cls={c} short />
-          ))}
-        </div>
-      ) : (
-        <SummaryStrip areas={areas} filter={filter} onFilterChange={changeFilter} />
-      )}
+      {/* 回答の中の地図は分類で分けないので、凡例は無い。拡大ビューは、分類の件数と表示の切り替え（チェックボックス）を兼ねる帯。地図に重ねる凡例は無い */}
+      {!props.inline && <SummaryStrip areas={areas} filter={filter} onFilterChange={changeFilter} />}
 
       {/* Esc は、地図の中（印・地図の本体）でも、選択中の候補のカードの中でも、選択を外す */}
       <div className="map-stage" ref={stageRef} onKeyDown={onStageKeyDown}>
@@ -265,6 +257,7 @@ export function MapPanel(props: Props) {
           onClearSelection={props.onClearSelection ? clearSelection : undefined}
           coverRef={cardRef}
           guardWheel={props.inline}
+          plain={props.inline}
         />
 
         {/* 地図の中に重ねるので、選んでも地図の大きさは変わらず、押した印が動かない。DOM では印（Leaflet の本体）より後ろ（Tab で印から近い） */}
@@ -274,7 +267,7 @@ export function MapPanel(props: Props) {
             <span id={selectedLabelId} className="map-selected__key">
               選択中の候補
             </span>
-            {isCandidateClass(selectedCard.properties.class) && <ClassBadge cls={selectedCard.properties.class} reason={selectedCard.properties.reason} short />}
+            {!props.inline && isCandidateClass(selectedCard.properties.class) && <ClassBadge cls={selectedCard.properties.class} reason={selectedCard.properties.reason} short />}
             <span className="map-selected__id">{selectedCard.properties.id}</span>
             <button
               type="button"
@@ -324,6 +317,7 @@ export function MapPanel(props: Props) {
             </button>
           )}
           <span className="map-status__hint">印・形を選ぶと「写真を比べる」が出ます。</span>
+          {props.inline && !allClassesShown(visible) && <span className="map-status__note">一部の候補に絞って表示しています。</span>}
           {/* いつも描き、文だけを替える。読み上げは、いつも DOM にある領域の文が替わったときが確実（文と同時に挿入された領域は、読まれないことがある）。空のあいだは、何も見えず、場所も取らない */}
           <span className="map-status__note" role="status">
             {notice}
@@ -333,7 +327,7 @@ export function MapPanel(props: Props) {
           )}
           {candidatesState.status === 'ready' && features.length === 0 && (
             <span className="map-status__note">
-              {candidatesState.data.length === 0 ? '表示できる候補がありません。' : '条件に合う候補がありません（分類の選択を確かめてください）。'}
+              {candidatesState.data.length === 0 ? '表示できる候補がありません。' : `条件に合う候補がありません${props.inline ? '' : '（分類の選択を確かめてください）'}。`}
             </span>
           )}
         </p>

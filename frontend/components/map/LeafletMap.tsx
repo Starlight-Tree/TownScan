@@ -53,7 +53,14 @@ export interface LeafletMapProps {
    * 地図を押す・Tab で地図へ入る（フォーカスが着く）と、ホイールでも拡大・縮小できる。地図を作るときの値で決まり、あとから替えない
    */
   guardWheel?: boolean;
+  /** 回答の中の図。印・形を分類で分けず、同じ見た目にする（名前にも分類を入れない）。地図を作るときの値で決まり、あとから替えない */
+  plain?: boolean;
 }
+
+/** 分類で分けないときの見た目（色は 1 つ・丸・実線） */
+const PLAIN_STYLE = { cssVar: '--primary', color: 'var(--primary)', dash: undefined, shape: 'circle' as const, fillOpacity: 0.3 };
+
+const styleOf = (cls: CandidateClass, plain: boolean) => (plain ? PLAIN_STYLE : CLASS_INFO[cls]);
 
 interface Entry {
   cls: CandidateClass;
@@ -164,8 +171,8 @@ function nearestId(map: L.Map, entries: Map<string, Entry>, pointer: MouseEvent,
   return best;
 }
 
-function markerIcon(cls: CandidateClass, mark: Mark): L.DivIcon {
-  const info = CLASS_INFO[cls];
+function markerIcon(cls: CandidateClass, mark: Mark, plain: boolean): L.DivIcon {
+  const info = styleOf(cls, plain);
   return L.divIcon({
     className: 'cand-marker',
     html: `<span class="cand-dot cand-dot--${info.shape} is-${mark}" style="--c:${info.color}"></span>`,
@@ -178,6 +185,7 @@ export default function LeafletMap(props: LeafletMapProps) {
   const { base, areas, features, showFrames, selectedId, highlightIds, focus } = props;
   // 回答の中の図か。地図を作るときの値で決める（あとから替えない）
   const [guardWheel] = useState(props.guardWheel === true);
+  const [plain] = useState(props.plain === true);
   // テーマが変わるたびに増える。色は JS の値として Leaflet に渡しているので、増えたら線と塗りを描き直す（印・集計の帯の分類の印・ツールチップは CSS の変数なので、自然に追従する）
   const themeVersion = useThemeVersion();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -464,10 +472,10 @@ export default function LeafletMap(props: LeafletMapProps) {
     for (const f of features) {
       const cls = f.properties.class;
       if (!isCandidateClass(cls)) continue;
-      const info = CLASS_INFO[cls];
+      const info = styleOf(cls, plain);
       const latlngs = toLatLngs(f.geometry) as L.LatLngExpression[][];
       const id = f.properties.id;
-      const label = `${classText(cls, f.properties.reason)}・${formatArea(f.properties.area_m2)}`;
+      const label = `${plain ? '候補' : classText(cls, f.properties.reason)}・${formatArea(f.properties.area_m2)}`;
       const casing = L.polygon(latlngs, { color: colors.casing, weight: 5, opacity: 0.9, fill: false, interactive: false });
       const lineColor = readCssColor(info.cssVar);
       const poly = L.polygon(latlngs, {
@@ -483,7 +491,7 @@ export default function LeafletMap(props: LeafletMapProps) {
       poly.on('click', () => callbacks.current.onSelect(id));
       poly.on('keydown', onKey(id));
       const marker = L.marker(poly.getBounds().getCenter(), {
-        icon: markerIcon(cls, 'normal'),
+        icon: markerIcon(cls, 'normal', plain),
         // 既定の keyboard: true は、すべての印を Tab の停止にする。role・tabindex は refreshKeys で付ける
         keyboard: false,
         title: `${label}（Enter か Space で選ぶ）`,
@@ -517,7 +525,7 @@ export default function LeafletMap(props: LeafletMapProps) {
       dots.remove();
       entriesRef.current = new Map();
     };
-  }, [features, themeVersion, refreshKeys]);
+  }, [features, themeVersion, refreshKeys, plain]);
 
   // ---- 選択・強調の見た目 ----
   // 輪（黄色）→ 縁 → 本線の順に重ねる。縁を間に挟むので、ライト・ダークのどちらの線の色も、黄色の上で見分けられる
@@ -542,7 +550,7 @@ export default function LeafletMap(props: LeafletMapProps) {
         e.polys.removeLayer(e.ring);
       }
       e.poly.setStyle({ weight: selected ? 4 : highlighted ? 3.5 : 2.5 });
-      e.marker.setIcon(markerIcon(e.cls, mark));
+      e.marker.setIcon(markerIcon(e.cls, mark, plain));
       e.marker.setZIndexOffset(selected ? 2000 : highlighted ? 1000 : 0);
       if (emphasized) {
         e.ring?.bringToFront();
@@ -552,7 +560,7 @@ export default function LeafletMap(props: LeafletMapProps) {
     }
     // アイコンを替えると、role・tabindex・aria-pressed を付け直す必要がある
     refreshKeys();
-  }, [selectedId, highlightIds, features, themeVersion, refreshKeys]);
+  }, [selectedId, highlightIds, features, themeVersion, refreshKeys, plain]);
 
   // ---- 選んだ印・形が、選択中のカードの下に隠れるなら、上へ寄せる ----
   // カードは、選んだのと同じ描画で出る（MapPanel）。印を押した直後に、押した印がカードの下になるのを防ぐ。

@@ -48,8 +48,8 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 /**
  * 道具の結果として読める形か。画面は、API の形が少し違っても壊れない作りにしている。
  * count は filterFromResults が filter を直接読む（契約では必須）ので、filter がオブジェクトでないものは、壊れた結果として外す。
- * 回答の「対象・条件」の行（AnswerScope）も、拡大ビューの地図・グラフの絞り込み（lib/answer-view.ts）も、filterFromResults に渡す前にこれで外す。
- * 外さずに渡すと、壊れた count が「条件なし（全地区・全分類）」と読まれ、条件の行（その前の結果の条件）と食い違う
+ * 拡大ビューの地図・グラフの絞り込み（lib/answer-view.ts）は、filterFromResults に渡す前にこれで外す。
+ * 外さずに渡すと、壊れた count が「条件なし（全地区・全分類）」と読まれ、その前の結果の条件が失われる
  */
 export function isWellFormedResult(r: unknown): r is ToolResult {
   if (!isRecord(r) || typeof r.type !== 'string') return false;

@@ -84,6 +84,18 @@ describe('Leaflet の地図', () => {
     expect(container.querySelectorAll('.leaflet-overlay-pane path').length).toBeGreaterThanOrEqual(2);
   });
 
+  it('plain（回答の中の地図）: 印は全部同じ形で、名前に分類を入れない。選択・強調の反映は同じ', () => {
+    const { container, rerender } = render(<LeafletMap {...props({ areas: wideAreas, plain: true })} />);
+    expect(container.querySelectorAll('.cand-dot--circle')).toHaveLength(3);
+    expect(container.querySelectorAll('.cand-dot--square, .cand-dot--triangle')).toHaveLength(0);
+    for (const mark of container.querySelectorAll('.leaflet-marker-icon')) {
+      expect(mark.getAttribute('title')).toMatch(/^候補・/);
+      expect(mark.getAttribute('title')).not.toMatch(/未検出|も検出|未判定/);
+    }
+    rerender(<LeafletMap {...props({ areas: wideAreas, plain: true, highlightIds: new Set(['c-1-2-3']) })} />);
+    expect(container.querySelectorAll('.cand-dot--circle.is-highlight')).toHaveLength(1);
+  });
+
   it('標準地図のときは下地 1 枚だけ。切り替えても壊れない', () => {
     const { container, rerender } = render(<LeafletMap {...props({ base: 'std' })} />);
     expect(container.querySelectorAll('.leaflet-tile-pane .leaflet-layer').length).toBe(1);

@@ -25,6 +25,7 @@ vi.mock('./LeafletMap', () => ({
     onZoom: (z: number) => void;
     coverRef?: { current: HTMLElement | null };
     guardWheel?: boolean;
+    plain?: boolean;
     onAreaSelect: (areaId: string) => void;
   }) => {
     seen.coverRef = p.coverRef ?? null;
@@ -33,6 +34,7 @@ vi.mock('./LeafletMap', () => ({
         data-testid="leaflet"
         className="leaflet-host"
         data-guard-wheel={String(p.guardWheel === true)}
+        data-plain={String(p.plain === true)}
         data-count={p.features.length}
         data-focus={p.focus ? 'fit' : ''}
         data-focus-keys={p.focus ? Object.keys(p.focus).sort().join(',') : ''}
@@ -896,18 +898,19 @@ describe('回答の中の図として使う（inline）と、2 つの地図パ�
     expect(screen.getByTestId('leaflet')).toHaveAttribute('data-guard-wheel', 'false');
   });
 
-  it('inline は、地図と印の凡例と状態の帯だけ。操作の行・分類の帯（チェックボックス）・候補の一覧は、拡大ビューにだけある', () => {
+  it('inline は、地図と状態の帯だけ（分類で分けないので、凡例も無い）。操作の行・分類の帯（チェックボックス）・候補の一覧は、拡大ビューにだけある', () => {
     const { unmount } = render(<MapPanel {...propsFor()} inline />);
     expect(screen.queryByRole('combobox', { name: '地区' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '地図の種類' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText('候補を一覧で見る（面積の大きい順）')).not.toBeInTheDocument();
-    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['2018 年は未検出', '2018 年も検出', '未判定']);
-    expect(screen.getByTestId('leaflet')).toBeInTheDocument();
+    expect(document.querySelector('.class-badge')).toBeNull();
+    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-plain', 'true');
+    expect(screen.queryByText('一部の候補に絞って表示しています。')).not.toBeInTheDocument();
     unmount();
     render(<MapPanel {...propsFor()} />);
     expect(screen.getByRole('combobox', { name: '地区' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: '地図の印' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('leaflet')).toHaveAttribute('data-plain', 'false');
     expect(screen.getByText('候補を一覧で見る（面積の大きい順）')).toBeInTheDocument();
   });
 
@@ -922,9 +925,10 @@ describe('回答の中の図として使う（inline）と、2 つの地図パ�
     expect(onFilterChange).toHaveBeenCalledWith(expect.objectContaining({ areaId: 'b' }));
   });
 
-  it('inline の凡例は、絞り込みで出している分類だけ', () => {
+  it('inline は凡例が無いので、分類を絞っているときは、そのことを言う（分類の名前は出さない）', () => {
     render(<MapPanel {...propsFor()} filter={{ areaId: '', classes: new Set(['confirmed_new'] as const) }} inline />);
-    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['2018 年は未検出']);
+    expect(screen.getByText('一部の候補に絞って表示しています。')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('未検出');
   });
 
   it('地図のパネルが 2 つ同時にあっても、地区の選択の id は重ならない。ラベルは、自分の選択を指す', () => {

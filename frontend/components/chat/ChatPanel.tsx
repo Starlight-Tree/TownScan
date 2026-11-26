@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, postChat } from '../../lib/api';
-import { figureKinds, type AnswerRef, type ExpandRequest, type FigureKind } from '../../lib/answer-view';
+import { planAnswer, type AnswerRef, type ExpandRequest, type FigureKind } from '../../lib/answer-view';
 import type { ChatRequestMessage, ToolCall, ToolResult } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { conversationErrorKind, getConversationMessages } from '../../lib/conversations-api';
@@ -14,11 +14,9 @@ import {
   writeConversationId,
 } from '../../lib/conversation-session';
 import { formatSentAt } from '../../lib/sentAt';
-import { ErrorBoundary } from '../ErrorBoundary';
 import { useHealth } from '../HealthProvider';
 import { useHistory } from '../HistoryProvider';
 import { usePublishConversationStatus, useRegisterConversationOpen, useRegisterNewConversation } from '../NewConversation';
-import { AnswerScope } from './AnswerScope';
 import { TILE_SIDE_TEXT } from './area-scale';
 import { ClassDefinitions } from './ClassGuide';
 import { Composer } from './Composer';
@@ -36,7 +34,6 @@ import {
   runCheck,
   type CurrentRun,
 } from './conversation';
-import { ToolCallContext } from './tool-call-context';
 import { buildRequestMessages } from './history';
 import { ResultCard } from './ResultCard';
 import type { ChatActions, ChatEntry, ResultActions } from './types';
@@ -55,14 +52,10 @@ const OUT_OF_SCOPE_SUGGESTIONS = ['渋谷の新築は？'];
 
 export const SUGGESTIONS = [...IN_SCOPE_SUGGESTIONS, ...OUT_OF_SCOPE_SUGGESTIONS];
 
-/** 本文と補足（根拠）を分けて、補足を図と条件のあとに置くカード。壊れた結果は分けない（「表示できない結果」が 2 回出ないように） */
-const isSplit = (r: ToolResult | null | undefined) =>
-  (r?.type === 'count' && !!r.provenance && !!r.filter && Array.isArray(r.breakdown)) || (r?.type === 'compare' && !!r.provenance && Array.isArray(r.items));
-
 interface Props {
   actions: ChatActions;
   /**
-   * 回答の中に出す図（地図・グラフ）。回答の結果から図が出る種類が決まり（figureKinds）、結果カードの並びの下に、この関数が返すものを 1 つずつ出す。
+   * 回答の中に出す図（地図・グラフ）。回答の結果から、出る図（多くても 1 つ）が決まり（planAnswer）、結果カードの下に、この関数が返すものを出す。
    * 図は、親（HomeClient）が持つ回答ごとの状態を読み書きするので、ここでは中身を知らない。渡さなければ、図は出さない
    */
   renderFigure?: (answer: AnswerRef, kind: FigureKind) => ReactNode;
@@ -145,6 +138,8 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
   useEffect(() => {
     historyRef.current = history;
   });
+  // 「表示を切り替える」でその場に出した、2 位以下の結果（鍵は「回答の ID:結果の添字」。回答の ID は使い回さない）
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set());
   const [restore, setRestore] = useState<Restore>(IDLE);
   // サイドパネルの一覧が「いま開いている会話」として見せる ID（保存された会話だけ。始めたばかりの会話は null）
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -438,13 +433,20 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
     [send, focusComposer],
   );
 
-  // 続けて聞く: 回答のあと（返答待ち・失敗のときは出さない）に、まだ聞いていない質問の例を最大 3 件（DocuNavi の followUpQuestions と同じ規則）
+  // 続けて聞く: 回答のあと（返答待ち・失敗のときは出さない）に、まだ聞いていない質問の例を最大 2 件
   const lastEntry = entries[entries.length - 1];
   const followUps = useMemo(() => {
     if (sending || failure || lastEntry?.role !== 'assistant') return [];
     const asked = new Set(entries.filter((e) => e.role === 'user').map((e) => e.content.trim()));
-    return IN_SCOPE_SUGGESTIONS.filter((q) => !asked.has(q)).slice(0, 3);
+    return IN_SCOPE_SUGGESTIONS.filter((q) => !asked.has(q)).slice(0, 2);
   }, [entries, sending, failure, lastEntry?.role]);
+
+  // 表示を切り替える: 最新の回答の、ほかの見方。押しても質問は送らない。別の解析結果に基づく回答には出さない（拡大ビューへ進めないのと同じ）
+  const lastAnswer = !sending && !failure && lastEntry?.role === 'assistant' ? lastEntry : null;
+  const switches =
+    lastAnswer && runCheck(lastAnswer, currentRun) === 'fresh'
+      ? planAnswer(lastAnswer.results ?? []).switches.filter((s) => s.kind !== 'show' || !revealed.has(`${lastAnswer.id}:${s.index}`))
+      : [];
 
   // 開き直した会話に、別の解析結果に基づく回答があるか（health の読み込みを待っている間は、注意書きは出さない）
   const hasStale = entries.some((e) => runCheck(e, currentRun) === 'stale');
@@ -506,6 +508,14 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
           const staleRun = runCheck(entry, currentRun) !== 'fresh';
           // 質問の前に、その時刻を薄く出す（時刻の無い発言・読めない値には出さない）
           const sentLabel = entry.role === 'user' && entry.sentAt ? formatSentAt(entry.sentAt, new Date()) : null;
+          const results = entry.results ?? [];
+          const plan = planAnswer(results);
+          const figure = renderFigure && !staleRun ? plan.figure : null;
+          // 地図の表示が 1 位で、回答の中の地図を出すときは、同じことを言うカード（説明と「地図で見る」）を出さない
+          const mapOnly = figure === 'map' ? plan.primary : null;
+          const card = (r: ToolResult, i: number, chipOnly = false) => (
+            <ResultCard key={`${chipOnly ? 'chip' : 'card'}-${i}`} result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} chipOnly={chipOnly} />
+          );
           return entry.role === 'user' ? (
             <Fragment key={entry.id}>
               {sentLabel && entry.sentAt && (
@@ -523,32 +533,13 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
             <div key={entry.id} data-entry="assistant" className="msg msg--assistant">
               <span className="visually-hidden">TownScan: </span>
               {entry.content && <p className="msg__text">{entry.content}</p>}
-              {entry.results?.map((r, i) => (
-                // 使ったツールは、同じ順番の結果カードの「根拠を見る」の中で見せる（数が合わないときは出さない）。
-                // 件数と比較のカードは、本文（写真・要点）をここに出し、補足（分類の意味・根拠）は図と条件のあとへ回す
-                <ToolCallContext.Provider key={i} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
-                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part={isSplit(r) ? 'body' : 'all'} />
-                </ToolCallContext.Provider>
-              ))}
-              {/* 図（地図・グラフ）は、結果カードの並びの下。出る種類は、回答の結果で決まる（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図） */}
-              {renderFigure &&
-                !staleRun &&
-                figureKinds(entry.results ?? []).map((kind) => (
-                  <Fragment key={kind}>{renderFigure(refFor(entry), kind)}</Fragment>
-                ))}
-              {entry.results && entry.results.length > 0 && (
-                // 条件の行が壊れても、回答とカードは出す。前提（対象・条件）は、本文と図のあとに置く
-                <ErrorBoundary fallback={() => null}>
-                  <AnswerScope results={entry.results} />
-                </ErrorBoundary>
-              )}
-              {entry.results?.map((r, i) =>
-                isSplit(r) ? (
-                  <ToolCallContext.Provider key={`notes-${i}`} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
-                    <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part="notes" />
-                  </ToolCallContext.Provider>
-                ) : null,
-              )}
+              {/* 本文の下に出す表示は 1 つ（順位 1 位の結果。順位の対象でない結果は、いつも出す） */}
+              {results.map((r, i) => (plan.hidden.has(i) || i === mapOnly ? null : card(r, i)))}
+              {figure && <Fragment key={figure}>{renderFigure?.(refFor(entry), figure)}</Fragment>}
+              {/* 「表示を切り替える」で出した、2 位以下の結果 */}
+              {results.map((r, i) => (plan.hidden.has(i) && revealed.has(`${entry.id}:${i}`) ? card(r, i) : null))}
+              {/* カードを出さない地図の表示は、合成データの印だけを残す */}
+              {results.map((r, i) => (r?.type === 'map_focus' && (i === mapOnly || plan.hidden.has(i)) ? card(r, i, true) : null))}
               {entry.notice && (
                 // 保存を飛ばして送り直した回答にだけ、1 回出す（以降の回答には繰り返さない。仕様 §7.1.7）
                 <p className="msg__notice" role="note">
@@ -558,21 +549,51 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
             </div>
           );
         })}
-        {followUps.length > 0 && (
-          <div className="follow-ups" role="group" aria-label="続けて聞く">
-            {followUps.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className="follow-up"
-                onClick={() => {
-                  send(q);
-                  focusComposer();
-                }}
-              >
-                {q}
-              </button>
-            ))}
+        {(switches.length > 0 || followUps.length > 0) && (
+          <div className="follow-ups">
+            {lastAnswer && switches.length > 0 && (
+              <div className="follow-ups__group" role="group" aria-label="表示を切り替える">
+                <span className="follow-ups__label" aria-hidden="true">
+                  表示を切り替える
+                </span>
+                <div className="follow-ups__switches">
+                  {switches.map((sw) => (
+                    <button
+                      key={sw.key}
+                      type="button"
+                      className="btn btn--small"
+                      onClick={(e) => {
+                        if (sw.kind === 'open') {
+                          actions.expand(refFor(lastAnswer), sw.request, e.currentTarget);
+                          return;
+                        }
+                        setRevealed((prev) => new Set(prev).add(`${lastAnswer.id}:${sw.index}`));
+                        focusComposer();
+                      }}
+                    >
+                      {sw.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {followUps.length > 0 && (
+              <div className="follow-ups__group" role="group" aria-label="続けて聞く">
+                {followUps.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    className="follow-up"
+                    onClick={() => {
+                      send(q);
+                      focusComposer();
+                    }}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {sending && (

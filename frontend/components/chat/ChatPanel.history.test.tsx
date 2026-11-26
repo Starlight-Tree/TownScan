@@ -397,15 +397,15 @@ describe('保存した会話を開き直す（仕様 §7.1.4）', () => {
     gate.resolve(jsonResponse({ messages: [user('何件ありますか？'), answer('件数です。', [count, table])] }));
     expect(await screen.findByText('件数です。')).toBeInTheDocument();
     expect(screen.getByText('何件ありますか？')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
+    // 出すカードは順位が 1 位の 1 つ（候補の一覧）。件数は、切り替えで出す
     expect(screen.getByRole('region', { name: table.title })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: count.title })).not.toBeInTheDocument();
     expect(screen.queryByText(MSG_RESTORING)).not.toBeInTheDocument();
     expect(screen.getByRole('log')).toHaveAttribute('aria-busy', 'false');
     // 質問に、時刻は付かない（保存していない）
     expect(chatRegion().querySelector('time')).toBeNull();
     // 拡大ビューは開かず、画面は替えない（回答の中の図は、回答の中に出る）
     expect(actions.expand).not.toHaveBeenCalled();
-    expect(renderFigure).toHaveBeenCalled();
     expect(router.to('GET /api/conversations/c1/messages')[0]?.headers.get('authorization')).toMatch(/^Bearer /);
   });
 
@@ -582,20 +582,27 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
     await userEvent.click(await listItem('2018 年は未検出の候補は何件ありますか？'));
     await screen.findByText('回答（保存）');
   };
-  const results = [count, table, mapFocus, detectionImage, refusal];
+  /** 回答の中に出すカードは 1 つなので、結果の型ごとに、別の回答にする（本文は、1 件目だけ「回答（保存）」） */
+  const saved = (runAt: string | null) => [
+    user('質問'),
+    answer('回答（保存）', [count], runAt),
+    ...[table, mapFocus, detectionImage, refusal].flatMap((r, i) => [user(`質問 ${i + 2}`), answer(`回答 ${i + 2}`, [r], runAt)]),
+  ];
 
   it('いまの run と同じ（run_id も run_created_at も。時刻の表記が違っても同じ時刻）なら、ボタンも図も使える。注意書きは出ない', async () => {
-    await open([user('質問'), answer('回答（保存）', results, '2026-11-24T03:00:00Z')]);
+    await open(saved('2026-11-24T03:00:00Z'));
     expect(screen.queryByText(MSG_STALE_RUN)).not.toBeInTheDocument();
-    for (const name of [/^詳細/, '地図で見る', '詳細を開く']) {
-      for (const button of screen.getAllByRole('button', { name })) expect(button).toBeEnabled();
-    }
-    expect(screen.getAllByTestId('figure').length).toBeGreaterThan(0);
+    // 一覧の写真 2 枚と、検出画像の写真
+    const photos = screen.getAllByRole('button', { name: /詳細を開く（c-/ });
+    expect(photos).toHaveLength(3);
+    for (const button of photos) expect(button).toBeEnabled();
+    // 地図の表示は、回答の中の地図が見せる
+    expect(screen.getAllByTestId('figure')).toHaveLength(1);
     expect(chatRegion().querySelector('img')).not.toBeNull();
   });
 
   it('run_id が同じでも run_created_at が違えば、別の解析結果: 注意書きを 1 行、ボタンは押せず、図は出さず、写真は読み込まない。カードの数字・文は保存された値のまま', async () => {
-    await open([user('質問'), answer('回答（保存）', results, '2026-11-24T12:00:01+09:00')]);
+    await open(saved('2026-11-24T12:00:01+09:00'));
     const note = screen.getByRole('note', { name: '' });
     expect(note).toHaveTextContent(MSG_STALE_RUN);
     expect(MSG_STALE_RUN).toBe('この会話の一部は、いまとは別の解析結果に基づいています。件数や地図は、いまのデータと食い違うことがあります。');
@@ -603,9 +610,11 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
     // 会話の先頭（回答より前）
     const first = chatRegion().querySelector('.chat__scroll')!.firstElementChild;
     expect(first).toBe(note);
-    for (const button of [...screen.getAllByRole('button', { name: /詳細（c-/ }), screen.getByRole('button', { name: '地図で見る' }), screen.getByRole('button', { name: '詳細を開く' })]) {
-      expect(button).toBeDisabled();
-    }
+    // 一覧の写真のカードと、地図の表示の「地図で見る」は押せない。検出画像は、写真も、写真を押すボタンも出さない
+    const cards = screen.getAllByRole('button', { name: /詳細を開く（c-/ });
+    expect(cards).toHaveLength(2);
+    for (const button of [...cards, screen.getByRole('button', { name: '地図で見る' })]) expect(button).toBeDisabled();
+    expect(screen.queryByRole('group', { name: '表示を切り替える' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('figure')).not.toBeInTheDocument();
     expect(renderFigure).not.toHaveBeenCalled();
     expect(chatRegion().querySelector('img')).toBeNull();
@@ -653,8 +662,9 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
     expect(screen.queryByTestId('figure')).not.toBeInTheDocument();
     expect(screen.queryByText(MSG_STALE_RUN)).not.toBeInTheDocument();
     gate.resolve(jsonResponse(health));
-    await waitFor(() => expect(screen.getByRole('button', { name: '地図で見る' })).toBeEnabled());
-    expect(screen.getAllByTestId('figure').length).toBeGreaterThan(0);
+    // 使えるようになると、回答の中の地図が出て、同じことを言うカードは消える
+    await waitFor(() => expect(screen.getAllByTestId('figure')).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
     expect(screen.queryByText(MSG_STALE_RUN)).not.toBeInTheDocument();
   });
 
@@ -663,10 +673,10 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
     await open([user('質問'), answer('回答（保存）', [mapFocus], '2020-01-01T00:00:00Z')]);
     await ask('続き');
     await screen.findByText('新しい回答');
+    // 古い回答は、押せないカードのまま。新しい回答は、回答の中の地図が出る
     const buttons = screen.getAllByRole('button', { name: '地図で見る' });
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(1);
     expect(buttons[0]).toBeDisabled();
-    expect(buttons[1]).toBeEnabled();
     expect(screen.getAllByTestId('figure')).toHaveLength(1);
   });
 });

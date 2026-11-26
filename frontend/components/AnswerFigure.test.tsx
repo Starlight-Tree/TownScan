@@ -80,19 +80,19 @@ function makeActions(): { [K in keyof FigureActions]: ReturnType<typeof vi.fn> }
 
 function setup(over: Partial<ComponentProps<typeof AnswerFigure>> = {}) {
   const actions = makeActions();
-  render(<AnswerFigure kind="map" answer={answer} state={state} withMap data={data()} actions={actions} {...over} />);
+  render(<AnswerFigure kind="map" answer={answer} state={state} data={data()} actions={actions} {...over} />);
   return actions;
 }
 
 describe('AnswerFigure（回答の中の図の枠）', () => {
   it('名前つきの region（名前は「地図」「グラフ」）。aria-live="off"。頭の行に、名前と「拡大」ボタン（名前は「地図を拡大」「グラフを拡大」）', () => {
-    const { unmount } = render(<AnswerFigure kind="map" answer={answer} state={state} withMap data={data()} actions={makeActions()} />);
+    const { unmount } = render(<AnswerFigure kind="map" answer={answer} state={state} data={data()} actions={makeActions()} />);
     const map = screen.getByRole('region', { name: '地図' });
     expect(map).toHaveAttribute('aria-live', 'off');
     expect(map).toHaveClass('result-card', 'answer-figure');
     expect(within(map).getByRole('button', { name: '地図を拡大ビューで開く' })).toHaveTextContent('拡大');
     unmount();
-    render(<AnswerFigure kind="chart" answer={answer} state={state} withMap data={data()} actions={makeActions()} />);
+    render(<AnswerFigure kind="chart" answer={answer} state={state} data={data()} actions={makeActions()} />);
     const chart = screen.getByRole('region', { name: 'グラフ' });
     expect(chart).toHaveAttribute('aria-live', 'off');
     expect(within(chart).getByRole('button', { name: 'グラフを拡大ビューで開く' })).toBeInTheDocument();
@@ -132,25 +132,18 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
     expect(screen.getByTestId('map-panel')).toHaveAttribute('data-inline', 'true');
   });
 
-  it('グラフの絞り込みは、回答の鍵で状態へ当てる。「地図で見る」は、同じ回答に地図の図が無いときだけ渡し、押すと地図の画面で開く', async () => {
-    const withMap = setup({ kind: 'chart', withMap: true });
-    expect(screen.queryByRole('button', { name: 'show-map' })).toBeNull();
+  it('グラフの絞り込みは、回答の鍵で状態へ当てる。「地図で見る」を押すと、地図の画面で開く（戻し先は「拡大」ボタン）', async () => {
+    const actions = setup({ kind: 'chart' });
     await userEvent.click(screen.getByRole('button', { name: 'chart-filter' }));
-    expect(withMap.setFilter).toHaveBeenCalledWith('answer:m7', { areaId: '', classes: new Set(['confirmed_new']) });
-    const opener = screen.getByRole('button', { name: 'グラフを拡大ビューで開く' });
-    // 再描画（図の中身を入れ替える）
-    document.body.innerHTML = '';
-    const actions = makeActions();
-    render(<AnswerFigure kind="chart" answer={answer} state={state} withMap={false} data={data()} actions={actions} />);
+    expect(actions.setFilter).toHaveBeenCalledWith('answer:m7', { areaId: '', classes: new Set(['confirmed_new']) });
     await userEvent.click(screen.getByRole('button', { name: 'show-map' }));
     expect(actions.expand).toHaveBeenCalledWith(answer, { type: 'view', view: 'map' }, screen.getByRole('button', { name: 'グラフを拡大ビューで開く' }));
-    expect(opener).not.toBe(screen.getByRole('button', { name: 'グラフを拡大ビューで開く' }));
   });
 
   it('その回答の状態が無いあいだは、読み込み中の枠だけ（中身は出さない）。地区・候補が届いた（失敗も含む）ら、状態を作るよう頼む。状態が有れば、頼まない', () => {
     const loading = makeActions();
     const { unmount } = render(
-      <AnswerFigure kind="map" answer={answer} state={undefined} withMap data={data({ candidatesState: { status: 'loading' } })} actions={loading} />,
+      <AnswerFigure kind="map" answer={answer} state={undefined} data={data({ candidatesState: { status: 'loading' } })} actions={loading} />,
     );
     expect(screen.getByText('地図を読み込んでいます…')).toBeInTheDocument();
     expect(screen.queryByTestId('map-panel')).toBeNull();
@@ -158,7 +151,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
     unmount();
 
     const done = makeActions();
-    const second = render(<AnswerFigure kind="chart" answer={answer} state={undefined} withMap data={data()} actions={done} />);
+    const second = render(<AnswerFigure kind="chart" answer={answer} state={undefined} data={data()} actions={done} />);
     expect(screen.getByText('グラフを読み込んでいます…')).toBeInTheDocument();
     expect(done.ensure).toHaveBeenCalledTimes(1);
     expect(done.ensure).toHaveBeenCalledWith(answer);
@@ -171,7 +164,6 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
         answer={answer}
        
         state={undefined}
-        withMap
         data={data({ candidatesState: { status: 'error', error: new Error('x') as never } })}
         actions={failed}
       />,
@@ -180,7 +172,7 @@ describe('AnswerFigure（回答の中の図の枠）', () => {
     third.unmount();
 
     const has = makeActions();
-    render(<AnswerFigure kind="map" answer={answer} state={state} withMap data={data()} actions={has} />);
+    render(<AnswerFigure kind="map" answer={answer} state={state} data={data()} actions={has} />);
     expect(has.ensure).not.toHaveBeenCalled();
   });
 

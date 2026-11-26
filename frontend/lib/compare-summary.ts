@@ -1,15 +1,15 @@
 import type { CandidateClass, CompareResult } from './api-types';
-import { CLASS_INFO, CLASS_ORDER, isCandidateClass } from './classes';
+import { CLASS_INFO, isCandidateClass } from './classes';
 import { formatNumber } from './format';
 
 /**
- * 比較（compare）の結果の要点。回答の文章は、数字を LLM に書かせない決まりで「結果は下のカードのとおりです」だけになるので、
- * 画面が、結果の数字だけから、いちばん知りたいこと（どこが多いか・全体の内訳）を 1〜2 文で言う。数字は結果の値を足すだけで、推測しない。
+ * 比較（compare）の結果の要点。画面が、結果の数字だけから作る。ふだん出すのは全体の合計（sub。回答の中のグラフに無い数字）で、
+ * 最も多い地区（lead）は、合計が 0 のときと、グラフが出ない回答（別の解析結果）で出す。数字は結果の値を足すだけで、推測しない。
  */
 export interface CompareSummary {
   /** 最も多い地区。並びの基準の分類があれば、その分類で */
   lead: string;
-  /** 全地区の合計と、分類ごとの内訳。未判定が過半のときは、そう言う。合計が 0 のときは無し */
+  /** 全地区の合計。合計が 0 のときは無し */
   sub: string | null;
 }
 
@@ -54,13 +54,6 @@ export function compareSummary(result: CompareResult): CompareSummary | null {
 
   const sum = perItem.reduce((acc, p) => acc + p.total, 0);
   if (sum <= 0) return { lead, sub: null };
-  const byClass = CLASS_ORDER.map((c) => ({ c, n: perItem.reduce((acc, p) => acc + p.byClass[c], 0) }));
-  const breakdown = byClass.map(({ c, n }) => `${CLASS_INFO[c].short} ${formatNumber(n)}`).join('・');
-  const uncertain = byClass.find((b) => b.c === 'uncertain')?.n ?? 0;
-  // 内訳の 3 分類の和が合計と合わないとき（古い応答など）は、内訳を言わない（合わない数字を並べない）
-  const classSum = byClass.reduce((acc, b) => acc + b.n, 0);
-  const head = `全 ${formatNumber(items.length)} 地区の合計は ${formatNumber(sum)} 件`;
-  let sub = classSum === sum ? `${head}（${breakdown}）。` : `${head}。`;
-  if (classSum === sum && uncertain * 2 > sum) sub += '未判定が過半を占めます。目で確かめる候補が多めです。';
+  const sub = `全 ${formatNumber(items.length)} 地区の合計は ${formatNumber(sum)} 件。`;
   return { lead, sub };
 }

@@ -145,7 +145,7 @@ interface AreaProps {
   panels: Record<ResultView, ReactNode>;
   /** タブの帯の右端に置く部品（拡大ビューの「閉じる」ボタン） */
   trailing?: ReactNode;
-  /** タブの帯と画面のあいだに置く行（どの回答かを示す行・「チャットへ戻る」） */
+  /** タブの帯と画面のあいだに置く行（どの回答かを示す行・閉じる ✕） */
   header?: ReactNode;
   /** タブの帯を、ここに置くか（広い幅）。狭い幅は、帯をチャットの上に置くので、false */
   showTabs?: boolean;

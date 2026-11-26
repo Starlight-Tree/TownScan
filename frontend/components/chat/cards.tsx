@@ -5,7 +5,6 @@ import { useContext, useState } from 'react';
 import { useAreas } from '../../lib/areas-context';
 import type {
   AccuracyResult,
-  CandidateClass,
   CompareResult,
   CountResult,
   DetectionImageResult,
@@ -14,23 +13,20 @@ import type {
   TableCell,
   TableResult,
 } from '../../lib/api-types';
-import { CLASS_INFO, classText, isCandidateClass, refusalTitle } from '../../lib/classes';
+import { CLASS_INFO, isCandidateClass, refusalTitle } from '../../lib/classes';
 import { countRank } from '../../lib/count-order';
 import { compareSummary } from '../../lib/compare-summary';
+import { isCandidateList } from '../../lib/answer-view';
 import { candidateImageUrl } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
 import { ALL_FILTER, areaLabel, areaScopeIds, filterFromResults } from '../../lib/result-view';
 import { CandidateFeaturesContext } from '../../lib/candidates-context';
 import { CandidateImage } from '../CandidateImage';
-import { ClassBadge, ClassSwatch } from '../ClassBadge';
+import { ClassBadge } from '../ClassBadge';
 import { classOfCell, reasonOfCell } from './cell';
 import { MSG_STALE_BUTTON, MSG_STALE_PHOTO } from './conversation';
-import { UncertainNote } from './ClassGuide';
-import { ProvenanceBox } from './ProvenanceBox';
 import { ScrollHint } from './ScrollHint';
 import type { ResultActions } from './types';
-
-const CANDIDATE_ID = /^c-\d+-\d+-\d+$/;
 
 /**
  * 回答の本文（answerText）が、カードの中の文をすでに含んでいるか。含んでいれば、カードのほうは同じ文を出さない
@@ -52,16 +48,19 @@ const PHOTO_FIRST = 4;
 
 const PHOTO_YEARS = [2018, 2023] as const;
 
-/** 写真のカード 1 枚ぶん。候補 ID は画面に出さない（読み上げの名前と写真の説明にだけ使う） */
+/** 写真のカード 1 枚ぶん。候補 ID は画面に出さない（読み上げの名前と写真の説明にだけ使う）。分類は回答では言わない（詳細で読める） */
 interface PhotoItem {
   id: string;
   place: string;
   areaM2: string;
-  cls: CandidateClass | null;
-  reason?: string;
 }
 
-function PhotoCard({ item, tag, actions, staleRun }: { item: PhotoItem; tag: string | null; actions: ResultActions; staleRun: boolean }) {
+/** 写真の出典。地理院タイルは出典の記載が利用の条件なので、写真を出すところに添える */
+function PhotoCredit() {
+  return <p className="result-card__note">出典：国土地理院</p>;
+}
+
+function PhotoCard({ item, actions, staleRun }: { item: PhotoItem; actions: ResultActions; staleRun: boolean }) {
   return (
     <li className="photo-card">
       {!staleRun && (
@@ -80,76 +79,30 @@ function PhotoCard({ item, tag, actions, staleRun }: { item: PhotoItem; tag: str
       >
         <span className="photo-card__place">{item.place}</span>
         <span className="photo-card__area">{item.areaM2} m²</span>
-        {tag && item.cls && (
-          <span className="photo-card__tag">
-            <ClassSwatch cls={item.cls} size={12} />
-            {tag}
-          </span>
-        )}
-        <span className="photo-card__more">
-          詳細<span className="visually-hidden">（{item.id}）</span>
-        </span>
+        <span className="visually-hidden">の詳細を開く（{item.id}）</span>
       </button>
     </li>
   );
 }
 
-/**
- * 候補を、2018 年と 2023 年の写真のカードで並べる。grouped なら、分類の見出しで区切る（items は分類ごとに続けて並んでいること）。
- * 見出しの件数は、隠れているぶんも含む。見出しがあるときのカードの札は、未判定の理由だけ。見出しが無く分類が混ざるときは、tagAll で全部に付ける
- */
-function PhotoCards({
-  items,
-  label,
-  grouped = false,
-  tagAll = false,
-  actions,
-  staleRun = false,
-}: {
-  items: PhotoItem[];
-  label: string;
-  grouped?: boolean;
-  tagAll?: boolean;
-  actions: ResultActions;
-  staleRun?: boolean;
-}) {
+/** 候補を、2018 年と 2023 年の写真のカードで並べる */
+function PhotoCards({ items, label, actions, staleRun = false }: { items: PhotoItem[]; label: string; actions: ResultActions; staleRun?: boolean }) {
   const [open, setOpen] = useState(false);
   const shown = open ? items : items.slice(0, PHOTO_FIRST);
-  const groups: { cls: CandidateClass | null; items: PhotoItem[] }[] = [];
-  for (const item of shown) {
-    const last = groups[groups.length - 1];
-    if (last && (!grouped || last.cls === item.cls)) last.items.push(item);
-    else groups.push({ cls: item.cls, items: [item] });
-  }
-  const tagOf = (item: PhotoItem) => {
-    if (!item.cls) return null;
-    if (tagAll) return classText(item.cls, item.reason);
-    const held = classText(item.cls, item.reason);
-    return held === CLASS_INFO[item.cls].short ? null : held;
-  };
   return (
     <>
       {staleRun && <p className="empty-note">{MSG_STALE_PHOTO}</p>}
-      {groups.map((group) => (
-        <div key={group.items[0]?.id} className="photo-group">
-          {grouped && group.cls && (
-            <h4 className="photo-group__title">
-              <ClassSwatch cls={group.cls} size={14} />
-              {CLASS_INFO[group.cls].short}（{formatNumber(items.filter((i) => i.cls === group.cls).length)} 件）
-            </h4>
-          )}
-          <ul className="photo-grid" aria-label={grouped && group.cls ? `${label}（${CLASS_INFO[group.cls].short}）` : label}>
-            {group.items.map((item) => (
-              <PhotoCard key={item.id} item={item} tag={tagOf(item)} actions={actions} staleRun={staleRun} />
-            ))}
-          </ul>
-        </div>
-      ))}
+      <ul className="photo-grid" aria-label={label}>
+        {shown.map((item) => (
+          <PhotoCard key={item.id} item={item} actions={actions} staleRun={staleRun} />
+        ))}
+      </ul>
       {items.length > PHOTO_FIRST && (
         <button type="button" className="count-more" aria-expanded={open} onClick={() => setOpen(!open)}>
           {open ? `先頭の ${PHOTO_FIRST} 件だけ表示` : `全 ${formatNumber(items.length)} 件を表示`}
         </button>
       )}
+      {!staleRun && <PhotoCredit />}
     </>
   );
 }
@@ -159,37 +112,21 @@ export function CountCard({
   result,
   actions,
   staleRun = false,
-  part = 'all',
 }: {
   result: CountResult;
   actions: ResultActions;
   staleRun?: boolean;
-  part?: 'all' | 'body' | 'notes';
 }) {
   const { nameOf } = useAreas();
   const features = useContext(CandidateFeaturesContext);
-  const cls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
+  // 条件か内訳の無い件数は、壊れた結果。条件が分からないまま「全地区」の件数として出さず、代わりの表示にする（ResultCard の境界が受ける）
+  if (!result.filter || !Array.isArray(result.breakdown)) throw new Error('壊れた件数の結果（filter・breakdown が無い）');
+  const cls = isCandidateClass(result.filter.cls) ? result.filter.cls : null;
   const filter = filterFromResults([result]) ?? ALL_FILTER;
   // 複数の地区（区など）は API の scope をそのまま出す。拡大ビューの地図・グラフに写す条件と同じ読み方
   const areaText = areaLabel(filter, nameOf) ?? '全地区';
-  const uncertain = result.overall?.uncertain ?? result.breakdown.find((b) => b.key === 'uncertain')?.value ?? 0;
-  // 分類で絞ったときは全体の数を、絞らないときは内訳を、見出しの下に添える
-  let context: string | null = null;
-  if (cls && result.overall) {
-    const held = cls !== 'uncertain' && uncertain > 0 ? `（うち未判定 ${formatNumber(uncertain)} 件）` : '';
-    context = `候補は全部で ${formatNumber(result.overall.total)} 件${held}`;
-  } else if (!cls && result.breakdown.length > 0) {
-    context = result.breakdown
-      .map((b) => `${isCandidateClass(b.key) ? CLASS_INFO[b.key].short : b.label} ${formatNumber(b.value)} 件`)
-      .join('・');
-  }
-  if (part === 'notes') {
-    return (
-      <div className="answer-notes">
-        <ProvenanceBox provenance={result.provenance} />
-      </div>
-    );
-  }
+  // 分類で絞ったときだけ、全体の数を添える（写真を出せないとき）
+  const context = cls && result.overall ? `候補は全部で ${formatNumber(result.overall.total)} 件` : null;
   const scope = areaScopeIds(filter);
   const rows =
     !features || staleRun
@@ -202,7 +139,7 @@ export function CountCard({
                 b.properties.area_m2 - a.properties.area_m2 ||
                 a.properties.id.localeCompare(b.properties.id),
             );
-  // 写真を出せるときは、枠・見出し・内訳を出さない（件数は返答の本文が言う）。出せないとき（別の解析結果・0 件）は、見出しと内訳を残す
+  // 写真を出せるときは、枠と見出しを出さない（件数は返答の本文が言う）。出せないとき（別の解析結果・0 件）は、見出しを残す
   const table = rows && rows.length > 0 && rows.length === result.total ? rows : null;
   return (
     <section className={table ? 'result-card result-card--plain' : 'result-card'} aria-label={result.title}>
@@ -216,18 +153,10 @@ export function CountCard({
       {table && (
         <PhotoCards
           label="候補の写真"
-          grouped={!cls}
-          items={table.map(({ properties: p }) => ({
-            id: p.id,
-            place: nameOf(p.area_id),
-            areaM2: formatNumber(p.area_m2),
-            cls: isCandidateClass(p.class) ? p.class : null,
-            reason: p.reason,
-          }))}
+          items={table.map(({ properties: p }) => ({ id: p.id, place: nameOf(p.area_id), areaM2: formatNumber(p.area_m2) }))}
           actions={actions}
         />
       )}
-      {part === 'all' && <ProvenanceBox provenance={result.provenance} />}
     </section>
   );
 }
@@ -247,32 +176,25 @@ function renderCell(colKey: string, value: TableCell | undefined, nameOf: (id: s
 
 export function TableCard({ result, actions, staleRun = false }: { result: TableResult; actions: ResultActions; staleRun?: boolean }) {
   const { nameOf } = useAreas();
-  // 候補の一覧（どの行にも候補 ID がある）は、表でなく写真のカードで出す。並びは API が返した順（面積の大きい順）のままなので、分類は見出しでなくカードに添える
-  const isCandidateList = result.rows.length > 0 && result.rows.every((r) => typeof r.id === 'string' && CANDIDATE_ID.test(r.id));
-  if (isCandidateList) {
-    const items: PhotoItem[] = result.rows.map((row) => {
-      const cls = classOfCell(row.class);
-      return {
-        id: row.id as string,
-        place: typeof row.area === 'string' ? row.area : typeof row.area_id === 'string' ? nameOf(row.area_id) : '—',
-        areaM2: typeof row.area_m2 === 'number' ? formatNumber(row.area_m2) : '—',
-        cls,
-        reason: reasonOfCell(row.class),
-      };
-    });
+  // 候補の一覧（どの行にも候補 ID がある）は、表でなく写真のカードで出す。並びは API が返した順（面積の大きい順）のまま
+  if (isCandidateList(result)) {
+    const items: PhotoItem[] = result.rows.map((row) => ({
+      id: row.id as string,
+      place: typeof row.area === 'string' ? row.area : typeof row.area_id === 'string' ? nameOf(row.area_id) : '—',
+      areaM2: typeof row.area_m2 === 'number' ? formatNumber(row.area_m2) : '—',
+    }));
     return (
       <section className="result-card result-card--plain" aria-label={result.title}>
         <header className="result-card__head">
           <h3 className="result-card__title">{result.title}</h3>
           <SyntheticChip kind={result.provenance.run_kind} />
         </header>
-        <PhotoCards label={result.title} items={items} tagAll actions={actions} staleRun={staleRun} />
+        <PhotoCards label={result.title} items={items} actions={actions} staleRun={staleRun} />
         {result.total > result.shown && (
           <p className="result-card__note">
             全 {formatNumber(result.total)} 件中、上位 {formatNumber(result.shown)} 件
           </p>
         )}
-        <ProvenanceBox provenance={result.provenance} />
       </section>
     );
   }
@@ -311,7 +233,6 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
       <p className="result-card__note">
         全 {formatNumber(result.total)} 件中 {formatNumber(result.shown)} 件を表示
       </p>
-      <ProvenanceBox provenance={result.provenance} />
     </section>
   );
 }
@@ -319,42 +240,42 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
 // ---- 比較 ----
 
 /**
- * 比較のカード。地区ごとの数字の表は出さない（全地区の棒グラフが、回答の中の図に出る。分類ごとの件数は棒の中に書き、「表で見る」で表も読める）。
- * 同じ数字を表とグラフで 2 回見せず、カードは、いちばん知りたい要点（どこが多いか・全体の内訳）を言う（lib/compare-summary.ts）
+ * 比較のカード。回答の並びは「本文 → 合計の 1 行 → グラフ」。結論は返答の本文、地区ごとの数字は回答の中のグラフ（「表で見る」で表も読める）が言うので、
+ * カードは、グラフに無い全体の合計と内訳だけを 1 行で言う（lib/compare-summary.ts）。枠は付けず、題は読み上げ用にする。
+ * 別の解析結果の回答はグラフが出ないので、最も多い地区の文も出す
  */
-export function CompareCard({ result, part = 'all' }: { result: CompareResult; part?: 'all' | 'body' | 'notes' }) {
+export function CompareCard({ result, staleRun = false }: { result: CompareResult; staleRun?: boolean }) {
   const summary = compareSummary(result);
-  // 'notes': 図のあとにまとめて置く補足（根拠）。回答の並びは「本文 → 図 → 条件 → 補足」（ChatPanel）
-  if (part === 'notes') {
-    return (
-      <div className="answer-notes">
-        <ProvenanceBox provenance={result.provenance} />
-      </div>
-    );
-  }
   return (
-    <section className={part === 'body' ? 'result-card result-card--plain' : 'result-card'} aria-label={result.title}>
-      <header className="result-card__head">
-        <h3 className="result-card__title">{result.title}</h3>
+    <section className={summary ? 'result-card result-card--plain' : 'result-card'} aria-label={result.title}>
+      <header className={summary ? 'result-card__head result-card__head--quiet' : 'result-card__head'}>
+        <h3 className={summary ? 'visually-hidden' : 'result-card__title'}>{result.title}</h3>
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
       {summary === null ? (
         <p className="empty-note">比べる地区がありません。</p>
       ) : (
-        <div className="compare-summary">
-          <p className="compare-summary__lead">{summary.lead}</p>
-          {summary.sub && <p className="compare-summary__sub">{summary.sub}</p>}
-        </div>
+        <p className="compare-summary">{staleRun || !summary.sub ? `${summary.lead}${summary.sub ?? ''}` : summary.sub}</p>
       )}
-      {result.items.some((i) => (i.counts.uncertain ?? 0) > 0) && <UncertainNote />}
-      {part === 'all' && <ProvenanceBox provenance={result.provenance} />}
     </section>
   );
 }
 
 // ---- 地図の表示 ----
 
-export function MapFocusCard({ result, actions, staleRun = false }: { result: MapFocusResult; actions: ResultActions; staleRun?: boolean }) {
+export function MapFocusCard({
+  result,
+  actions,
+  staleRun = false,
+  chipOnly = false,
+}: {
+  result: MapFocusResult;
+  actions: ResultActions;
+  staleRun?: boolean;
+  chipOnly?: boolean;
+}) {
+  // 回答の中の地図が同じことを見せるとき（または 2 位以下のとき）は、合成データの印だけを出す
+  if (chipOnly) return <SyntheticChip kind={result.provenance.run_kind} />;
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -375,7 +296,6 @@ export function MapFocusCard({ result, actions, staleRun = false }: { result: Ma
           地図で見る
         </button>
       </div>
-      <ProvenanceBox provenance={result.provenance} />
     </section>
   );
 }
@@ -395,7 +315,6 @@ export function DetectionImageCard({
   /** 開き直した会話の、別の解析結果に基づく回答。保存された画像の URL は、いまのデータに無い候補・別の建物を指しうるので、写真を読み込まない（仕様 §7.1.5 の〔J5〕） */
   staleRun?: boolean;
 }) {
-  const cls = isCandidateClass(result.class) ? result.class : null;
   const images =
     result.images.length > 0
       ? result.images
@@ -409,28 +328,20 @@ export function DetectionImageCard({
       {staleRun ? (
         <p className="empty-note">{MSG_STALE_PHOTO}</p>
       ) : (
-        <div className="image-pair">
-          {images.map((img) => (
-            <CandidateImage key={img.year} src={img.url} year={img.year} candidateId={result.candidate_id} />
-          ))}
+        // 写真を押すと詳細が開く（ボタンは写真に重ねる。文字のリンクは置かない）
+        <div className="photo-open">
+          <div className="image-pair">
+            {images.map((img) => (
+              <CandidateImage key={img.year} src={img.url} year={img.year} candidateId={result.candidate_id} />
+            ))}
+          </div>
+          <button type="button" className="photo-open__hit" onClick={() => actions.openCandidate(result.candidate_id)}>
+            <span className="visually-hidden">詳細を開く（{result.candidate_id}）</span>
+          </button>
         </div>
       )}
-      <p className="chip-row">
-        {cls && <ClassBadge cls={cls} short />}
-        {!saidInAnswer(answerText, result.caption) && <span className="result-card__text">{result.caption}</span>}
-      </p>
-      <div className="button-row">
-        <button
-          type="button"
-          className="btn btn--primary"
-          disabled={staleRun}
-          title={staleRun ? MSG_STALE_BUTTON : undefined}
-          onClick={() => actions.openCandidate(result.candidate_id)}
-        >
-          詳細を開く
-        </button>
-      </div>
-      <ProvenanceBox provenance={result.provenance} />
+      {!saidInAnswer(answerText, result.caption) && <p className="result-card__text">{result.caption}</p>}
+      {!staleRun && <PhotoCredit />}
     </section>
   );
 }
@@ -490,7 +401,6 @@ export function AccuracyCard({ result }: { result: AccuracyResult }) {
       <p className="result-card__note">
         <Link href="/accuracy">このアプリの精度の画面で、詳しく見る</Link>
       </p>
-      <ProvenanceBox provenance={result.provenance} />
     </section>
   );
 }

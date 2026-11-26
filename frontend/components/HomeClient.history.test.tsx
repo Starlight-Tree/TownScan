@@ -69,9 +69,9 @@ describe('開き直した会話（画面全体）', () => {
     await userEvent.click(item);
     expect(await screen.findByText('件数です。')).toBeInTheDocument();
     expect(panel()).not.toBeInTheDocument();
-    // 回答の中の図は、回答が届いたときと同じく、回答の中に出る（件数: 地図とグラフ・比較: グラフ。同じ回答の中では、種類ごとに 1 つ）
+    // 回答の中の図は、回答が届いたときと同じく、回答の中に出る（多くても 1 つ。件数と比較の回答は、順位が上の比較のグラフ）
     expect(await screen.findAllByRole('region', { name: 'グラフ' })).toHaveLength(1);
-    expect(screen.getAllByRole('region', { name: '地図' })).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: '地図' })).not.toBeInTheDocument();
     // フォーカスは動かさない（押した一覧のボタンに残す）
     expect(item).toHaveFocus();
   });
@@ -91,13 +91,14 @@ describe('開き直した会話（画面全体）', () => {
     expect(panel()).not.toBeInTheDocument();
   });
 
-  it('いまの解析結果の回答は、「地図で見る」で拡大ビューを開ける（押したときだけ）。開き直すとき、開いていた拡大ビューは閉じる前提（サイドパネルは後ろで操作できない）', async () => {
+  it('いまの解析結果の回答は、回答の中の地図の「拡大」で拡大ビューを開ける（押したときだけ）。開き直すとき、開いていた拡大ビューは閉じる前提（サイドパネルは後ろで操作できない）', async () => {
     router.on('GET /api/conversations/c1/messages', () => jsonResponse({ messages: [user('地図で'), answer('地図です。', [mapFocus])] }));
     render(<Screen />);
     await userEvent.click(await screen.findByTitle('2018 年は未検出の候補は何件ありますか？'));
     await screen.findByText('地図です。');
-    await waitFor(() => expect(screen.getByRole('button', { name: '地図で見る' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('button', { name: '地図で見る' }));
+    const button = await screen.findByRole('button', { name: '地図を拡大ビューで開く' });
+    expect(panel()).not.toBeInTheDocument();
+    await userEvent.click(button);
     await waitFor(() => expect(panel()).not.toBeNull());
   });
 

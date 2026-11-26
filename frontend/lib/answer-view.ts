@@ -1,5 +1,5 @@
-import type { AreaSummary, BBox, CandidateDetail, CandidateFeature, ToolResult } from './api-types';
-import { featureBBox, nextNonce, scopeBBox, type MapFocus } from './map-config';
+import type { AreaSummary, BBox, CandidateDetail, CandidateFeature, TableResult, ToolResult } from './api-types';
+import { featureBBox, nextNonce, scopeBBox, unionBBox, type MapFocus } from './map-config';
 import {
   ALL_FILTER,
   areaScopeIds,
@@ -51,6 +51,8 @@ export type ExpandRequest =
   | { type: 'view'; view: ResultView }
   /** 地図の表示（map_focus）の「地図で見る」: 候補を目立たせ、範囲へ寄せて、地図で開く */
   | { type: 'focus'; bbox: BBox; candidateIds: string[] }
+  /** 候補の一覧の回答の「地図で見る」: 一覧の候補を目立たせ、その範囲（地図の候補データの形から決める）へ寄せて、地図で開く */
+  | { type: 'candidates'; ids: string[] }
   /** 結果カードの「詳細」「詳細を開く」、図の地図の一覧: その候補を選び、地図もその候補へ寄せて、写真の比較で開く */
   | { type: 'candidate'; id: string }
   /** 図の地図の「写真を比べる」: 地図で選んだ候補を（すでに選んでいても）、写真の比較で開く。地図は動かさない */
@@ -111,7 +113,7 @@ function selectCandidate(state: AnswerView, id: string, focus: boolean, ctx: Ans
  * 回答が届いたことでは、何も開かず、何も替えない。ここは、その回答の拡大ビューを、はじめて開くときだけ使う
  */
 export function initialAnswerView(results: readonly ToolResult[], ctx: AnswerContext): AnswerView {
-  // 回答の「対象・条件」の行（AnswerScope）と同じ前処理: 壊れた結果（filter の無い count）は、条件なしと読まず、飛ばす
+  // 壊れた結果（filter の無い count）は、条件なしと読まず、飛ばす
   const readable = results.filter(isWellFormedResult);
   let state: AnswerView = {
     view: 'map',
@@ -164,6 +166,24 @@ export function applyExpandRequest(state: AnswerView, request: ExpandRequest, ct
         filter: widenForIds(calm.filter, request.candidateIds, ctx.byId),
         mapFocus: fit(request.bbox, request.candidateIds),
       };
+    case 'candidates': {
+      const box = unionBBox(
+        request.ids.flatMap((id) => {
+          const feature = ctx.byId.get(id);
+          const b = feature ? featureBBox(feature) : null;
+          return b ? [b] : [];
+        }),
+      );
+      // 地図の候補データがまだ無ければ、地図を開くだけにする
+      if (!box) return applyExpandRequest(calm, { type: 'view', view: 'map' }, ctx);
+      return {
+        ...calm,
+        view: 'map',
+        highlightIds: new Set(request.ids),
+        filter: widenForIds(calm.filter, request.ids, ctx.byId),
+        mapFocus: fit(box, request.ids),
+      };
+    }
     case 'candidate':
       return { ...selectCandidate(calm, request.id, true, ctx), view: 'photos' };
     case 'compare':
@@ -175,32 +195,105 @@ export function applyExpandRequest(state: AnswerView, request: ExpandRequest, ct
   }
 }
 
-// ---- 回答の中に出す図 ----
+// ---- 回答に出す表示は 1 つ ----
 
 /** 回答の中に出す図の種類。地図は MapPanel（集計の帯・一覧を含む）、グラフは AreaChartView。写真の比較は図に入れない（「詳細」で拡大ビューが開く） */
 export type FigureKind = Extract<ResultView, 'map' | 'chart'>;
 
+const CANDIDATE_ID = /^c-\d+-\d+-\d+$/;
+
+/** 候補の一覧の表（どの行にも候補 ID がある）。使い方の案内の表と分ける */
+export function isCandidateList(result: TableResult): boolean {
+  return Array.isArray(result.rows) && result.rows.length > 0 && result.rows.every((r) => typeof r?.id === 'string' && CANDIDATE_ID.test(r.id));
+}
+
 /**
- * 回答の結果から、回答の中に出す図の種類（並びは、拡大ビューのタブと同じ地図・グラフ）。結果カードにあった「グラフで見る」「地図で見る」の出し方を、そのまま写す:
- * - 件数（count）: 地図（グラフは「グラフ」のタブで見る。件数の内訳は、カードが文字で出す）
- * - 比較（compare）: グラフ（比べる地区が 1 つ以上あるときだけ）
- * - 地図の表示（map_focus）: 地図
- * - 表・検出画像・精度・お断り・知らない型・壊れた結果: 出さない
- * 壊れた結果は、拡大ビューの絞り込みと同じ前処理（isWellFormedResult）で飛ばす（filter の無い count は、図の条件にならない）
+ * 表示を 1 つに絞るときの順位（小さいほど優先。具体的な頼みほど上）: 地図の表示 > 候補 1 件の写真 > 地区の比較 > 候補の一覧 > 件数。
+ * 順位の対象でない結果（精度・お断り・使い方の案内の表・知らない型・壊れた結果）は null で、いつも出す
  */
-export function figureKinds(results: readonly ToolResult[]): FigureKind[] {
-  let map = false;
-  let chart = false;
-  for (const r of results.filter(isWellFormedResult)) {
-    if (r.type === 'count') {
-      map = true;
-    } else if (r.type === 'compare') {
-      if (Array.isArray(r.items) && r.items.length > 0) chart = true;
-    } else if (r.type === 'map_focus') {
-      if (Array.isArray(r.candidate_ids) && Array.isArray(r.bbox) && r.bbox.length === 4) map = true;
-    }
+function displayRank(r: ToolResult): number | null {
+  if (!isWellFormedResult(r)) return null;
+  switch (r.type) {
+    case 'map_focus':
+      return Array.isArray(r.candidate_ids) && Array.isArray(r.bbox) && r.bbox.length === 4 ? 1 : null;
+    case 'detection_image':
+      return typeof r.candidate_id === 'string' && r.candidate_id !== '' ? 2 : null;
+    case 'compare':
+      return Array.isArray(r.items) && r.items.length > 0 ? 3 : null;
+    case 'table':
+      return isCandidateList(r) ? 4 : null;
+    case 'count':
+      return Array.isArray(r.breakdown) && !!r.provenance ? 5 : null;
+    default:
+      return null;
   }
-  return [...(map ? (['map'] as const) : []), ...(chart ? (['chart'] as const) : [])];
+}
+
+/** 「表示を切り替える」の 1 件。open は地図・グラフの画面を開く。show は、2 位以下の結果を回答の中のその場に出す。どちらも、質問は送らない（LLM を呼ばない） */
+export type DisplaySwitch =
+  | { key: string; label: string; kind: 'open'; request: ExpandRequest }
+  | { key: string; label: string; kind: 'show'; index: number };
+
+export const MAX_SWITCHES = 2;
+
+export interface AnswerPlan {
+  /** 順位 1 位の結果の添字。順位の対象が無ければ null */
+  primary: number | null;
+  /** 回答の中に出さない結果（順位 2 位以下）の添字 */
+  hidden: ReadonlySet<number>;
+  /** 1 位の結果が図で見せるものなら、その図（比較: グラフ・地図の表示: 地図）。写真・件数は図を出さない */
+  figure: FigureKind | null;
+  /** ほかの見方。2 位以下の結果（順位の順）が先、そのあとに、1 位の結果と同じ対象の地図・グラフ。MAX_SWITCHES 件まで */
+  switches: DisplaySwitch[];
+}
+
+/** 回答の結果から、出す表示（1 つ）と、切り替えの候補を決める。同じ結果の組には、いつも同じ答えを返す */
+export function planAnswer(results: readonly ToolResult[]): AnswerPlan {
+  const ranked = results
+    .flatMap((result, index) => {
+      const rank = displayRank(result);
+      return rank === null ? [] : [{ result, index, rank }];
+    })
+    .sort((a, b) => a.rank - b.rank || a.index - b.index);
+  const [first, ...rest] = ranked;
+  if (!first) return { primary: null, hidden: new Set(), figure: null, switches: [] };
+
+  const figure: FigureKind | null = first.result.type === 'compare' ? 'chart' : first.result.type === 'map_focus' ? 'map' : null;
+  const switches: DisplaySwitch[] = [];
+  const offered = new Set<FigureKind>(figure ? [figure] : []);
+  const open = (view: FigureKind, request: ExpandRequest = { type: 'view', view }) => {
+    if (offered.has(view)) return;
+    offered.add(view);
+    switches.push({ key: view, kind: 'open', label: view === 'map' ? '地図で見る' : 'グラフで見る', request });
+  };
+  const show = (index: number, label: string) => switches.push({ key: `show-${index}`, kind: 'show', index, label });
+
+  for (const { result: r, index } of rest) {
+    if (r.type === 'map_focus') open('map', { type: 'focus', bbox: r.bbox, candidateIds: r.candidate_ids });
+    else if (r.type === 'compare') open('chart');
+    // 検出画像の題には候補 ID が入るので、題を使わない（ID は画面に出さない）
+    else if (r.type === 'detection_image') show(index, '候補 1 件の写真を見る');
+    else if (r.type === 'table') show(index, `${r.title}を見る`);
+    else if (r.type === 'count') show(index, `${r.title}の写真を見る`);
+  }
+
+  const r = first.result;
+  if (r.type === 'count') {
+    open('map');
+    open('chart');
+  } else if (r.type === 'table') {
+    open('map', { type: 'candidates', ids: r.rows.map((row) => row.id as string) });
+  } else if (r.type !== 'map_focus') {
+    open('map');
+  }
+
+  return { primary: first.index, hidden: new Set(rest.map((x) => x.index)), figure, switches: switches.slice(0, MAX_SWITCHES) };
+}
+
+/** 回答の中に出す図（多くても 1 つ） */
+export function figureKinds(results: readonly ToolResult[]): FigureKind[] {
+  const { figure } = planAnswer(results);
+  return figure ? [figure] : [];
 }
 
 // ---- 地図・グラフ・写真の比較の中の操作（回答の中の図でも、拡大ビューの中でも、その回答の状態へ当てる）----

@@ -16,12 +16,3 @@ export function ClassDefinitions() {
     </dl>
   );
 }
-
-/** 未判定を含む比較の回答に、畳まずに添える 1 行（3 分類の説明は、最初の画面の「くわしく」と、候補の詳細にある） */
-export function UncertainNote() {
-  return (
-    <p className="uncertain-note">
-      {CLASS_INFO.uncertain.short}: {CLASS_INFO.uncertain.summary}
-    </p>
-  );
-}

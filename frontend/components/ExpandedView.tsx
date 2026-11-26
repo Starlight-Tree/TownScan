@@ -15,10 +15,8 @@ interface Props {
   panels: Record<ResultView, ReactNode>;
   /** どの回答の拡大ビューか。回答の質問（無いとき〔最初の画面の「解析した地区を地図で見る」〕は null） */
   question: string | null;
-  /** 「閉じる」・Esc で閉じる。外す（マウントをやめる）のは、親 */
+  /** 右上の ✕・Esc で閉じて、回答へ戻る。外す（マウントをやめる）のは、親 */
   onClose: () => void;
-  /** 「チャットへ戻る」。チャットのタブを選ぶ（親が決める）。拡大ビューは閉じない */
-  onBackToChat: () => void;
   /** 閉じたとき、フォーカスを戻す要素（開いたボタン）を返す。閉じるときに呼ぶ。null・外れているときは、チャットの入力欄 */
   returnFocusTo: () => HTMLElement | null;
   /** 利用者の操作で開く・別の回答へ切り替えるたびに +1。変わったら、フォーカスをこの拡大ビュー（選んでいるタブ）へ移す（すでに中にあれば動かさない） */
@@ -33,10 +31,10 @@ interface Props {
  *
  * - 利用者の操作で開く・別の回答へ切り替えたとき（openNonce）、フォーカスを選んでいるタブ（すでにタブの帯か中にあれば動かさない。詳細の見出しへ移す操作のときは、その見出し）へ移す。回答が届いたことでは動かさない。
  * - Tab は、外へも抜けられる（フォーカストラップを作らない）。
- * - Esc で閉じる（中にフォーカスがあるとき）。ただし、中の部品が Esc を使ったとき（preventDefault。地図の選択の解除）と、詳細（stopPropagation。詳細だけを閉じる）は、閉じない。
+ * - 閉じる手段は、右上の ✕ と Esc（中にフォーカスがあるとき）の 1 通りで、どの画面（地図・グラフ・写真の比較）でも回答へ戻る。中の部品が Esc を使ったとき（preventDefault。地図の選択の解除）は、閉じない。
  * - 閉じると、フォーカスを開いたボタンへ戻す。開く・閉じるを live region で知らせない（フォーカスの移動で足りる）。
  */
-export function ExpandedView({ baseId, view, onViewChange, panels, question, onClose, onBackToChat, returnFocusTo, openNonce }: Props) {
+export function ExpandedView({ baseId, view, onViewChange, panels, question, onClose, returnFocusTo, openNonce }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const returnRef = useRef(returnFocusTo);
@@ -71,7 +69,7 @@ export function ExpandedView({ baseId, view, onViewChange, panels, question, onC
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Escape') return;
-    // 中の部品が Esc を使ったとき（地図の選択の解除）は、閉じない。詳細は stopPropagation するので、ここへ来ない
+    // 中の部品が Esc を使ったとき（地図の選択の解除）は、閉じない
     if (e.defaultPrevented) return;
     e.preventDefault();
     onClose();
@@ -89,8 +87,10 @@ export function ExpandedView({ baseId, view, onViewChange, panels, question, onC
           '解析した地区'
         )}
       </p>
-      <button type="button" className="btn btn--small expanded-view__back" onClick={onBackToChat}>
-        チャットへ戻る
+      <button type="button" className="expanded-view__close" aria-label="閉じる" title="閉じて回答に戻る（Esc）" onClick={onClose}>
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
       </button>
     </div>
   );

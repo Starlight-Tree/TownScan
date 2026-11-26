@@ -1,13 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   answerKey,
   applyExpandRequest,
   clearSelection,
   comparePhotos,
   detailLoaded,
-  figureKinds,
   initialAnswerView,
   NO_IDS,
   openCandidate,
@@ -47,7 +46,7 @@ function PhotosEmptyState() {
     // フォーカスできる中身が無いパネルなので、外枠をフォーカスできるようにする（キーボードの人がパネルへ入れるように）
     <div className="result-area__empty" tabIndex={0}>
       <p>候補を選ぶと、2018 年と 2023 年の写真を並べて見られます。</p>
-      <p className="result-area__empty-hint">地図の印、候補の一覧、チャットの結果の「詳細」から選べます。</p>
+      <p className="result-area__empty-hint">地図の印、候補の一覧、チャットの結果の写真から選べます。</p>
     </div>
   );
 }
@@ -58,7 +57,6 @@ interface PhotosPanelProps {
   focusNonce: number;
   /** 「写真の比較」を見ているか（結果領域のいまの画面が写真の比較か） */
   visible: boolean;
-  onClose: () => void;
   onShowOnMap: (detail: CandidateDetail) => void;
   onLoaded: (detail: CandidateDetail) => void;
 }
@@ -69,7 +67,7 @@ interface PhotosPanelProps {
  * 一度見えた詳細は、別のタブへ替えても保つ（外すと、戻したときに取り直す）。選んだ候補が替わったら、新しい候補は、また見えるまでマウントしない。
  * 見えたときにマウントするので、詳細の「フォーカスを移すか」（autoFocus）も、見えた時点の選び方で決まる
  */
-function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLoaded }: PhotosPanelProps) {
+function PhotosPanel({ selected, focusNonce, visible, onShowOnMap, onLoaded }: PhotosPanelProps) {
   const id = selected?.id ?? null;
   // 詳細を見せた候補の id。見えているあいだは選択に追いつき、見えていないあいだは、同じ候補なら保ち、別の候補（または選択なし）なら外す。
   // 描画の中で、自分の state だけを直す（React が、この描画をやり直す。効果で直すと、見えた直後の 1 描画だけ遅れる）
@@ -86,7 +84,6 @@ function PhotosPanel({ selected, focusNonce, visible, onClose, onShowOnMap, onLo
       candidateId={selected.id}
       autoFocus={selected.focus}
       focusNonce={focusNonce}
-      onClose={onClose}
       onShowOnMap={onShowOnMap}
       onLoaded={onLoaded}
     />
@@ -119,7 +116,7 @@ export function HomeClient() {
   const [focusNonce, setFocusNonce] = useState(0);
   // ---- 結果のタブ（ADR 0008）----
   const baseId = useId();
-  // チャットのタブを選んでいるか（開いたとき・ボタンで開き直したときは false＝開いた画面。「チャットへ戻る」・チャットのタブで true）
+  // チャットのタブを選んでいるか（開いたとき・ボタンで開き直したときは false＝開いた画面。チャットのタブを選ぶと true）
   const [showChat, setShowChat] = useState(false);
   // 利用者の操作で開く・別の回答へ切り替えるたびに +1（拡大ビューが、フォーカスを中へ移す合図）
   const [openNonce, setOpenNonce] = useState(0);
@@ -130,8 +127,6 @@ export function HomeClient() {
   const [announcement, setAnnouncement] = useState('');
   // コールバックの中で、最新の「チャットのタブを選んでいるか」を読むための控え
   const showChatRef = useRef(showChat);
-  // 「チャットへ戻る」を押したあと、フォーカスをチャットのタブへ移す合図
-  const backFocusRef = useRef(false);
 
   const areas = areasQ.state.status === 'ready' ? areasQ.state.data : NO_AREAS;
   const features = candQ.state.status === 'ready' ? candQ.state.data : null;
@@ -249,7 +244,6 @@ export function HomeClient() {
       kind={kind}
       answer={answer}
       state={states.get(answerKey(answer))}
-      withMap={figureKinds(answer.results).includes('map')}
       data={figureData}
       actions={figureActions}
     />
@@ -281,17 +275,6 @@ export function HomeClient() {
     },
     [expand, chooseView, baseId],
   );
-
-  /** 「チャットへ戻る」: チャットのタブへ（拡大ビューは閉じない） */
-  const backToChat = useCallback(() => {
-    backFocusRef.current = true;
-    selectTab('chat');
-  }, [selectTab]);
-  useLayoutEffect(() => {
-    if (!showChat || !backFocusRef.current) return;
-    backFocusRef.current = false;
-    document.getElementById(resultTabId(baseId, 'chat'))?.focus();
-  }, [showChat, baseId]);
 
   /** 回答が届いたとき（チャットが知らせる）。チャット以外のタブにいるときだけ、文字の印と 1 文の知らせを出す（フォーカスも画面も動かさない） */
   const onAnswer = useCallback(() => {
@@ -339,7 +322,6 @@ export function HomeClient() {
               onViewChange={chooseView}
               question={openQuestion}
               onClose={close}
-              onBackToChat={backToChat}
               returnFocusTo={returnFocusTo}
               openNonce={openNonce}
               panels={{
@@ -368,7 +350,6 @@ export function HomeClient() {
                     selected={current.selected}
                     focusNonce={focusNonce}
                     visible={current.view === 'photos'}
-                    onClose={closeDrawer}
                     onShowOnMap={showOnMap}
                     onLoaded={onDetailLoaded}
                   />

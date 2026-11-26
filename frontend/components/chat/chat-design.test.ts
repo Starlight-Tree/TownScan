@@ -103,12 +103,12 @@ describe('質問の吹き出し（.msg--user。DocuNavi の .message-question）
 });
 
 describe('続けて聞く（.follow-ups・.follow-up。DocuNavi の同名の規則）: 最後の回答の下に、枠なしの小さい文字で並べる', () => {
-  it('.follow-ups: 縦の列・左寄せ・列の幅いっぱい・上に区切りの線（宣言が DocuNavi と同じ）', () => {
+  it('.follow-ups: 縦の列・左寄せ・列の幅いっぱい・上に区切りの線（DocuNavi と同じ。違うのは、切り替えと質問の 2 組のあいだの gap）', () => {
     expect(rule('.follow-ups')).toEqual([
       ['display', 'flex'],
       ['flex-direction', 'column'],
       ['align-items', 'flex-start'],
-      ['gap', '0.1rem'],
+      ['gap', '0.7rem'],
       ['width', '100%'],
       ['align-self', 'center'],
       ['padding-top', '0.7rem'],
@@ -208,14 +208,13 @@ describe('回答の本文（.msg__text。DocuNavi の .message-assistant）', ()
     expect(rule('.msg__text strong')).toEqual([['color', 'var(--text-strong)']]);
   });
 
-  it('回答の入れ物（.msg--assistant）には掛けない: 結果カード・条件の帯・表の文字は、これまでの大きさのまま', () => {
+  it('回答の入れ物（.msg--assistant）には掛けない: 結果カード・表の文字は、これまでの大きさのまま', () => {
     const container = rule('.msg--assistant').map(([p]) => p);
     expect(container).not.toContain('font-size');
     expect(container).not.toContain('line-height');
     expect(container).not.toContain('color');
     // 結果カードの中身は、自分の大きさを持つ
     expect(rule('.result-card__text')).toContainEqual(['font-size', '13px']);
-    expect(rule('.answer-scope')).toContainEqual(['font-size', '12px']);
     expect(rule('.msg')).toContainEqual(['font-size', '14px']);
   });
 });

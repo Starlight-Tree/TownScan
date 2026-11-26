@@ -25,14 +25,13 @@ interface HarnessProps {
   question?: string | null;
   returnFocusTo?: () => HTMLElement | null;
   onCloseSpy?: () => void;
-  onBackSpy?: () => void;
 }
 
 /**
  * 親（HomeClient）と同じく、開く・閉じるを親が持つ。外（チャットの入力・開くボタン）も置く。
- * タブの帯（4 つのタブと、右端の「閉じる」）は、拡大ビューの外（チャットの上）にある。同じ baseId で、外に置く
+ * タブの帯（4 つのタブ）は、拡大ビューの外（チャットの上）にある。同じ baseId で、外に置く。閉じる ✕ は、拡大ビューの質問の行にある
  */
-function Harness({ content = panels(), question = '2018 年は未検出は何件？', returnFocusTo, onCloseSpy, onBackSpy }: HarnessProps) {
+function Harness({ content = panels(), question = '2018 年は未検出は何件？', returnFocusTo, onCloseSpy }: HarnessProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ResultView>('map');
   const [nonce, setNonce] = useState(0);
@@ -62,11 +61,6 @@ function Harness({ content = panels(), question = '2018 年は未検出は何件
             tabs={['chat', 'map', 'chart', 'photos']}
             selected={view}
             onSelect={(id) => id !== 'chat' && setView(id)}
-            trailing={
-              <button type="button" onClick={close}>
-                閉じる
-              </button>
-            }
             onEscape={close}
           />
         </div>
@@ -79,7 +73,6 @@ function Harness({ content = panels(), question = '2018 年は未検出は何件
           panels={content}
           question={question}
           openNonce={nonce}
-          onBackToChat={() => onBackSpy?.()}
           returnFocusTo={returnFocusTo ?? (() => openerRef.current)}
           onClose={close}
         />
@@ -93,7 +86,7 @@ const openButton = () => screen.getByRole('button', { name: '拡大ビューを�
 /** 拡大ビューの枠（開いていなければ null） */
 const root = () => document.querySelector<HTMLElement>('.expanded-view');
 const outerTab = (name: string) => within(screen.getByTestId('outer-tabs')).getByRole('tab', { name });
-const closeButton = () => within(screen.getByTestId('outer-tabs')).getByRole('button', { name: '閉じる' });
+const closeButton = () => within(root()!).getByRole('button', { name: '閉じる' });
 const open = () => userEvent.click(openButton());
 
 afterEach(() => {
@@ -116,15 +109,15 @@ describe('拡大ビュー: タブの画面の側の構造。モーダルでも�
     expect(root()).toBeNull();
   });
 
-  it('タブの帯は、外（チャットの上）にある。中にタブの帯を持たず、外のタブの aria-controls が中の画面を指す。中は、質問の行と 3 つの画面。「閉じる」は外の帯に置く', async () => {
+  it('タブの帯は、外（チャットの上）にある。中にタブの帯を持たず、外のタブの aria-controls が中の画面を指す。中は、質問の行と 3 つの画面。閉じる ✕ は、どの画面でも質問の行に 1 つ', async () => {
     render(<Harness />);
     await open();
     const outer = screen.getByTestId('outer-tabs');
     expect(within(outer).getAllByRole('tab').map((t) => t.textContent)).toEqual(['回答', '地図', 'グラフ', '画像']);
     expect(root()!.querySelector('[role="tablist"]')).toBeNull();
     expect(within(root()!).getAllByRole('tabpanel', { hidden: true })).toHaveLength(3);
-    expect(outer.querySelector('.result-area__bar')).toContainElement(closeButton());
-    expect(within(root()!).queryByRole('button', { name: '閉じる' })).toBeNull();
+    expect(within(outer).queryByRole('button', { name: '閉じる' })).toBeNull();
+    expect(closeButton()).toHaveAttribute('title', '閉じて回答に戻る（Esc）');
     const mapTab = outerTab('地図');
     const target = document.getElementById(mapTab.getAttribute('aria-controls')!)!;
     expect(root()).toContainElement(target);
@@ -138,14 +131,20 @@ describe('拡大ビュー: タブの画面の側の構造。モーダルでも�
     expect(root()!.querySelector('[aria-live], [role="status"], [role="alert"]')).toBeNull();
   });
 
-  it('どの回答かを示す行: 回答の質問（全文は title）と「チャットへ戻る」。質問が無いとき（最初の画面の地図）は「解析した地区」。「チャットへ戻る」は、親へ伝えるだけ（閉じない）', async () => {
-    const back = vi.fn();
-    const { unmount } = render(<Harness question="2018 年は未検出は何件ありますか？" onBackSpy={back} />);
+  it('どの回答かを示す行: 回答の質問（全文は title）と閉じる ✕（ほかの戻るボタンは無い）。質問が無いとき（最初の画面の地図）は「解析した地区」。どの画面でも ✕ で閉じる', async () => {
+    const closed = vi.fn();
+    const { unmount } = render(<Harness question="2018 年は未検出は何件ありますか？" onCloseSpy={closed} />);
     await open();
     expect(within(root()!).getByText(/2018 年は未検出は何件ありますか？/)).toHaveAttribute('title', '2018 年は未検出は何件ありますか？');
-    await userEvent.click(within(root()!).getByRole('button', { name: 'チャットへ戻る' }));
-    expect(back).toHaveBeenCalledTimes(1);
-    expect(root()).not.toBeNull();
+    expect(within(root()!).queryByRole('button', { name: 'チャットへ戻る' })).toBeNull();
+    let times = 0;
+    for (const name of ['地図', 'グラフ', '画像']) {
+      if (!root()) await open();
+      await userEvent.click(outerTab(name));
+      await userEvent.click(closeButton());
+      expect(root()).toBeNull();
+      expect(closed).toHaveBeenCalledTimes(++times);
+    }
     unmount();
 
     render(<Harness question={null} />);
