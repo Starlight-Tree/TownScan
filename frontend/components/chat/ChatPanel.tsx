@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, postChat } from '../../lib/api';
 import { figureKinds, type AnswerRef, type ExpandRequest, type FigureKind } from '../../lib/answer-view';
-import type { ChatRequestMessage, ToolCall } from '../../lib/api-types';
+import type { ChatRequestMessage, ToolCall, ToolResult } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { conversationErrorKind, getConversationMessages } from '../../lib/conversations-api';
 import {
@@ -54,6 +54,10 @@ const IN_SCOPE_SUGGESTIONS = [
 const OUT_OF_SCOPE_SUGGESTIONS = ['渋谷の新築は？'];
 
 export const SUGGESTIONS = [...IN_SCOPE_SUGGESTIONS, ...OUT_OF_SCOPE_SUGGESTIONS];
+
+/** 本文と補足（根拠）を分けて、補足を図と条件のあとに置くカード。壊れた結果は分けない（「表示できない結果」が 2 回出ないように） */
+const isSplit = (r: ToolResult | null | undefined) =>
+  (r?.type === 'count' && !!r.provenance && !!r.filter && Array.isArray(r.breakdown)) || (r?.type === 'compare' && !!r.provenance && Array.isArray(r.items));
 
 interface Props {
   actions: ChatActions;
@@ -521,9 +525,9 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
               {entry.content && <p className="msg__text">{entry.content}</p>}
               {entry.results?.map((r, i) => (
                 // 使ったツールは、同じ順番の結果カードの「根拠を見る」の中で見せる（数が合わないときは出さない）。
-                // 比較のカードだけ、本文（要点）をここに出し、補足（分類の意味・根拠）は図と条件のあとへ回す
+                // 件数と比較のカードは、本文（写真・要点）をここに出し、補足（分類の意味・根拠）は図と条件のあとへ回す
                 <ToolCallContext.Provider key={i} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
-                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part={r?.type === 'compare' ? 'body' : 'all'} />
+                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part={isSplit(r) ? 'body' : 'all'} />
                 </ToolCallContext.Provider>
               ))}
               {/* 図（地図・グラフ）は、結果カードの並びの下。出る種類は、回答の結果で決まる（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図） */}
@@ -539,7 +543,7 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
                 </ErrorBoundary>
               )}
               {entry.results?.map((r, i) =>
-                r?.type === 'compare' ? (
+                isSplit(r) ? (
                   <ToolCallContext.Provider key={`notes-${i}`} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
                     <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part="notes" />
                   </ToolCallContext.Provider>

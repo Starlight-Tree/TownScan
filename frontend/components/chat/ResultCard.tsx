@@ -14,13 +14,13 @@ import {
 } from './cards';
 import type { ResultActions } from './types';
 
-/** 比較のカードだけ、本文（body）と補足（notes）に分けて置ける。ほかの種類は、いつも全部（all）を 1 か所に出す */
+/** 件数と比較のカードは、本文（body）と補足（notes）に分けて置ける。ほかの種類は、いつも全部（all）を 1 か所に出す */
 export type ResultPart = 'all' | 'body' | 'notes';
 
 function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean, part: ResultPart) {
   switch (result.type) {
     case 'count':
-      return <CountCard result={result} actions={actions} staleRun={staleRun} />;
+      return <CountCard result={result} actions={actions} staleRun={staleRun} part={part} />;
     case 'table':
       return <TableCard result={result} actions={actions} staleRun={staleRun} />;
     case 'compare':

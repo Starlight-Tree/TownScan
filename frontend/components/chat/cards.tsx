@@ -5,7 +5,7 @@ import { useContext, useState } from 'react';
 import { useAreas } from '../../lib/areas-context';
 import type {
   AccuracyResult,
-  CandidateFeature,
+  CandidateClass,
   CompareResult,
   CountResult,
   DetectionImageResult,
@@ -14,7 +14,7 @@ import type {
   TableCell,
   TableResult,
 } from '../../lib/api-types';
-import { CLASS_INFO, isCandidateClass, refusalTitle } from '../../lib/classes';
+import { CLASS_INFO, classText, isCandidateClass, refusalTitle } from '../../lib/classes';
 import { countRank } from '../../lib/count-order';
 import { compareSummary } from '../../lib/compare-summary';
 import { candidateImageUrl } from '../../lib/api';
@@ -22,7 +22,7 @@ import { formatNumber } from '../../lib/format';
 import { ALL_FILTER, areaLabel, areaScopeIds, filterFromResults } from '../../lib/result-view';
 import { CandidateFeaturesContext } from '../../lib/candidates-context';
 import { CandidateImage } from '../CandidateImage';
-import { ClassBadge } from '../ClassBadge';
+import { ClassBadge, ClassSwatch } from '../ClassBadge';
 import { classOfCell, reasonOfCell } from './cell';
 import { MSG_STALE_BUTTON, MSG_STALE_PHOTO } from './conversation';
 import { UncertainNote } from './ClassGuide';
@@ -47,64 +47,107 @@ function SyntheticChip({ kind }: { kind: string }) {
 
 // ---- 件数 ----
 
-/** 件数のカードの表で、はじめに出す行の数 */
-const COUNT_FIRST_ROWS = 5;
+/** 写真のカードで、はじめに出す件数 */
+const PHOTO_FIRST = 4;
+
+const PHOTO_YEARS = [2018, 2023] as const;
+
+/** 写真のカード 1 枚ぶん。候補 ID は画面に出さない（読み上げの名前と写真の説明にだけ使う） */
+interface PhotoItem {
+  id: string;
+  place: string;
+  areaM2: string;
+  cls: CandidateClass | null;
+  reason?: string;
+}
+
+function PhotoCard({ item, tag, actions, staleRun }: { item: PhotoItem; tag: string | null; actions: ResultActions; staleRun: boolean }) {
+  return (
+    <li className="photo-card">
+      {!staleRun && (
+        <div className="image-pair">
+          {PHOTO_YEARS.map((year) => (
+            <CandidateImage key={year} src={candidateImageUrl(item.id, year)} year={year} candidateId={item.id} />
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        className="photo-card__open"
+        disabled={staleRun}
+        title={staleRun ? MSG_STALE_BUTTON : undefined}
+        onClick={() => actions.openCandidate(item.id)}
+      >
+        <span className="photo-card__place">{item.place}</span>
+        <span className="photo-card__area">{item.areaM2} m²</span>
+        {tag && item.cls && (
+          <span className="photo-card__tag">
+            <ClassSwatch cls={item.cls} size={12} />
+            {tag}
+          </span>
+        )}
+        <span className="photo-card__more">
+          詳細<span className="visually-hidden">（{item.id}）</span>
+        </span>
+      </button>
+    </li>
+  );
+}
 
 /**
- * 件数の結果に当たる候補の表（2018 年は未検出が先。同じ分類の中は面積の大きい順）。件数の結果は行を持たないので、地図と同じ候補データから作る。
- * 件数が結果の値と合わないとき（データが別の解析結果など）は、呼ぶ側が出さない
+ * 候補を、2018 年と 2023 年の写真のカードで並べる。grouped なら、分類の見出しで区切る（items は分類ごとに続けて並んでいること）。
+ * 見出しの件数は、隠れているぶんも含む。見出しがあるときのカードの札は、未判定の理由だけ。見出しが無く分類が混ざるときは、tagAll で全部に付ける
  */
-function CountRows({ rows, showClass, actions }: { rows: CandidateFeature[]; showClass: boolean; actions: ResultActions }) {
-  const { nameOf } = useAreas();
+function PhotoCards({
+  items,
+  label,
+  grouped = false,
+  tagAll = false,
+  actions,
+  staleRun = false,
+}: {
+  items: PhotoItem[];
+  label: string;
+  grouped?: boolean;
+  tagAll?: boolean;
+  actions: ResultActions;
+  staleRun?: boolean;
+}) {
   const [open, setOpen] = useState(false);
-  const shown = open ? rows : rows.slice(0, COUNT_FIRST_ROWS);
-  const rest = rows.length - COUNT_FIRST_ROWS;
+  const shown = open ? items : items.slice(0, PHOTO_FIRST);
+  const groups: { cls: CandidateClass | null; items: PhotoItem[] }[] = [];
+  for (const item of shown) {
+    const last = groups[groups.length - 1];
+    if (last && (!grouped || last.cls === item.cls)) last.items.push(item);
+    else groups.push({ cls: item.cls, items: [item] });
+  }
+  const tagOf = (item: PhotoItem) => {
+    if (!item.cls) return null;
+    if (tagAll) return classText(item.cls, item.reason);
+    const held = classText(item.cls, item.reason);
+    return held === CLASS_INFO[item.cls].short ? null : held;
+  };
   return (
     <>
-      <ScrollHint label="候補の表（横にスクロールできます）">
-        <table className="data-table data-table--chat">
-          <caption className="visually-hidden">
-            {showClass ? '候補（2018 年は未検出が先。同じ分類の中は面積の大きい順）' : '候補（面積の大きい順）'}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">地区</th>
-              {showClass && <th scope="col">分類</th>}
-              <th scope="col">面積（m²）</th>
-              <th scope="col">
-                <span className="visually-hidden">操作</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map(({ properties: p }) => (
-              <tr key={p.id}>
-                <td>
-                  {nameOf(p.area_id)}
-                  <span className="data-table__sub">
-                    <span className="visually-hidden">候補 ID: </span>
-                    {p.id}
-                  </span>
-                </td>
-                {showClass && (
-                  <td>
-                    {isCandidateClass(p.class) ? <ClassBadge cls={p.class} reason={p.reason} short /> : renderCell('class', p.class, nameOf)}
-                  </td>
-                )}
-                <td>{formatNumber(p.area_m2)}</td>
-                <td>
-                  <button type="button" className="btn btn--small" onClick={() => actions.openCandidate(p.id)}>
-                    詳細<span className="visually-hidden">（{p.id}）</span>
-                  </button>
-                </td>
-              </tr>
+      {staleRun && <p className="empty-note">{MSG_STALE_PHOTO}</p>}
+      {groups.map((group) => (
+        <div key={group.items[0]?.id} className="photo-group">
+          {grouped && group.cls && (
+            <h4 className="photo-group__title">
+              <ClassSwatch cls={group.cls} size={14} />
+              {CLASS_INFO[group.cls].short}（{formatNumber(items.filter((i) => i.cls === group.cls).length)} 件）
+            </h4>
+          )}
+          <ul className="photo-grid" aria-label={grouped && group.cls ? `${label}（${CLASS_INFO[group.cls].short}）` : label}>
+            {group.items.map((item) => (
+              <PhotoCard key={item.id} item={item} tag={tagOf(item)} actions={actions} staleRun={staleRun} />
             ))}
-          </tbody>
-        </table>
-      </ScrollHint>
-      {rest > 0 && (
+          </ul>
+        </div>
+      ))}
+      {items.length > PHOTO_FIRST && (
         <button type="button" className="count-more" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? `先頭の ${COUNT_FIRST_ROWS} 件だけ表示` : `全 ${formatNumber(rows.length)} 件を表示`}
+          {open ? `先頭の ${PHOTO_FIRST} 件だけ表示` : `全 ${formatNumber(items.length)} 件を表示`}
         </button>
       )}
     </>
@@ -112,7 +155,17 @@ function CountRows({ rows, showClass, actions }: { rows: CandidateFeature[]; sho
 }
 
 // 地図は、回答の中の図（ChatPanel の renderFigure）に出る。件数のカードに、拡大ビューを開くボタンは無い
-export function CountCard({ result, actions, staleRun = false }: { result: CountResult; actions: ResultActions; staleRun?: boolean }) {
+export function CountCard({
+  result,
+  actions,
+  staleRun = false,
+  part = 'all',
+}: {
+  result: CountResult;
+  actions: ResultActions;
+  staleRun?: boolean;
+  part?: 'all' | 'body' | 'notes';
+}) {
   const { nameOf } = useAreas();
   const features = useContext(CandidateFeaturesContext);
   const cls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
@@ -130,6 +183,13 @@ export function CountCard({ result, actions, staleRun = false }: { result: Count
       .map((b) => `${isCandidateClass(b.key) ? CLASS_INFO[b.key].short : b.label} ${formatNumber(b.value)} 件`)
       .join('・');
   }
+  if (part === 'notes') {
+    return (
+      <div className="answer-notes">
+        <ProvenanceBox provenance={result.provenance} />
+      </div>
+    );
+  }
   const scope = areaScopeIds(filter);
   const rows =
     !features || staleRun
@@ -142,7 +202,7 @@ export function CountCard({ result, actions, staleRun = false }: { result: Count
                 b.properties.area_m2 - a.properties.area_m2 ||
                 a.properties.id.localeCompare(b.properties.id),
             );
-  // 表を出せるときは、枠・見出し・内訳を出さない（件数は返答の本文が言う）。出せないとき（別の解析結果・0 件）は、見出しと内訳を残す
+  // 写真を出せるときは、枠・見出し・内訳を出さない（件数は返答の本文が言う）。出せないとき（別の解析結果・0 件）は、見出しと内訳を残す
   const table = rows && rows.length > 0 && rows.length === result.total ? rows : null;
   return (
     <section className={table ? 'result-card result-card--plain' : 'result-card'} aria-label={result.title}>
@@ -153,8 +213,21 @@ export function CountCard({ result, actions, staleRun = false }: { result: Count
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
       {!table && context && <p className="count-context">{context}</p>}
-      {table && <CountRows rows={table} showClass={!cls} actions={actions} />}
-      <ProvenanceBox provenance={result.provenance} />
+      {table && (
+        <PhotoCards
+          label="候補の写真"
+          grouped={!cls}
+          items={table.map(({ properties: p }) => ({
+            id: p.id,
+            place: nameOf(p.area_id),
+            areaM2: formatNumber(p.area_m2),
+            cls: isCandidateClass(p.class) ? p.class : null,
+            reason: p.reason,
+          }))}
+          actions={actions}
+        />
+      )}
+      {part === 'all' && <ProvenanceBox provenance={result.provenance} />}
     </section>
   );
 }
@@ -174,14 +247,37 @@ function renderCell(colKey: string, value: TableCell | undefined, nameOf: (id: s
 
 export function TableCard({ result, actions, staleRun = false }: { result: TableResult; actions: ResultActions; staleRun?: boolean }) {
   const { nameOf } = useAreas();
-  const hasDetail = result.rows.some((r) => typeof r.id === 'string' && CANDIDATE_ID.test(r.id));
-  // 詳細のボタンがある表は、候補 ID の列を、最初の列の名前の下に小さく添える。チャットの幅（340px 前後）では、
-  // ID・地区・分類の 3 列で幅を使い切り、並びの基準の面積と「詳細」が横スクロールの先に隠れていた
-  const idColumn = hasDetail && result.columns.length > 1 ? result.columns.find((c) => c.key === 'id') : undefined;
-  const columns = idColumn ? result.columns.filter((c) => c !== idColumn) : result.columns;
-  // 候補の一覧（詳細のボタンがある表）は、枠を重ねない
+  // 候補の一覧（どの行にも候補 ID がある）は、表でなく写真のカードで出す。並びは API が返した順（面積の大きい順）のままなので、分類は見出しでなくカードに添える
+  const isCandidateList = result.rows.length > 0 && result.rows.every((r) => typeof r.id === 'string' && CANDIDATE_ID.test(r.id));
+  if (isCandidateList) {
+    const items: PhotoItem[] = result.rows.map((row) => {
+      const cls = classOfCell(row.class);
+      return {
+        id: row.id as string,
+        place: typeof row.area === 'string' ? row.area : typeof row.area_id === 'string' ? nameOf(row.area_id) : '—',
+        areaM2: typeof row.area_m2 === 'number' ? formatNumber(row.area_m2) : '—',
+        cls,
+        reason: reasonOfCell(row.class),
+      };
+    });
+    return (
+      <section className="result-card result-card--plain" aria-label={result.title}>
+        <header className="result-card__head">
+          <h3 className="result-card__title">{result.title}</h3>
+          <SyntheticChip kind={result.provenance.run_kind} />
+        </header>
+        <PhotoCards label={result.title} items={items} tagAll actions={actions} staleRun={staleRun} />
+        {result.total > result.shown && (
+          <p className="result-card__note">
+            全 {formatNumber(result.total)} 件中、上位 {formatNumber(result.shown)} 件
+          </p>
+        )}
+        <ProvenanceBox provenance={result.provenance} />
+      </section>
+    );
+  }
   return (
-    <section className={hasDetail ? 'result-card result-card--plain' : 'result-card'} aria-label={result.title}>
+    <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
         <h3 className="result-card__title">{result.title}</h3>
         <SyntheticChip kind={result.provenance.run_kind} />
@@ -193,48 +289,19 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
           <table className="data-table data-table--chat">
             <thead>
               <tr>
-                {columns.map((c, i) => (
+                {result.columns.map((c) => (
                   <th key={c.key} scope="col">
                     {c.label}
-                    {idColumn && i === 0 && <span className="visually-hidden">と{idColumn.label}</span>}
                   </th>
                 ))}
-                {hasDetail && (
-                  <th scope="col">
-                    <span className="visually-hidden">操作</span>
-                  </th>
-                )}
               </tr>
             </thead>
             <tbody>
               {result.rows.map((row, i) => (
                 <tr key={row.id ?? i}>
-                  {columns.map((c, ci) => (
-                    <td key={c.key}>
-                      {renderCell(c.key, row[c.key], nameOf)}
-                      {idColumn && ci === 0 && typeof row.id === 'string' && (
-                        <span className="data-table__sub">
-                          <span className="visually-hidden">{idColumn.label}: </span>
-                          {row.id}
-                        </span>
-                      )}
-                    </td>
+                  {result.columns.map((c) => (
+                    <td key={c.key}>{renderCell(c.key, row[c.key], nameOf)}</td>
                   ))}
-                  {hasDetail && (
-                    <td>
-                      {typeof row.id === 'string' && CANDIDATE_ID.test(row.id) && (
-                        <button
-                          type="button"
-                          className="btn btn--small"
-                          disabled={staleRun}
-                          title={staleRun ? MSG_STALE_BUTTON : undefined}
-                          onClick={() => actions.openCandidate(row.id as string)}
-                        >
-                          詳細<span className="visually-hidden">（{row.id}）</span>
-                        </button>
-                      )}
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>

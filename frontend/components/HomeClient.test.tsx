@@ -352,13 +352,14 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     expect(map).toHaveAttribute('data-focus-bbox', mapFocus.bbox.join(','));
   });
 
-  it('件数のカードの表は、地図と同じ候補データから出る。行の「詳細」で、写真の比較が開く', async () => {
+  it('件数のカードの写真は、地図と同じ候補データから出る。カードの「詳細」で、写真の比較が開く', async () => {
     await ask([{ ...count, total: 1, overall: { total: 2, uncertain: 1 } }]);
     const card = screen.getByRole('region', { name: count.title });
-    const rows = await within(card).findAllByRole('row');
-    expect(rows).toHaveLength(2); // 見出しと、2018 年は未検出の 1 件（未判定の c-1-2-2 は入らない）
-    expect(rows[1]).toHaveTextContent('c-1-2-1');
-    expect(rows[1]).toHaveTextContent('123.4');
+    const photos = await within(card).findAllByRole('listitem');
+    const shown = photos.filter((li) => li.classList.contains('photo-card'));
+    expect(shown).toHaveLength(1); // 2018 年は未検出の 1 件（未判定の c-1-2-2 は入らない）
+    expect(shown[0]).toHaveTextContent('c-1-2-1');
+    expect(shown[0]).toHaveTextContent('123.4 m²');
     await userEvent.click(within(card).getByRole('button', { name: /詳細.*c-1-2-1/ }));
     expectOpenDialog('画像');
     expect(await screen.findByRole('region', { name: '候補の詳細' })).toBeInTheDocument();

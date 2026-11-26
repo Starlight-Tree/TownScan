@@ -1705,30 +1705,6 @@ p.banner {
   min-width: 0;
 }
 
-.data-table--chat .class-badge {
-  white-space: normal;
-}
-
-.data-table--chat .btn {
-  white-space: nowrap;
-}
-
-/* 「詳細」のボタン: 表の外の並びで付く左の余白（.btn--small の margin-left）と横の余白を詰める */
-.data-table--chat .btn--small {
-  margin-left: 0;
-  padding: 0 10px;
-}
-
-/* 候補 ID は、最初の列の名前の下に、小さく添える（列にすると、狭いチャットで面積・詳細が隠れる） */
-.data-table__sub {
-  display: block;
-  font-size: 11px;
-  color: var(--muted);
-  line-height: 1.4;
-  /* ID は、列が狭いときだけ途中で折り返してよい */
-  overflow-wrap: anywhere;
-}
-
 .data-table .cell-mark {
   width: 1%;
   padding-right: 4px;
@@ -1741,6 +1717,7 @@ p.banner {
   line-height: 1.4;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .data-table tr.is-chosen td {
@@ -1978,6 +1955,101 @@ p.banner {
   font-size: 12px;
   padding: 1px 10px;
   border-radius: 999px;
+}
+
+/* ---- 候補の写真のカード ----
+   チャットの列では 2 枚並べ、狭い幅では 1 枚。カードのどこを押しても詳細が開く（ボタンの当たり判定を、カード全体に広げる） */
+.photo-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photo-group__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 600px) {
+  .photo-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.photo-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.photo-card .image-pair {
+  gap: 4px;
+}
+
+.photo-card__open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.photo-card__open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.photo-card__open:disabled {
+  cursor: default;
+}
+
+.photo-card__place {
+  font-weight: 700;
+}
+
+.photo-card__area {
+  font-variant-numeric: tabular-nums;
+}
+
+.photo-card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.photo-card__more {
+  margin-left: auto;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.photo-card__open:disabled .photo-card__more {
+  color: var(--muted);
 }
 
 /* ---- 地図 ----

@@ -49,11 +49,10 @@ describe('チャット欄の規則: 読み上げ用の span が、文書の高�
     expect(css).toMatch(/\.table-scroll-wrap\[data-overflow-start\]::before,\s*\.table-scroll-wrap\[data-overflow-end\]::after\s*\{[^}]*opacity:\s*1/);
   });
 
-  it('チャット用の表（.data-table--chat）は、余白を詰め、見出し・文字を折り返す（面積・詳細が横スクロールの先に隠れない）', () => {
+  it('チャット用の表（.data-table--chat）は、余白を詰め、見出し・文字を折り返す（列が横スクロールの先に隠れない）', () => {
     const joined = css.match(/\.data-table--chat th,\s*\.data-table--chat td\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(joined).toMatch(/white-space:\s*normal/);
     expect(joined).toMatch(/padding:\s*6px 7px/);
-    expect(css).toMatch(/\.data-table--chat \.btn\s*\{[^}]*white-space:\s*nowrap/);
   });
 });
 

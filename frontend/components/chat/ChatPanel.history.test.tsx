@@ -603,13 +603,14 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
     // 会話の先頭（回答より前）
     const first = chatRegion().querySelector('.chat__scroll')!.firstElementChild;
     expect(first).toBe(note);
-    for (const button of [...screen.getAllByRole('button', { name: /^詳細（/ }), screen.getByRole('button', { name: '地図で見る' }), screen.getByRole('button', { name: '詳細を開く' })]) {
+    for (const button of [...screen.getAllByRole('button', { name: /詳細（c-/ }), screen.getByRole('button', { name: '地図で見る' }), screen.getByRole('button', { name: '詳細を開く' })]) {
       expect(button).toBeDisabled();
     }
     expect(screen.queryByTestId('figure')).not.toBeInTheDocument();
     expect(renderFigure).not.toHaveBeenCalled();
     expect(chatRegion().querySelector('img')).toBeNull();
-    expect(screen.getByText(MSG_STALE_PHOTO)).toBeInTheDocument();
+    // 候補の一覧と検出画像の、2 つのカードに出る
+    expect(screen.getAllByText(MSG_STALE_PHOTO)).toHaveLength(2);
     // 数字・題名は、保存された値のまま
     expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: count.title }).querySelector('.count-value')).toHaveTextContent('33');
