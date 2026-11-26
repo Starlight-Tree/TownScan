@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { AreaSummary, CandidateClass, CandidateFeature } from '../../lib/api-types';
-import { isCandidateClass } from '../../lib/classes';
+import { CLASS_ORDER, isCandidateClass } from '../../lib/classes';
 import { formatNumber } from '../../lib/format';
 import {
   BASE_LAYERS,
@@ -69,6 +69,9 @@ const TILE_NOTICE: Record<TileStatus, string | null> = {
   partial: 'この範囲の一部には、この年の写真がありません（標準地図を表示しています）。',
   none: 'この範囲には、この年の写真がありません（標準地図を表示しています）。',
 };
+
+/** 回答の中の地図は、地区の枠を押しても絞り込まない（戻す操作を置いていないため。絞り込みは「拡大」の地図で） */
+const ignoreAreaSelect = () => {};
 
 export function MapPanel(props: Props) {
   const { areas, areasState, candidatesState, focus, selectedId, highlightIds } = props;
@@ -183,6 +186,7 @@ export function MapPanel(props: Props) {
     // 外側の tabpanel が「地図」と名乗るので、ここに同じ名前のランドマークを重ねない
     <div className="map-panel">
       {/* 1 行目は地図の見せ方（種類・地区の枠）、2 行目は対象の地区（選択と、寄せ直し）。狭い幅で折り返すとき、地区の選択に 1 行ぶんの幅が回る */}
+      {!props.inline && (
       <div className="map-toolbar">
         <div className="map-toolbar__group" role="group" aria-label="地図の種類">
           {BASE_LAYER_ORDER.map((id) => (
@@ -231,9 +235,18 @@ export function MapPanel(props: Props) {
           表示範囲を戻す
         </button>
       </div>
+      )}
 
-      {/* 分類の件数と、表示の切り替え（チェックボックス）を兼ねる。地図に重ねる凡例は無い */}
-      <SummaryStrip areas={areas} filter={filter} onFilterChange={changeFilter} />
+      {/* 回答の中の地図は、印の凡例だけ。切り替えは「拡大」で開く地図にある。拡大ビューは、分類の件数と表示の切り替え（チェックボックス）を兼ねる帯。地図に重ねる凡例は無い */}
+      {props.inline ? (
+        <div className="map-legend" role="group" aria-label="地図の印">
+          {CLASS_ORDER.filter((c) => filter.classes.has(c)).map((c) => (
+            <ClassBadge key={c} cls={c} short />
+          ))}
+        </div>
+      ) : (
+        <SummaryStrip areas={areas} filter={filter} onFilterChange={changeFilter} />
+      )}
 
       {/* Esc は、地図の中（印・地図の本体）でも、選択中の候補のカードの中でも、選択を外す */}
       <div className="map-stage" ref={stageRef} onKeyDown={onStageKeyDown}>
@@ -246,7 +259,7 @@ export function MapPanel(props: Props) {
           highlightIds={highlightIds}
           focus={activeFocus}
           onSelect={props.onSelect}
-          onAreaSelect={onAreaChange}
+          onAreaSelect={props.inline ? ignoreAreaSelect : onAreaChange}
           onTileStatus={setTileStatus}
           onZoom={setZoom}
           onClearSelection={props.onClearSelection ? clearSelection : undefined}
@@ -326,7 +339,7 @@ export function MapPanel(props: Props) {
         </p>
       </div>
 
-      <CandidateList areaId={listAreaId} multiArea={multiArea} cls={onlyClass} onSelect={props.onOpen} />
+      {!props.inline && <CandidateList areaId={listAreaId} multiArea={multiArea} cls={onlyClass} onSelect={props.onOpen} />}
     </div>
   );
 }

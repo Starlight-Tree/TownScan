@@ -193,6 +193,8 @@ export interface CountResult {
   title: string;
   total: number;
   breakdown: Array<{ key: string; label: string; value: number }>;
+  /** 分類で絞ったときだけ: 同じ地区の候補の全体と、うち判定保留（古い保存済みの回答には無い） */
+  overall?: { total: number; uncertain: number };
   filter: ResultFilter;
   provenance: Provenance;
 }

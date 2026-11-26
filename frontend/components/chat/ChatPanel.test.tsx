@@ -599,12 +599,12 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
 
   const kindsShown = () => screen.queryAllByTestId(/^figure-/).map((el) => el.dataset.testid);
 
-  it('件数: 地図とグラフ（この順）。結果カードの並びの下（根拠の箱より後）に出る', async () => {
+  it('件数: 地図だけ。結果カードの並びの下（根拠の箱より後）に出る', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [count])));
     const { input } = setupFigures();
     await userEvent.type(input(), '何件？{Enter}');
     await screen.findByRole('region', { name: count.title });
-    expect(kindsShown()).toEqual(['figure-map', 'figure-chart']);
+    expect(kindsShown()).toEqual(['figure-map']);
     const card = screen.getByRole('region', { name: count.title });
     for (const f of screen.getAllByTestId(/^figure-/)) {
       expect(card.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -654,10 +654,9 @@ describe('回答の中の図（renderFigure。結果カードの並びの下に�
     const [first, second] = figure.mock.calls.filter((c, i, all) => all.findIndex((x) => x[0].id === c[0].id) === i).map((c) => c[0]);
     expect(first).toEqual({ id: expect.any(String), results: [count, table], question: 'ひとつめ' });
     expect(second).toEqual({ id: expect.any(String), results: [compare], question: 'ふたつめ' });
-    expect(kindsShown()).toEqual(['figure-map', 'figure-chart', 'figure-chart']);
+    expect(kindsShown()).toEqual(['figure-map', 'figure-chart']);
     const ids = screen.getAllByTestId(/^figure-/).map((el) => el.dataset.answer);
-    expect(ids[0]).toBe(ids[1]);
-    expect(ids[2]).not.toBe(ids[0]);
+    expect(ids[1]).not.toBe(ids[0]);
   });
 
   it('renderFigure を渡さなければ、図は出ない（カードだけ）。拡大ビューを開く操作も呼ばない', async () => {
@@ -722,25 +721,24 @@ describe('チャットのスクロール位置（開いた直後は説明の見�
 });
 
 describe('比較の回答の並び（本文 → 要点 → 条件 → 補足。2026-11-26）', () => {
-  it('比較の要点は本文のすぐ下（枠なし）。分類の意味・根拠を見るは、条件の帯のあとに 1 かたまりで置く', async () => {
+  it('比較の要点と判定保留の 1 行は本文のすぐ下（枠なし）。根拠を見るは、条件の帯のあとに置く', async () => {
     fetchMock.mockResolvedValue(jsonResponse(reply('比較です。', [compare])));
     const { input } = setup({ areas });
     await userEvent.type(input(), '比べて{Enter}');
     const card = await screen.findByRole('region', { name: compare.title });
     const scope = screen.getByRole('group', { name: 'この回答の対象・条件' });
-    const guide = screen.getByText('分類の意味', { selector: 'summary' });
     const provenance = screen.getByText('根拠を見る', { selector: 'summary' });
     const text = screen.getByText('比較です。');
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(card).toHaveClass('result-card--plain');
     expect(follows(text, card)).toBe(true);
     expect(follows(card, scope)).toBe(true);
-    expect(follows(scope, guide)).toBe(true);
-    expect(follows(guide, provenance)).toBe(true);
-    // 補足は、要点のカードの外（同じ折りたたみが 2 回出ない）
-    expect(card.contains(guide)).toBe(false);
+    expect(follows(scope, provenance)).toBe(true);
+    expect(card).toContainElement(screen.getByText(/^判定保留: /));
+    expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
+    // 根拠は、要点のカードの外（図と条件のあと）
     expect(card.contains(provenance)).toBe(false);
-    expect(guide.closest('.answer-notes')).toBe(provenance.closest('.answer-notes'));
+    expect(provenance.closest('.answer-notes')).not.toBeNull();
   });
 });
 
@@ -1097,7 +1095,7 @@ describe('入力欄（DocuNavi の Composer と同じ作り: 枠の中の伸び�
     expect(input()).toHaveAttribute('id', 'chat-input');
     expect(input()).toHaveAttribute('rows', '1');
     expect(input()).toHaveAttribute('maxlength', '2000');
-    expect(input()).toHaveAttribute('placeholder', '例: 新規出現の候補は何件ありますか？');
+    expect(input()).toHaveAttribute('placeholder', '例: 候補は何件ありますか？');
     const field = input().closest('.chat__field') as HTMLElement;
     expect(field).not.toBeNull();
     expect(field).toContainElement(send());

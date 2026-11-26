@@ -612,7 +612,7 @@ describe('開き直した会話の、解析結果（run）の食い違い（仕�
     expect(screen.getByText(MSG_STALE_PHOTO)).toBeInTheDocument();
     // 数字・題名は、保存された値のまま
     expect(screen.getByRole('region', { name: count.title })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: count.title }).querySelector('.count-hero__value')).toHaveTextContent('33');
+    expect(screen.getByRole('region', { name: count.title }).querySelector('.count-value')).toHaveTextContent('33');
     expect(screen.getByRole('region', { name: table.title })).toBeInTheDocument();
     // 質問の例のボタン（ask）は、新しい質問を送るだけなので、そのまま使える
     const suggestion = within(screen.getByRole('note', { name: /お答えできません|範囲外|お断り/ })).getAllByRole('button')[0]!;

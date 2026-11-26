@@ -43,7 +43,7 @@ import type { ChatActions, ChatEntry, ResultActions } from './types';
 
 /** 答えられる質問の例 */
 const IN_SCOPE_SUGGESTIONS = [
-  '新規出現の候補は何件ありますか？',
+  '候補は何件ありますか？',
   '地区ごとの候補数を比べて',
   '面積の大きい候補を一覧にして',
   'いちばん大きい候補の写真を見せて',

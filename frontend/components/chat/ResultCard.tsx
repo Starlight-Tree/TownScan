@@ -20,7 +20,7 @@ export type ResultPart = 'all' | 'body' | 'notes';
 function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean, part: ResultPart) {
   switch (result.type) {
     case 'count':
-      return <CountCard result={result} />;
+      return <CountCard result={result} actions={actions} staleRun={staleRun} />;
     case 'table':
       return <TableCard result={result} actions={actions} staleRun={staleRun} />;
     case 'compare':

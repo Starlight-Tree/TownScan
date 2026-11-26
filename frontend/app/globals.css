@@ -1288,11 +1288,6 @@ p.banner {
   overflow-wrap: anywhere;
 }
 
-.class-guide .class-guide__list {
-  background: var(--bg);
-  border-radius: 8px;
-}
-
 .class-guide__item .class-badge {
   white-space: normal;
 }
@@ -1448,6 +1443,42 @@ p.banner {
   color: var(--muted);
 }
 
+/* 件数のカード: 聞かれた数は見出しの中。下に、全体の数（または内訳）と、判定保留の 1 行 */
+.count-value {
+  font-size: 22px;
+}
+
+.count-context {
+  font-size: 13px;
+}
+
+.uncertain-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 表の続きを開くボタン（枠なしの文字のボタン） */
+.count-more {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 回答の中の地図の、印の凡例 */
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 12px;
+}
+
 /* ---- 回答の中の図（地図・グラフ。components/AnswerFigure.tsx）----
    枠・背景・幅は結果カードと同じ（.result-card を重ねて使う。幅は、回答の列＝--chat-w のまま）。頭の行に、名前と「拡大」ボタン。
    色は既存のトークン（--border・--surface・--surface-muted・--muted）だけで、ライト・ダークとも、結果カードと同じに読める。
@@ -1514,47 +1545,11 @@ p.banner {
   padding: 0;
 }
 
-.count-hero {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.count-hero__value {
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.count-hero__unit {
-  font-size: 14px;
-}
-
 .chip-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
-}
-
-.breakdown {
-  display: grid;
-  gap: 8px;
-}
-
-.breakdown__row {
-  display: grid;
-  grid-template-columns: minmax(80px, 38%) minmax(0, 1fr) 48px;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-}
-
-.breakdown__value {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .bar {
@@ -2994,9 +2989,6 @@ p.banner {
   }
   .auth-main {
     padding: 32px 16px 48px;
-  }
-  .breakdown__row {
-    grid-template-columns: minmax(70px, 34%) minmax(0, 1fr) 40px;
   }
 }
 

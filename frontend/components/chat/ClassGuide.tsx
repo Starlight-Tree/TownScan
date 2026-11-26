@@ -17,15 +17,11 @@ export function ClassDefinitions() {
   );
 }
 
-/**
- * 回答のカードに添える、分類の意味の折りたたみ。件数・比較・一覧の分類の名前（「判定保留」など）が何を指すかを、
- * 詳細の画面を開かなくても確かめられるように
- */
-export function ClassGuide() {
+/** 判定保留の件数を含む回答に、畳まずに添える 1 行（3 分類の説明は、最初の画面の「くわしく」と、候補の詳細にある） */
+export function UncertainNote() {
   return (
-    <details className="provenance class-guide">
-      <summary>分類の意味</summary>
-      <ClassDefinitions />
-    </details>
+    <p className="uncertain-note">
+      {CLASS_INFO.uncertain.short}: {CLASS_INFO.uncertain.summary}
+    </p>
   );
 }

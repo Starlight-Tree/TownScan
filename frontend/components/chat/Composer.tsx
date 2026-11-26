@@ -72,7 +72,7 @@ export function Composer({ value, onChange, pending, onSend, inputRef }: Compose
           onKeyDown={handleKeyDown}
           maxLength={MAX_CONTENT_LENGTH}
           rows={1}
-          placeholder="例: 新規出現の候補は何件ありますか？"
+          placeholder="例: 候補は何件ありますか？"
         />
         <div className="chat__footer">
           <div className="chat__actions">

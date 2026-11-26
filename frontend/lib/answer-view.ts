@@ -182,7 +182,7 @@ export type FigureKind = Extract<ResultView, 'map' | 'chart'>;
 
 /**
  * 回答の結果から、回答の中に出す図の種類（並びは、拡大ビューのタブと同じ地図・グラフ）。結果カードにあった「グラフで見る」「地図で見る」の出し方を、そのまま写す:
- * - 件数（count）: 地図とグラフ
+ * - 件数（count）: 地図（グラフは「グラフ」のタブで見る。件数の内訳は、カードが文字で出す）
  * - 比較（compare）: グラフ（比べる地区が 1 つ以上あるときだけ）
  * - 地図の表示（map_focus）: 地図
  * - 表・検出画像・精度・お断り・知らない型・壊れた結果: 出さない
@@ -194,7 +194,6 @@ export function figureKinds(results: readonly ToolResult[]): FigureKind[] {
   for (const r of results.filter(isWellFormedResult)) {
     if (r.type === 'count') {
       map = true;
-      chart = true;
     } else if (r.type === 'compare') {
       if (Array.isArray(r.items) && r.items.length > 0) chart = true;
     } else if (r.type === 'map_focus') {

@@ -26,6 +26,7 @@ import type { AreaSummary, CandidateDetail, CandidateFeature } from '../lib/api-
 import { AreasProvider } from '../lib/areas-context';
 import { RESULT_VIEW_ORDER, type MapFilter, type ResultView } from '../lib/result-view';
 import { useAsync } from '../lib/use-api';
+import { CandidateFeaturesContext } from '../lib/candidates-context';
 import { AnswerFigure, type FigureActions, type FigureData } from './AnswerFigure';
 import { CandidateDrawer } from './CandidateDrawer';
 import { AreaChartView } from './chart/AreaChartView';
@@ -324,7 +325,9 @@ export function HomeClient() {
           aria-labelledby={resultTabId(baseId, 'chat')}
           tabIndex={0}
         >
-          <ChatPanel actions={chatActions} renderFigure={renderFigure} onNewConversation={resetAll} onAnswer={onAnswer} />
+          <CandidateFeaturesContext.Provider value={features}>
+            <ChatPanel actions={chatActions} renderFigure={renderFigure} onNewConversation={resetAll} onAnswer={onAnswer} />
+          </CandidateFeaturesContext.Provider>
         </div>
         {current && (
           // 開いているあいだだけマウントする（Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す。

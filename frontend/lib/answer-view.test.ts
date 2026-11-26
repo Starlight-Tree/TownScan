@@ -279,9 +279,10 @@ describe('拡大ビューの中の操作', () => {
 });
 
 describe('figureKinds（回答の中に出す図。結果カードにあった「グラフで見る」「地図で見る」の出し方を写す）', () => {
-  it('件数: 地図とグラフ（並びは、拡大ビューのタブと同じ地図・グラフ）。複数の地区の件数も同じ', () => {
-    expect(figureKinds([count])).toEqual(['map', 'chart']);
-    expect(figureKinds([countWards])).toEqual(['map', 'chart']);
+  it('件数: 地図だけ（内訳はカードが文字で出す。グラフは「グラフ」のタブ）。複数の地区の件数も同じ。比較と組なら、地図・グラフの順', () => {
+    expect(figureKinds([count])).toEqual(['map']);
+    expect(figureKinds([countWards])).toEqual(['map']);
+    expect(figureKinds([compare, count])).toEqual(['map', 'chart']);
   });
 
   it('比較: グラフだけ。比べる地区が 1 つも無いときは出さない', () => {

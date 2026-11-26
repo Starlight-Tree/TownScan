@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useContext, useState } from 'react';
 import { useAreas } from '../../lib/areas-context';
 import type {
   AccuracyResult,
+  CandidateFeature,
   CompareResult,
   CountResult,
   DetectionImageResult,
@@ -16,12 +18,13 @@ import { CLASS_INFO, isCandidateClass, refusalTitle } from '../../lib/classes';
 import { compareSummary } from '../../lib/compare-summary';
 import { candidateImageUrl } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
-import { ALL_FILTER, areaLabel, filterFromResults } from '../../lib/result-view';
+import { ALL_FILTER, areaLabel, areaScopeIds, filterFromResults } from '../../lib/result-view';
+import { CandidateFeaturesContext } from '../../lib/candidates-context';
 import { CandidateImage } from '../CandidateImage';
 import { ClassBadge } from '../ClassBadge';
 import { classOfCell } from './cell';
 import { MSG_STALE_BUTTON, MSG_STALE_PHOTO } from './conversation';
-import { ClassGuide } from './ClassGuide';
+import { UncertainNote } from './ClassGuide';
 import { ProvenanceBox } from './ProvenanceBox';
 import { ScrollHint } from './ScrollHint';
 import type { ResultActions } from './types';
@@ -41,51 +44,103 @@ function SyntheticChip({ kind }: { kind: string }) {
   return kind === 'synthetic' ? <span className="pill pill--warn pill--inline">合成データ</span> : null;
 }
 
-function barColor(key: string): string {
-  return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--primary)';
-}
-
 // ---- 件数 ----
 
-// グラフ・地図は、回答の中の図（ChatPanel の renderFigure）に出る。件数のカードに、拡大ビューを開くボタンは無い
-export function CountCard({ result }: { result: CountResult }) {
+/** 件数のカードの表で、はじめに出す行の数 */
+const COUNT_FIRST_ROWS = 5;
+
+/**
+ * 件数の結果に当たる候補を、面積の大きい順に並べる表。件数の結果は行を持たないので、地図と同じ候補データから作る。
+ * 件数が結果の値と合わないとき（データが別の解析結果など）は、呼ぶ側が出さない
+ */
+function CountRows({ rows, showClass, actions }: { rows: CandidateFeature[]; showClass: boolean; actions: ResultActions }) {
   const { nameOf } = useAreas();
-  const max = Math.max(1, ...result.breakdown.map((b) => b.value));
+  const [open, setOpen] = useState(false);
+  const shown = open ? rows : rows.slice(0, COUNT_FIRST_ROWS);
+  const rest = rows.length - COUNT_FIRST_ROWS;
+  return (
+    <>
+      <ScrollHint label="候補の表（横にスクロールできます）">
+        <table className="data-table data-table--chat">
+          <caption className="visually-hidden">候補（面積の大きい順）</caption>
+          <thead>
+            <tr>
+              <th scope="col">地区</th>
+              {showClass && <th scope="col">分類</th>}
+              <th scope="col">面積（m²）</th>
+              <th scope="col">
+                <span className="visually-hidden">操作</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map(({ properties: p }) => (
+              <tr key={p.id}>
+                <td>
+                  {nameOf(p.area_id)}
+                  <span className="data-table__sub">
+                    <span className="visually-hidden">候補 ID: </span>
+                    {p.id}
+                  </span>
+                </td>
+                {showClass && <td>{renderCell('class', p.class, nameOf)}</td>}
+                <td>{formatNumber(p.area_m2)}</td>
+                <td>
+                  <button type="button" className="btn btn--small" onClick={() => actions.openCandidate(p.id)}>
+                    詳細<span className="visually-hidden">（{p.id}）</span>
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollHint>
+      {rest > 0 && (
+        <button type="button" className="count-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? `先頭の ${COUNT_FIRST_ROWS} 件だけ表示` : `残り ${formatNumber(rest)} 件を表示`}
+        </button>
+      )}
+    </>
+  );
+}
+
+// 地図は、回答の中の図（ChatPanel の renderFigure）に出る。件数のカードに、拡大ビューを開くボタンは無い
+export function CountCard({ result, actions, staleRun = false }: { result: CountResult; actions: ResultActions; staleRun?: boolean }) {
+  const { nameOf } = useAreas();
+  const features = useContext(CandidateFeaturesContext);
   const cls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
+  const filter = filterFromResults([result]) ?? ALL_FILTER;
   // 複数の地区（区など）は API の scope をそのまま出す。拡大ビューの地図・グラフに写す条件と同じ読み方
-  const areaText = areaLabel(filterFromResults([result]) ?? ALL_FILTER, nameOf);
+  const areaText = areaLabel(filter, nameOf) ?? '全地区';
+  const uncertain = result.overall?.uncertain ?? result.breakdown.find((b) => b.key === 'uncertain')?.value ?? 0;
+  // 分類で絞ったときは全体の数を、絞らないときは内訳を、見出しの下に添える
+  let context: string | null = null;
+  if (cls && result.overall) {
+    const held = cls !== 'uncertain' && uncertain > 0 ? `（うち判定保留 ${formatNumber(uncertain)} 件）` : '';
+    context = `候補は全部で ${formatNumber(result.overall.total)} 件${held}`;
+  } else if (!cls && result.breakdown.length > 0) {
+    context = result.breakdown
+      .map((b) => `${isCandidateClass(b.key) ? CLASS_INFO[b.key].short : b.label} ${formatNumber(b.value)} 件`)
+      .join('・');
+  }
+  const scope = areaScopeIds(filter);
+  const rows =
+    !features || staleRun
+      ? null
+      : features
+          .filter((f) => (!scope || scope.has(f.properties.area_id)) && filter.classes.has(f.properties.class))
+          .sort((a, b) => b.properties.area_m2 - a.properties.area_m2 || a.properties.id.localeCompare(b.properties.id));
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
-        <h3 className="result-card__title">{result.title}</h3>
+        <h3 className="result-card__title">
+          {cls ? CLASS_INFO[cls].short : '候補'} <span className="count-value">{formatNumber(result.total)}</span> 件（{areaText}）
+        </h3>
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
-      <p className="count-hero">
-        <span className="count-hero__value" style={{ color: cls ? CLASS_INFO[cls].color : undefined }}>
-          {formatNumber(result.total)}
-        </span>
-        <span className="count-hero__unit">件</span>
-      </p>
-      {(cls || areaText) && (
-        <p className="chip-row" aria-label="絞り込み条件">
-          {areaText && <span className="pill">地区: {areaText}</span>}
-          {cls && <ClassBadge cls={cls} short />}
-        </p>
-      )}
-      {result.breakdown.length > 0 && (
-        <ul className="breakdown" aria-label="内訳">
-          {result.breakdown.map((b) => (
-            <li key={b.key} className="breakdown__row">
-              <span className="breakdown__label">{b.label}</span>
-              <span className="bar" aria-hidden="true">
-                <span className="bar__fill" style={{ width: `${(b.value / max) * 100}%`, background: barColor(b.key) }} />
-              </span>
-              <span className="breakdown__value">{formatNumber(b.value)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <ClassGuide />
+      {context && <p className="count-context">{context}</p>}
+      {uncertain > 0 && <UncertainNote />}
+      {rows && rows.length > 0 && rows.length === result.total && <CountRows rows={rows} showClass={!cls} actions={actions} />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -111,7 +166,7 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
   // ID・地区・分類の 3 列で幅を使い切り、並びの基準の面積と「詳細」が横スクロールの先に隠れていた
   const idColumn = hasDetail && result.columns.length > 1 ? result.columns.find((c) => c.key === 'id') : undefined;
   const columns = idColumn ? result.columns.filter((c) => c !== idColumn) : result.columns;
-  const hasClassColumn = columns.some((c) => c.key === 'class');
+  const hasUncertain = columns.some((c) => c.key === 'class') && result.rows.some((r) => classOfCell(r.class ?? null) === 'uncertain');
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -176,7 +231,7 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
       <p className="result-card__note">
         全 {formatNumber(result.total)} 件中 {formatNumber(result.shown)} 件を表示
       </p>
-      {hasClassColumn && result.rows.length > 0 && <ClassGuide />}
+      {hasUncertain && <UncertainNote />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );
@@ -190,11 +245,10 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
  */
 export function CompareCard({ result, part = 'all' }: { result: CompareResult; part?: 'all' | 'body' | 'notes' }) {
   const summary = compareSummary(result);
-  // 'notes': 図のあとにまとめて置く補足（分類の意味・根拠）。回答の並びは「本文 → 図 → 条件 → 補足」（ChatPanel）
+  // 'notes': 図のあとにまとめて置く補足（根拠）。回答の並びは「本文 → 図 → 条件 → 補足」（ChatPanel）
   if (part === 'notes') {
     return (
       <div className="answer-notes">
-        {summary !== null && <ClassGuide />}
         <ProvenanceBox provenance={result.provenance} />
       </div>
     );
@@ -213,7 +267,7 @@ export function CompareCard({ result, part = 'all' }: { result: CompareResult; p
           {summary.sub && <p className="compare-summary__sub">{summary.sub}</p>}
         </div>
       )}
-      {part === 'all' && summary !== null && <ClassGuide />}
+      {result.items.some((i) => (i.counts.uncertain ?? 0) > 0) && <UncertainNote />}
       {part === 'all' && <ProvenanceBox provenance={result.provenance} />}
     </section>
   );

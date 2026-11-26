@@ -33,6 +33,7 @@ export const count: CountResult = {
     { key: 'existing_omission', label: '既存の描き漏れ（旧写真に既にある）', value: 51 },
     { key: 'uncertain', label: '判定保留', value: 18 },
   ],
+  overall: { total: 102, uncertain: 18 },
   filter: { area_id: null, cls: 'confirmed_new' },
   provenance,
 };
@@ -42,6 +43,7 @@ export const countWards: CountResult = {
   ...count,
   title: '中央区の新規出現（旧写真に無い）',
   total: 14,
+  overall: undefined, // 分類を絞らない件数には、全体の件数は付かない
   filter: { area_ids: ['z18-1-2', 'z18-2-2'], cls: null, scope: '中央区' },
 };
 

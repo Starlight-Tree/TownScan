@@ -25,6 +25,7 @@ vi.mock('./LeafletMap', () => ({
     onZoom: (z: number) => void;
     coverRef?: { current: HTMLElement | null };
     guardWheel?: boolean;
+    onAreaSelect: (areaId: string) => void;
   }) => {
     seen.coverRef = p.coverRef ?? null;
     return (
@@ -39,6 +40,9 @@ vi.mock('./LeafletMap', () => ({
         data-focus-nonce={p.focus ? p.focus.nonce : ''}
         tabIndex={0}
       >
+        <button type="button" onClick={() => p.onAreaSelect('b')}>
+          地区の枠（b）
+        </button>
         {(['ok', 'partial', 'none'] as const).map((s) => (
           <button key={s} type="button" onClick={() => p.onTileStatus(s)}>
             タイル（{s}）
@@ -892,11 +896,42 @@ describe('回答の中の図として使う（inline）と、2 つの地図パ�
     expect(screen.getByTestId('leaflet')).toHaveAttribute('data-guard-wheel', 'false');
   });
 
-  it('回答の中の図と拡大ビューの地図が同時にあっても、地区の選択の id は重ならない。ラベルは、自分の選択を指す', () => {
+  it('inline は、地図と印の凡例と状態の帯だけ。操作の行・分類の帯（チェックボックス）・候補の一覧は、拡大ビューにだけある', () => {
+    const { unmount } = render(<MapPanel {...propsFor()} inline />);
+    expect(screen.queryByRole('combobox', { name: '地区' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '地図の種類' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('候補を一覧で見る（面積の大きい順）')).not.toBeInTheDocument();
+    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['新規出現', '既存の描き漏れ', '判定保留']);
+    expect(screen.getByTestId('leaflet')).toBeInTheDocument();
+    unmount();
+    render(<MapPanel {...propsFor()} />);
+    expect(screen.getByRole('combobox', { name: '地区' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '地図の印' })).not.toBeInTheDocument();
+    expect(screen.getByText('候補を一覧で見る（面積の大きい順）')).toBeInTheDocument();
+  });
+
+  it('inline では、地区の枠を押しても絞り込まない（戻す操作が無いため）。拡大ビューでは、その地区に絞り込む', async () => {
+    const onFilterChange = vi.fn();
+    const { unmount } = render(<MapPanel {...propsFor({ onFilterChange })} filter={ALL_FILTER} inline />);
+    await userEvent.click(screen.getByRole('button', { name: '地区の枠（b）' }));
+    expect(onFilterChange).not.toHaveBeenCalled();
+    unmount();
+    render(<MapPanel {...propsFor({ onFilterChange })} filter={ALL_FILTER} />);
+    await userEvent.click(screen.getByRole('button', { name: '地区の枠（b）' }));
+    expect(onFilterChange).toHaveBeenCalledWith(expect.objectContaining({ areaId: 'b' }));
+  });
+
+  it('inline の凡例は、絞り込みで出している分類だけ', () => {
+    render(<MapPanel {...propsFor()} filter={{ areaId: '', classes: new Set(['confirmed_new'] as const) }} inline />);
+    expect([...screen.getByRole('group', { name: '地図の印' }).querySelectorAll('.class-badge')].map((el) => el.textContent)).toEqual(['新規出現']);
+  });
+
+  it('地図のパネルが 2 つ同時にあっても、地区の選択の id は重ならない。ラベルは、自分の選択を指す', () => {
     render(
       <>
         <section aria-label="図">
-          <MapPanel {...propsFor()} inline />
+          <MapPanel {...propsFor()} />
         </section>
         <section aria-label="拡大ビュー">
           <MapPanel {...propsFor()} />

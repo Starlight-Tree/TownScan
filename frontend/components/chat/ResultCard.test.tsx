@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { AccuracyResult, CompareResult, TableResult, ToolResult } from '../../lib/api-types';
+import type { AccuracyResult, CandidateClass, CandidateFeature, CompareResult, CountResult, TableResult, ToolResult } from '../../lib/api-types';
+import { CandidateFeaturesContext } from '../../lib/candidates-context';
 import { ALL_RESULTS, accuracy, compare, count, countWards, detectionImage, mapFocus, refusal, table } from '../../tests/fixtures';
 import { ResultCard } from './ResultCard';
 import type { ResultActions } from './types';
@@ -11,14 +12,92 @@ function makeActions(): ResultActions {
 }
 
 describe('結果カード: 型ごとの描画', () => {
-  it('count: 件数・内訳・絞り込み条件・根拠', () => {
+  it('count: 見出しに聞かれた数と地区、下に全体の数・判定保留の 1 行・根拠。大きな数字・内訳の棒は無い', () => {
     render(<ResultCard result={count} actions={makeActions()} />);
     const card = screen.getByRole('region', { name: count.title });
-    expect(within(card).getByText('33', { selector: '.count-hero__value' })).toBeInTheDocument();
-    expect(within(card).getByRole('list', { name: '内訳' }).querySelectorAll('li')).toHaveLength(3);
-    expect(within(card).getByText('51')).toBeInTheDocument();
+    expect(within(card).getByRole('heading')).toHaveTextContent('新規出現 33 件（全地区）');
+    expect(within(card).getByText('候補は全部で 102 件（うち判定保留 18 件）')).toBeInTheDocument();
+    expect(within(card).getByText('判定保留: 新規か既存かを、写真から判断できませんでした。')).toBeInTheDocument();
+    expect(within(card).queryByRole('list')).not.toBeInTheDocument();
+    expect(card.querySelector('.bar')).toBeNull();
     expect(within(card).getByText('根拠を見る')).toBeInTheDocument();
     expect(within(card).getByText(count.provenance.model)).toBeInTheDocument();
+  });
+
+  it('count: 分類を絞らなければ、見出しは「候補」で、下に分類ごとの内訳', () => {
+    render(<ResultCard result={{ ...count, total: 102, overall: undefined, filter: {} }} actions={makeActions()} />);
+    expect(screen.getByRole('heading')).toHaveTextContent('候補 102 件（全地区）');
+    expect(screen.getByText('新規出現 33 件・既存の描き漏れ 51 件・判定保留 18 件')).toBeInTheDocument();
+    expect(screen.queryByText(/候補は全部で/)).not.toBeInTheDocument();
+  });
+
+  it('count: 判定保留で絞った回答の全体の行は、判定保留を重ねて言わない。全体の件数の無い保存済みの回答は、全体の行を出さない', () => {
+    const { unmount } = render(<ResultCard result={{ ...count, total: 18, filter: { cls: 'uncertain' } }} actions={makeActions()} />);
+    expect(screen.getByText('候補は全部で 102 件')).toBeInTheDocument();
+    unmount();
+    render(<ResultCard result={{ ...count, overall: undefined, breakdown: [count.breakdown[0]!] }} actions={makeActions()} />);
+    expect(screen.queryByText(/候補は全部で/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/判定保留/)).not.toBeInTheDocument();
+  });
+
+  describe('count: 候補の表（地図と同じ候補データから作る）', () => {
+    const feature = (n: number, cls: CandidateClass, area_m2: number, area_id = 'z18-1-2'): CandidateFeature => ({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [] },
+      properties: { id: `c-9-9-${n}`, class: cls, area_m2, area_id },
+    });
+    /** 新規出現 7 件（面積は番号の順ではない）と、ほかの分類 2 件 */
+    const features = [
+      ...[30, 70, 10, 60, 20, 50, 40].map((a, i) => feature(i + 1, 'confirmed_new', a)),
+      feature(8, 'uncertain', 999),
+      feature(9, 'existing_omission', 888, 'z18-2-2'),
+    ];
+    const seven: CountResult = { ...count, total: 7 };
+    const show = (result: CountResult, props: { staleRun?: boolean; data?: CandidateFeature[] | null } = {}) => {
+      const actions = makeActions();
+      const rendered = render(
+        <CandidateFeaturesContext.Provider value={props.data === undefined ? features : props.data}>
+          <ResultCard result={result} actions={actions} staleRun={props.staleRun} />
+        </CandidateFeaturesContext.Provider>,
+      );
+      return { actions, ...rendered };
+    };
+    const ids = () => screen.getAllByRole('row').slice(1).map((r) => r.textContent!.match(/c-9-9-\d/)![0]);
+
+    it('面積の大きい順に 5 行。残りは、ボタンで開き、もう一度押すと戻る。分類で絞った表に、分類の列は無い', async () => {
+      show(seven);
+      expect(ids()).toEqual(['c-9-9-2', 'c-9-9-4', 'c-9-9-6', 'c-9-9-7', 'c-9-9-1']);
+      expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '面積（m²）', '操作']);
+      const more = screen.getByRole('button', { name: '残り 2 件を表示' });
+      expect(more).toHaveAttribute('aria-expanded', 'false');
+      await userEvent.click(more);
+      expect(ids()).toEqual(['c-9-9-2', 'c-9-9-4', 'c-9-9-6', 'c-9-9-7', 'c-9-9-1', 'c-9-9-5', 'c-9-9-3']);
+      await userEvent.click(screen.getByRole('button', { name: '先頭の 5 件だけ表示' }));
+      expect(ids()).toHaveLength(5);
+    });
+
+    it('表の「根拠を見る」は、表のすぐ下。行の「詳細」は、その候補を開く', async () => {
+      const { actions } = show(seven);
+      expect(screen.getByRole('table').compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await userEvent.click(screen.getByRole('button', { name: /詳細.*c-9-9-2/ }));
+      expect(actions.openCandidate).toHaveBeenCalledWith('c-9-9-2');
+    });
+
+    it('分類を絞らない件数の表には、分類の列がある。地区の条件があれば、その地区の行だけ。5 件以下なら、開くボタンは無い', () => {
+      show({ ...count, total: 1, overall: undefined, filter: { area_id: 'z18-2-2' } });
+      expect(ids()).toEqual(['c-9-9-9']);
+      expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '分類', '面積（m²）', '操作']);
+      expect(screen.queryByRole('button', { name: /残り/ })).not.toBeInTheDocument();
+    });
+
+    it('表の行数が結果の件数と合わないとき・別の解析結果の回答・候補データが無いときは、表を出さない（件数の文は出る）', () => {
+      for (const [result, props] of [[{ ...seven, total: 8 }, {}], [seven, { staleRun: true }], [seven, { data: null }]] as const) {
+        const { unmount } = show(result, props);
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(screen.getByRole('heading')).toHaveTextContent('件（全地区）');
+        unmount();
+      }
+    });
   });
 
   it('count: 「グラフで見る」「地図で見る」のボタンは無い（グラフ・地図そのものが、回答の中の図に出る）。カードは、拡大ビューを開く操作を持たない', () => {
@@ -28,7 +107,7 @@ describe('結果カード: 型ごとの描画', () => {
       const card = screen.getByRole('region', { name: result.title });
       expect(within(card).queryByRole('button', { name: 'グラフで見る' })).not.toBeInTheDocument();
       expect(within(card).queryByRole('button', { name: '地図で見る' })).not.toBeInTheDocument();
-      // 根拠の箱（「根拠を見る」）と分類の説明だけが、ボタンの代わりに残る
+      // グラフ・地図のボタンの代わりに、根拠の箱（「根拠を見る」）がある
       expect(within(card).getByText('根拠を見る')).toBeInTheDocument();
       unmount();
     }
@@ -36,12 +115,12 @@ describe('結果カード: 型ごとの描画', () => {
     expect(actions.openCandidate).not.toHaveBeenCalled();
   });
 
-  it('count: 絞り込み条件のチップ。複数の地区は API の scope をそのまま、scope が無ければ「N 地区」（「すべて」とは言わない）', () => {
+  it('count: 見出しの地区。複数の地区は API の scope をそのまま、scope が無ければ「N 地区」（「全地区」とは言わない）', () => {
     const { unmount } = render(<ResultCard result={countWards} actions={makeActions()} />);
-    expect(within(screen.getByLabelText('絞り込み条件')).getByText('地区: 中央区')).toBeInTheDocument();
+    expect(screen.getByRole('heading')).toHaveTextContent('候補 14 件（中央区）');
     unmount();
     render(<ResultCard result={{ ...countWards, filter: { ...countWards.filter, scope: null } }} actions={makeActions()} />);
-    expect(within(screen.getByLabelText('絞り込み条件')).getByText('地区: 2 地区')).toBeInTheDocument();
+    expect(screen.getByRole('heading')).toHaveTextContent('候補 14 件（2 地区）');
   });
 
   it('compare: 「グラフで見る」のボタンは無い（グラフが、回答の中の図に出る）。比べる地区が無いときも、ボタンは出さない', () => {
@@ -113,10 +192,10 @@ describe('結果カード: 型ごとの描画', () => {
       expect(screen.getByText('判定保留の候補が最も多いのはテスト地区 02で、2 件です。')).toBeInTheDocument();
     });
 
-    it('要点は、分類の意味・根拠より前', () => {
+    it('要点は、判定保留の 1 行・根拠より前', () => {
       render(<ResultCard result={compare} actions={makeActions()} />);
       const lead = screen.getByText(/候補が最も多いのは/);
-      expect(lead.compareDocumentPosition(screen.getByText('分類の意味')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(lead.compareDocumentPosition(screen.getByText(/^判定保留: /)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(lead.compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
@@ -317,24 +396,25 @@ describe('結果カード: 表（チャットの狭い幅）', () => {
   });
 });
 
-describe('結果カード: 分類の意味', () => {
-  const summaries = ['2023 年の写真に建物があり、2018 年の写真には見当たりません。', '2018 年の写真にも既に写っています。', '新規か既存かを、写真から判断できませんでした。'];
+describe('結果カード: 分類の説明', () => {
+  const note = '判定保留: 新規か既存かを、写真から判断できませんでした。';
 
-  it('件数・比較・分類の列のある一覧に、「分類の意味」の折りたたみ（3 分類の印・名前・1 行の説明）を付ける', () => {
+  it('判定保留を含む件数・比較・一覧に、畳まずに 1 行の説明を出す。「分類の意味」の折りたたみは、どの型にも無い', () => {
     for (const result of [count, compare, realTable]) {
       const { unmount } = render(<ResultCard result={result} actions={makeActions()} />);
-      const guide = screen.getByText('分類の意味').closest('details') as HTMLElement;
-      expect(guide).not.toHaveAttribute('open');
-      for (const s of summaries) expect(within(guide).getByText(s)).toBeInTheDocument();
-      expect(guide.querySelectorAll('.class-badge')).toHaveLength(3);
+      expect(screen.getByText(note).closest('details')).toBeNull();
+      expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
       unmount();
     }
   });
 
-  it('分類の列が無い一覧・地図の表示・精度・お断りには付けない', () => {
+  it('判定保留を含まない結果・分類の列が無い一覧・地図の表示・精度・お断りには、出さない', () => {
     const noClass: TableResult = { ...table, columns: [{ key: 'id', label: '候補 ID' }, { key: 'area_m2', label: '面積（m²）' }] };
-    for (const result of [noClass, mapFocus, accuracy, refusal, { ...compare, items: [] }]) {
+    const newOnly: TableResult = { ...table, rows: [table.rows[0]!], shown: 1 };
+    const noHeld: CompareResult = { ...compare, items: compare.items.map((i) => ({ ...i, counts: { ...i.counts, uncertain: 0 } })) };
+    for (const result of [noClass, newOnly, noHeld, mapFocus, accuracy, refusal, { ...compare, items: [] }]) {
       const { unmount } = render(<ResultCard result={result} actions={makeActions()} />);
+      expect(screen.queryByText(note)).not.toBeInTheDocument();
       expect(screen.queryByText('分類の意味')).not.toBeInTheDocument();
       unmount();
     }

@@ -3,7 +3,7 @@
 Next.js 16（App Router・TypeScript strict・Node 24）。仕様は [../docs/spec-prototype.md](../docs/spec-prototype.md) §7。
 
 - 画面: `/`（チャットの 1 列）・`/accuracy`（精度・既知の限界・出典と規約）・`/login`（任意のログイン）・`/healthz`（コンテナのヘルスチェック）
-  結果のうち、グラフ・地図は、回答の中の**図**として、結果カードの並びの下に出る（件数＝地図とグラフ、比較＝グラフ、地図の表示＝地図。`components/AnswerFigure.tsx`・`lib/answer-view.ts` の `figureKinds`。地図は画面に近づくまでマウントしない）。
+  結果のうち、グラフ・地図は、回答の中の**図**として、結果カードの並びの下に出る（件数＝地図、比較＝グラフ、地図の表示＝地図。件数のカードの表は、地図と同じ候補データから作る〔`lib/candidates-context.ts`〕。`components/AnswerFigure.tsx`・`lib/answer-view.ts` の `figureKinds`。地図は画面に近づくまでマウントしない）。
   図の「拡大」、結果カードの「詳細」「詳細を開く」「地図で見る」（地図の表示）、最初の画面の「解析した地区を地図で見る」を押したときだけ、拡大ビュー（`components/ExpandedView.tsx`。ダイアログ）が開く。回答が届いただけでは開かない。
   拡大ビューの中身は `components/ResultArea.tsx`（地図・グラフ・写真の比較のタブ。候補の詳細は `components/CandidateDrawer.tsx`）。状態の単位は回答 1 件で、タブ・絞り込み・選んだ候補は回答ごとに保ち、回答の中の図と拡大ビューが共有する（`lib/answer-view.ts`・`components/HomeClient.tsx`）。
 - 枠: 幅 1024px 以上は左のサイドパネル（`AppSidebar`。JobNavi・DocuNavi と同じ。開いた表示と細い帯をボタンで切り替える。はじめは開いた状態で、保存しない）。1023px 以下は、はじめは閉じていて、上の細い 1 行のボタンで、サイドパネルを重ねて開く（背景・Esc・閉じるボタン・ページの移動で閉じる）。上の横帯は無い。状態の印（模擬モデルなど）も出さない。合成データ・API 不通のバナー（`AppBanners`）は、どちらの幅でも本文の上に出る。`/login` はサイドパネルなし。
