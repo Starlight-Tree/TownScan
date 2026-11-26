@@ -6,7 +6,7 @@
 
 フランスのパリ南西の近郊で、2014 年と 2024 年の空中写真から新築の候補を見つけ、質問に、短い文と 1 つの表示（写真・グラフ・地図）で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、Go の API（[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。
 
-**今の検出の出来は悪いです。** 目で見ると、大きな新しい建物を見落とし、影を建物と判定します。フランスの写真での精度は測っていません。候補の件数は、建築の統計として読めません。
+**このアプリの写真（IGN の配信タイル）での検出の精度は、測っていません。** 目で見ると、道路の上を建物と判定した例があり、隣り合う建物が 1 つの大きな形にまとまることもあります。候補の件数は、建築の統計として読めません。別の検証用データで抽出モデルを比べた値は [ADR 0016](docs/decisions/0016-flair-hub-model.md) にあります（調整に使ったデータの値です）。
 
 | 地図の上の候補 | 2014 年と 2024 年の写真つきの回答 |
 |---|---|
@@ -19,7 +19,7 @@
 - **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけ・写真 1 件だけの回答の本文は、コードが決めます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
 - **新築候補の 2 分類。** 2024 年の写真から取り出した建物の外形を、2014 年の写真と比べます。2014 年でも検出した建物は外し、残りを「2014 年は未検出」（`confirmed_new`）と「未判定」（`uncertain`）に分けます。
 - **地図と写真の見比べ。** 候補を IGN の地図と写真の上に描き、1 棟の 2014 年と 2024 年の写真を並べます。
-- **限界を隠さない精度ページ。** いまは「未測定」とだけ出し、数字を作りません。抽出の倍率と閾値は、目で見て選んだ固定の値で、検証していません。
+- **限界を隠さない精度ページ。** いまは「未測定」とだけ出し、数字を作りません。抽出の倍率と閾値は固定の値で、このアプリの写真では確かめていません（選び方は [ADR 0016](docs/decisions/0016-flair-hub-model.md)）。
 - **任意の Google ログイン。** ログインしなくても使えます。ログインが要るのは、会話の履歴の保存だけです。
 
 ## 構成
@@ -79,7 +79,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 |---|---|
 | [docs/plan.md](docs/plan.md) | 計画・段階・出口条件・決定待ち |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | 契約: データのファイル・DB・API・3 分類・評価・画面 |
-| [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005）、会話の履歴・画面・呼び名（0006〜0013）、新築の再現率（0014）、フランスへの移行（0015） |
+| [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005）、会話の履歴・画面・呼び名（0006〜0013）、新築の再現率（0014）、フランスへの移行（0015）、建物の抽出モデル（0016） |
 | [frontend/README.md](frontend/README.md) ・ [api/README.md](api/README.md) | 各部分の動かし方・検査・詳細 |
 | [CLAUDE.md](CLAUDE.md) | 開発の規約（AI エージェント向け） |
 
@@ -91,9 +91,9 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 
 - 写真と地図: [IGN](https://cartes.gouv.fr/cgu/)（フランス国土地理院。BD ORTHO 2014・2024 年と Plan IGN）。Licence Ouverte 2.0。出典は画面に表示します。
 - 地区の選び方: [FOTBCD](https://huggingface.co/datasets/abdevd/FOTBCD)（作者: Abdelrrahman Moubane。[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。IGN の BD ORTHO・BD TOPO が元）の検証用データで、新築が多い場所を 12 地区選びました。新築の多い場所に偏った標本です。FOTBCD の画像と建物の枠は、アプリに入れていません。
-- モデル: `giswqs/whu-building-unetplusplus-efficientnet-b4`（Apache-2.0。学習データ WHU の利用条件は未確認）。
+- モデル: IGN の [`IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet`](https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet)（Licence Ouverte 2.0〔Etalab 2.0〕。最終更新 2026-04-28）。
 
-どれも、このリポジトリでは再配布しません。詳細は [ADR 0015](docs/decisions/0015-move-to-france.md) です。
+どれも、このリポジトリでは再配布しません。詳細は [ADR 0015](docs/decisions/0015-move-to-france.md) と [ADR 0016](docs/decisions/0016-flair-hub-model.md) です。
 
 ## ライセンス
 

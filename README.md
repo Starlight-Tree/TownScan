@@ -6,7 +6,7 @@ English | [日本語](README.ja.md)
 
 A chat app that finds candidates for new buildings in the south-western suburbs of Paris from 2014 and 2024 aerial photos, and answers each question with a short text and one view: photos, a chart or a map. The app's screens and answers are in Japanese. A local prototype (not deployed): Next.js, an API in Go ([ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab.
 
-**Detection quality is poor so far:** by eye, the current model misses large new buildings and reports shadows as buildings. Its accuracy on the French photos has not been measured. Do not read the candidate counts as construction statistics.
+**Detection accuracy on this app's photos (IGN tiles) has not been measured.** By eye, there is a case of a road reported as a building, and neighbouring buildings can merge into one large shape. Do not read the candidate counts as construction statistics. A comparison of the extraction models on a separate validation set is in [ADR 0016](docs/decisions/0016-flair-hub-model.md) (values on data that was also used for tuning).
 
 | Candidates on the map | A chat answer with 2014 and 2024 photos |
 |---|---|
@@ -19,7 +19,7 @@ The photos on the right are the four largest "not detected in 2014" candidates; 
 - **A chat grounded in tool results.** Cards, charts and maps are drawn from the tool results as they are. A reply that is only a count, or only one candidate's photos, is worded by code ([ADR 0013](docs/decisions/0013-one-view-per-answer.md)). Other replies are written by the model, and one with a number that is not in the results is replaced with a fixed text ([ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)); other claims are not checked. Out-of-scope questions are declined. The model is Gemini (an API key is needed).
 - **Two classes of candidates.** Each building outline extracted from the 2024 photo is checked against the 2014 photo. Buildings also detected in 2014 are dropped; the rest are "not detected in 2014" (`confirmed_new`) or "undecided" (`uncertain`).
 - **Map and photo comparison.** Candidates on IGN map and photo tiles, and the 2014 and 2024 crops of one building side by side.
-- **An accuracy page that shows its limits.** For now it says "not measured" and shows no numbers. The extraction scale and threshold are fixed values chosen by eye, not validated.
+- **An accuracy page that shows its limits.** For now it says "not measured" and shows no numbers. The extraction scale and threshold are fixed values that have not been checked on this app's photos (how they were chosen: [ADR 0016](docs/decisions/0016-flair-hub-model.md)).
 - **Optional Google sign-in.** The app works without it; only saved conversation history needs it.
 
 ## Architecture
@@ -79,7 +79,7 @@ The documents are written in Japanese.
 |---|---|
 | [docs/plan.md](docs/plan.md) | Plan, stages, exit criteria, pending decisions |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | The contract: data files, DB, API, classes, evaluation, UI |
-| [docs/decisions/](docs/decisions/) | Decisions and reasons: data and terms (0001), direction (0002), chat LLM (0003), secrets (0004), Go API (0005), conversation history, screens and wording (0006–0013), new-building recall (0014), the move to France (0015) |
+| [docs/decisions/](docs/decisions/) | Decisions and reasons: data and terms (0001), direction (0002), chat LLM (0003), secrets (0004), Go API (0005), conversation history, screens and wording (0006–0013), new-building recall (0014), the move to France (0015), the extraction model (0016) |
 | [frontend/README.md](frontend/README.md) · [api/README.md](api/README.md) | Running, checks and details of each part |
 | [CLAUDE.md](CLAUDE.md) | Development conventions (for AI agents) |
 
@@ -91,9 +91,9 @@ Data and attribution:
 
 - Photos and maps: [IGN](https://cartes.gouv.fr/cgu/) (BD ORTHO 2014 and 2024, Plan IGN), Licence Ouverte 2.0. The source is shown in the app.
 - Area selection: the 12 areas were chosen where the validation split of [FOTBCD](https://huggingface.co/datasets/abdevd/FOTBCD) (by Abdelrrahman Moubane, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), built from IGN BD ORTHO and BD TOPO) has the most new buildings. This is a deliberately high-construction sample. FOTBCD images and labels are not part of the app.
-- Model: `giswqs/whu-building-unetplusplus-efficientnet-b4` (Apache-2.0; the terms of its training data, WHU, are unverified).
+- Model: [`IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet`](https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet) by IGN (Licence Ouverte 2.0 / Etalab 2.0, last updated 2026-04-28).
 
-None of these is redistributed here; see [ADR 0015](docs/decisions/0015-move-to-france.md).
+None of these is redistributed here; see [ADR 0015](docs/decisions/0015-move-to-france.md) and [ADR 0016](docs/decisions/0016-flair-hub-model.md).
 
 ## License
 
