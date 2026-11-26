@@ -112,8 +112,13 @@ def check_result(r: dict) -> None:
     check_provenance(r["provenance"])
     if t == "count":
         check_filter(r["filter"])
-        # 分類で絞った件数にだけ、同じ地区の絞り込み前の全体と、うち判定保留（overall）が付く
-        assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance"} | ({"overall"} if "cls" in r["filter"] else set()), r
+        # 分類で絞った件数にだけ、同じ地区の絞り込み前の全体と、うち未判定（overall）が付く。未判定を数えて 1 件以上あれば、理由の内訳（held）が付く
+        counted_held = any(b["key"] == "uncertain" and b["value"] > 0 for b in r["breakdown"])
+        optional = ({"overall"} if "cls" in r["filter"] else set()) | ({"held"} if counted_held else set())
+        assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance"} | optional, r
+        if counted_held:
+            assert all(set(h) == {"key", "label", "value"} and h["value"] > 0 for h in r["held"]), r
+            assert sum(h["value"] for h in r["held"]) == next(b["value"] for b in r["breakdown"] if b["key"] == "uncertain"), r
         assert isinstance(r["total"], int) and not isinstance(r["total"], bool)
         if "overall" in r:
             assert set(r["overall"]) == {"total", "uncertain"} and all(isinstance(v, int) for v in r["overall"].values()), r

@@ -30,6 +30,23 @@ func seedChatData(t *testing.T, s *Store) (a1, a2 string) {
 	return a1, a2
 }
 
+func TestCountByClassSplitsUncertainByReason(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	a1, _ := seedChatData(t, s) // a1 の未判定は c-1-1-3 の 1 件
+	for _, c := range []struct{ id, reason string }{{"c-1-1-3", "edge"}, {"c-1-1-4", "ambiguous"}, {"c-1-1-5", "edge"}, {"c-1-1-6", "something_new"}} {
+		if c.id != "c-1-1-3" {
+			seedCandidate(t, s, "r1", a1, c.id, "uncertain", 10, `{}`, `{}`)
+		}
+		exec(t, s, "UPDATE candidates SET reason = $1 WHERE run_id = 'r1' AND id = $2", c.reason, c.id)
+	}
+	got, err := s.CountByClass(ctx, "r1", Filter{AreaIDs: []string{a1}})
+	want := ClassCounts{ConfirmedNew: 1, ExistingOmission: 1, Uncertain: 4, UncertainEdge: 2, UncertainReview: 1}
+	if err != nil || got != want {
+		t.Errorf("理由ごと: %+v, %v; 期待 %+v", got, err, want)
+	}
+}
+
 func TestCountByClass(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

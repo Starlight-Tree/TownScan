@@ -12,7 +12,7 @@
   （A1・A2 は同じ緯度で同じ値。A3 は緯度が 1 タイル南だが、0.1 に丸めると同じ 75.6）。A3 の 750 → 188.9、480（A2）→ 120.9、400 → 100.8。
 - 同じ面積（75.6 が 3 つ）の順は、API の並びの規則（面積の降順、同じなら id の昇順）で決まる。
 - 緯度経度は、Web メルカトルのタイル座標（z18）から導く（下の tile_lonlat）。丸めの差を見込んで 1e-6 度（約 0.1 m）の許容で比べる。
-- 件数: 新規出現（confirmed_new）4・既存の描き漏れ（existing_omission）3・判定保留（uncertain）2、合計 9。建物は 1 地区 8（2018 年 3＋2023 年 5）× 3 = 24。
+- 件数: 2018 年は未検出（confirmed_new）4・2018 年も検出（existing_omission）3・未判定（uncertain。どちらも理由は edge）2、合計 9。建物は 1 地区 8（2018 年 3＋2023 年 5）× 3 = 24。
 """
 
 from __future__ import annotations
@@ -29,10 +29,18 @@ COUNTS = {"areas": 3, "candidates": 9, "buildings": 24}
 
 CLASSES = ("confirmed_new", "existing_omission", "uncertain")
 CLASS_LABELS = {
-    "confirmed_new": "新規出現（旧写真に無い）",
-    "existing_omission": "既存の描き漏れ（旧写真に既にある）",
-    "uncertain": "判定保留",
+    "confirmed_new": "2018 年は未検出",
+    "existing_omission": "2018 年も検出",
+    "uncertain": "未判定",
 }
+# 未判定の候補は、理由で呼び分ける（並びは、返り値の held の順）
+HELD_LABELS = {"ambiguous": "要確認", "edge": "端のため未判定"}
+
+
+def row_label(cls: str, reason: str) -> str:
+    """候補 1 件の呼び名。"""
+    return HELD_LABELS.get(reason, CLASS_LABELS[cls]) if cls == "uncertain" else CLASS_LABELS[cls]
+
 
 A1, A2, A3 = "z18-226249-105759", "z18-226250-105759", "z18-226249-105760"
 
@@ -44,9 +52,9 @@ NOTE_UNVERIFIED_ACCURACY = "数字は 2018 年の写真で測った値。新築�
 
 # 候補の説明文（旧 Python の API の explanations.py。git 履歴 e9a6614。reason ごとの固定文）
 EXPLANATIONS = {
-    "new_absent_2018": "2023 年の写真には建物があり、2018 年の写真にはその場所に何も見当たりません。新しく建った可能性があります。",
+    "new_absent_2018": "2023 年の写真では建物を検出し、2018 年の写真では検出していません。前からある建物の場合もあるので、写真で確かめてください。",
     "present_2018": "2018 年の写真にも既に建物があります。建物データ（基盤地図情報）の描き漏れの可能性が高く、新築とは限りません。",
-    "edge": "写真（タイル）の縁に接していて、建物が途中で切れている可能性があります。判定を保留しています。",
+    "edge": "写真（タイル）の端に接していて建物が切れている可能性があるため、分けていません。面積は実際より小さい場合があります。",
 }
 
 # 分類ごとの証拠（synthetic.py の EVIDENCE。edge_touch は候補ごと）

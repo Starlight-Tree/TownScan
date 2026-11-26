@@ -33,12 +33,16 @@ func TestRatioRoundsLikePython(t *testing.T) {
 func TestRenderCount(t *testing.T) {
 	f := newFakeData()
 	all := callTool(t, f, "count_candidates", Args{})
-	if got, want := Render(all), "全地区の候補は 9 件です。内訳は、新規出現（旧写真に無い） 4 件、既存の描き漏れ（旧写真に既にある） 3 件、判定保留 2 件 です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
+	if got, want := Render(all), "全地区の候補は 9 件です。内訳は、2018 年は未検出 4 件、2018 年も検出 3 件、端のため未判定 2 件 です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
 		t.Errorf("全分類\n got  %s\n want %s", got, want)
 	}
 	one := callTool(t, f, "count_candidates", Args{AreaIDs: []string{a1}, Cls: "confirmed_new"})
-	if got, want := Render(one), "合成町の「新規出現（旧写真に無い）」は 1 件です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
+	if got, want := Render(one), "合成町の「2018 年は未検出」は 1 件です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
 		t.Errorf("1 分類\n got  %s\n want %s", got, want)
+	}
+	held := callTool(t, f, "count_candidates", Args{Cls: "uncertain"})
+	if got, want := Render(held), "全地区の「未判定」は 2 件です。内訳は、端のため未判定 2 件 です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
+		t.Errorf("未判定だけ\n got  %s\n want %s", got, want)
 	}
 	// 0 件は、0 件と書く（内訳は書かない）
 	zero := callTool(t, f, "count_candidates", Args{AreaIDs: []string{a3}, Cls: "uncertain"})
@@ -77,7 +81,7 @@ func TestRenderCompare(t *testing.T) {
 	if got, want := Render(callTool(t, f, "compare_areas", Args{})), "全地区の地区ごとの件数を比べました。候補の合計が最も多いのは 仮想町 で、3 件です。"; got != want {
 		t.Errorf("合計 = %s", got)
 	}
-	if got, want := Render(callTool(t, f, "compare_areas", Args{Cls: "confirmed_new"})), "全地区の地区ごとの件数を比べました。「新規出現（旧写真に無い）」が最も多いのは 試験町 で、2 件です。"; got != want {
+	if got, want := Render(callTool(t, f, "compare_areas", Args{Cls: "confirmed_new"})), "全地区の地区ごとの件数を比べました。「2018 年は未検出」が最も多いのは 試験町 で、2 件です。"; got != want {
 		t.Errorf("新規出現 = %s", got)
 	}
 	if got := Render(CompareResult{Filter: FilterInfo{Scope: "東区"}}); got != "東区には、比べる地区がありません。" {
@@ -93,7 +97,7 @@ func TestRenderCompare(t *testing.T) {
 func TestRenderDetectionImageAndMap(t *testing.T) {
 	f := newFakeData()
 	got := Render(callTool(t, f, "show_candidate", Args{CandidateID: "c-226249-105759-2"}))
-	if want := "候補 c-226249-105759-2 の写真を、2018 年と 2023 年で並べます。合成町・新規出現（旧写真に無い）・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。"; got != want {
+	if want := "候補 c-226249-105759-2 の写真を、2018 年と 2023 年で並べます。合成町・2018 年は未検出・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。"; got != want {
 		t.Errorf("写真 = %s", got)
 	}
 	got = Render(callTool(t, f, "focus_map", Args{AreaIDs: []string{a1}}))
@@ -153,7 +157,7 @@ func TestRenderRefusalIsTheMessageAndComposeJoinsInOrder(t *testing.T) {
 		results = append(results, r)
 	}
 	want := Render(results[0]) + Render(results[1])
-	if got := Compose(results); got != want || !strings.HasPrefix(got, "全地区の「新規出現（旧写真に無い）」は 4 件です。") || !strings.HasSuffix(got, "と聞けます。") {
+	if got := Compose(results); got != want || !strings.HasPrefix(got, "全地区の「2018 年は未検出」は 4 件です。") || !strings.HasSuffix(got, "と聞けます。") {
 		t.Errorf("Compose = %s", got)
 	}
 	if got := Compose(nil); got != "" {

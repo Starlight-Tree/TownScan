@@ -290,6 +290,10 @@ func countCandidates(ctx context.Context, tc *ToolContext, args Args) (Result, e
 		breakdown = append(breakdown, Breakdown{Key: k, Label: classLabels[k], Value: counts.Of(k)})
 		total += counts.Of(k)
 	}
+	var held []Breakdown
+	if cls == "" || cls == "uncertain" {
+		held = heldBreakdown(counts)
+	}
 	title := "候補の件数（" + scope + "）"
 	var overall *Overall
 	if cls != "" {
@@ -301,7 +305,7 @@ func countCandidates(ctx context.Context, tc *ToolContext, args Args) (Result, e
 		overall = &Overall{Total: all.Sum(), Uncertain: all.Uncertain}
 	}
 	return CountResult{
-		Type: "count", Title: title, Total: total, Breakdown: breakdown, Overall: overall,
+		Type: "count", Title: title, Total: total, Breakdown: breakdown, Held: held, Overall: overall,
 		Filter: filterInfo(ids, cls, scope), Provenance: provenance(tc),
 	}, nil
 }
@@ -333,7 +337,7 @@ func listCandidates(ctx context.Context, tc *ToolContext, args Args) (Result, er
 		if c.AreaName != nil && *c.AreaName != "" {
 			area = *c.AreaName
 		}
-		rows = append(rows, CandidateRow{ID: c.ID, Area: area, Class: classLabels[c.Class], AreaM2: c.AreaM2})
+		rows = append(rows, CandidateRow{ID: c.ID, Area: area, Class: candidateLabel(c.Class, c.Reason), AreaM2: c.AreaM2})
 	}
 	what := "候補"
 	if cls != "" {
@@ -408,7 +412,7 @@ func pickCandidate(ctx context.Context, tc *ToolContext, args Args) (*store.Cand
 	if err != nil {
 		return nil, err
 	}
-	// 分類の指定が無いときは、主役の「新規出現」を先に探し、無ければ全分類から選ぶ
+	// 分類の指定が無いときは、主役の「2018 年は未検出」を先に探し、無ければ全分類から選ぶ
 	tries := []string{cls}
 	if cls == "" {
 		tries = []string{"confirmed_new", ""}
@@ -440,7 +444,7 @@ func showCandidate(ctx context.Context, tc *ToolContext, args Args) (Result, err
 	if cand.AreaName != nil && *cand.AreaName != "" {
 		areaName = *cand.AreaName
 	}
-	caption := fmt.Sprintf("%s・%s・面積 約 %s m²。", areaName, classLabels[cand.Class], pyFixed(float64(cand.AreaM2), 0)) +
+	caption := fmt.Sprintf("%s・%s・面積 約 %s m²。", areaName, candidateLabel(cand.Class, cand.Reason), pyFixed(float64(cand.AreaM2), 0)) +
 		"輪郭は機械が抽出した範囲で、確定ではありません。"
 	return DetectionImageResult{
 		Type: "detection_image", Title: "候補 " + cand.ID + " の写真（2018 年と 2023 年）", CandidateID: cand.ID, Class: cand.Class,
@@ -643,7 +647,7 @@ func showHelp(_ context.Context, tc *ToolContext, _ Args) (Result, error) {
 		{"候補は何件ありますか？", "件数と分類ごとの内訳"},
 		{"地区ごとに候補数を比べてください", "地区の比較"},
 		{"面積の大きい候補を一覧で見せてください", "候補の一覧（表）"},
-		{"一番大きい新規出現の写真を見せてください", "2018 年と 2023 年の写真の見比べ"},
+		{"2018 年は未検出で一番大きい候補の写真を見せてください", "2018 年と 2023 年の写真の見比べ"},
 		{"その地図での位置は？", "地図で場所を示す"},
 		{"このアプリの精度は？", "実測した精度の数字"},
 	}

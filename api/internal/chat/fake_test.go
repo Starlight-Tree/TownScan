@@ -37,13 +37,24 @@ func syntheticRun() *store.Run {
 	return &store.Run{RunID: "synthetic-test", Kind: "synthetic", CreatedAt: time.Date(2026, 11, 24, 3, 0, 0, 0, time.UTC), Model: "synthetic-fixture（モデルなし。合成データ）"}
 }
 
+// fakeReason は、分類に対応する理由（契約の検査の合成データでは、未判定はどちらも edge）。
+func fakeReason(class string) string {
+	switch class {
+	case "existing_omission":
+		return "present_2018"
+	case "uncertain":
+		return "edge"
+	}
+	return "new_absent_2018"
+}
+
 func candidate(id, areaID, areaName, class string, area float64) store.Candidate {
 	return store.Candidate{
 		Summary: store.Summary{
 			ID: id, AreaID: areaID, AreaName: ptr(areaName), Ward: ptr("中央区"), Class: class, AreaM2: pyjson.Float(area),
 			BBox:     [4]pyjson.Float{130.70, 32.80, 130.71, 32.81},
 			Centroid: [2]pyjson.Float{130.705, 32.805},
-			Reason:   "new_absent_2018",
+			Reason:   fakeReason(class),
 		},
 	}
 }
@@ -120,6 +131,12 @@ func (f *fakeData) CountByClass(_ context.Context, _ string, flt store.Filter) (
 			n.ExistingOmission++
 		case "uncertain":
 			n.Uncertain++
+			switch c.Reason {
+			case "edge":
+				n.UncertainEdge++
+			case "ambiguous":
+				n.UncertainReview++
+			}
 		}
 	}
 	return n, f.err

@@ -16,6 +16,8 @@ type ClassCounts struct {
 	ConfirmedNew     int64
 	ExistingOmission int64
 	Uncertain        int64
+	UncertainEdge    int64 // Uncertain のうち、理由が edge
+	UncertainReview  int64 // Uncertain のうち、理由が ambiguous
 }
 
 // Of は、分類（candidates.class の値）の件数。知らない分類は 0。
@@ -42,7 +44,8 @@ func (s *Store) CountByClass(ctx context.Context, runID string, f Filter) (Class
 	}
 	defer c.Release()
 	where, args := filterSQL(runID, f)
-	rows, err := c.Query(ctx, "SELECT c.class, count(*) FROM candidates c WHERE "+where+" GROUP BY c.class", args...)
+	rows, err := c.Query(ctx, "SELECT c.class, count(*), count(*) FILTER (WHERE c.reason = 'edge'), count(*) FILTER (WHERE c.reason = 'ambiguous')"+
+		" FROM candidates c WHERE "+where+" GROUP BY c.class", args...)
 	if err != nil {
 		return ClassCounts{}, classify(err)
 	}
@@ -50,8 +53,8 @@ func (s *Store) CountByClass(ctx context.Context, runID string, f Filter) (Class
 	var out ClassCounts
 	for rows.Next() {
 		var class string
-		var n int64
-		if err := rows.Scan(&class, &n); err != nil {
+		var n, edge, review int64
+		if err := rows.Scan(&class, &n, &edge, &review); err != nil {
 			return ClassCounts{}, classify(err)
 		}
 		switch class {
@@ -60,7 +63,7 @@ func (s *Store) CountByClass(ctx context.Context, runID string, f Filter) (Class
 		case "existing_omission":
 			out.ExistingOmission = n
 		case "uncertain":
-			out.Uncertain = n
+			out.Uncertain, out.UncertainEdge, out.UncertainReview = n, edge, review
 		}
 	}
 	return out, classify(rows.Err())

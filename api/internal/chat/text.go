@@ -15,7 +15,7 @@ const (
 	msgSatellite = "衛星による「変化の当たり」は未実装です。いま答えられるのは、空中写真から棟ごとに見つけた候補の件数・一覧・写真の見比べ・精度です。"
 	msgPanel     = "屋根の太陽光パネルの検出は未実装です。いま答えられるのは、空中写真から棟ごとに見つけた新築の候補についてです。"
 	msgDisappear = "取り壊し・減少（2018 年にあって 2023 年に無い建物）は調べていません。" +
-		"このアプリが答えるのは、2018 年の写真に無く 2023 年の写真に新しく現れた建物（新築の候補）だけです。"
+		"このアプリが答えるのは、建物データに載っていない建物の候補だけです。"
 	msgYear = "写真があるのは 2018 年と 2023 年だけです。それ以外の年（2024 年以降を含む）の棟の確認はできません。"
 )
 
@@ -93,6 +93,14 @@ func scopeOf(f FilterInfo) string {
 	return f.Scope
 }
 
+func joinCounts(rows []Breakdown) string {
+	parts := make([]string, len(rows))
+	for i, b := range rows {
+		parts[i] = fmt.Sprintf("%s %s 件", b.Label, commas(b.Value))
+	}
+	return strings.Join(parts, "、")
+}
+
 func renderCount(r CountResult) string {
 	scope := scopeOf(r.Filter)
 	if r.Total == 0 {
@@ -101,12 +109,19 @@ func renderCount(r CountResult) string {
 	var body string
 	if r.Filter.Cls != "" {
 		body = fmt.Sprintf("%sの「%s」は %s 件です。", scope, r.Breakdown[0].Label, commas(r.Total))
-	} else {
-		parts := make([]string, len(r.Breakdown))
-		for i, b := range r.Breakdown {
-			parts[i] = fmt.Sprintf("%s %s 件", b.Label, commas(b.Value))
+		if len(r.Held) > 0 {
+			body += fmt.Sprintf("内訳は、%s です。", joinCounts(r.Held))
 		}
-		body = fmt.Sprintf("%sの候補は %s 件です。内訳は、%s です。", scope, commas(r.Total), strings.Join(parts, "、"))
+	} else {
+		var rows []Breakdown
+		for _, b := range r.Breakdown {
+			if b.Key == "uncertain" && len(r.Held) > 0 { // 未判定は、理由の呼び名で言う
+				rows = append(rows, r.Held...)
+				continue
+			}
+			rows = append(rows, b)
+		}
+		body = fmt.Sprintf("%sの候補は %s 件です。内訳は、%s です。", scope, commas(r.Total), joinCounts(rows))
 	}
 	return body + "機械が写真から見つけた候補で、確定ではありません。"
 }

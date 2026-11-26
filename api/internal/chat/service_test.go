@@ -64,7 +64,7 @@ func TestAnswerReturnsToolCallsResultsAndContent(t *testing.T) {
 	if got := jsonOf(t, r.ToolCalls); got != `[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]` {
 		t.Errorf("tool_calls = %s", got)
 	}
-	if want := "全地区の「新規出現（旧写真に無い）」は 4 件です。機械が写真から見つけた候補で、確定ではありません。"; r.Content != want {
+	if want := "全地区の「2018 年は未検出」は 4 件です。機械が写真から見つけた候補で、確定ではありません。"; r.Content != want {
 		t.Errorf("content = %s", r.Content)
 	}
 	// 応答のキーの並び（Python の dict と同じ）

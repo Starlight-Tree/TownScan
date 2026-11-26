@@ -337,9 +337,9 @@ func TestCandidateFeaturesAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := marshal(t, feats); got != `[`+
-		`{"type":"Feature","id":"c-1-1-1","geometry":{"type":"Polygon","coordinates":[[[1.5,2.25]]]},"properties":{"id":"c-1-1-1","class":"confirmed_new","area_m2":300.5,"area_id":"z18-1-1"}},`+
-		`{"type":"Feature","id":"c-1-1-2","geometry":{},"properties":{"id":"c-1-1-2","class":"existing_omission","area_m2":100.0,"area_id":"z18-1-1"}},`+
-		`{"type":"Feature","id":"c-1-1-3","geometry":{"type":"Polygon","coordinates":[[[1,2],[3,4]]]},"properties":{"id":"c-1-1-3","class":"uncertain","area_m2":100.0,"area_id":"z18-1-1"}}]` {
+		`{"type":"Feature","id":"c-1-1-1","geometry":{"type":"Polygon","coordinates":[[[1.5,2.25]]]},"properties":{"id":"c-1-1-1","class":"confirmed_new","area_m2":300.5,"area_id":"z18-1-1","reason":"new_absent_2018"}},`+
+		`{"type":"Feature","id":"c-1-1-2","geometry":{},"properties":{"id":"c-1-1-2","class":"existing_omission","area_m2":100.0,"area_id":"z18-1-1","reason":"new_absent_2018"}},`+
+		`{"type":"Feature","id":"c-1-1-3","geometry":{"type":"Polygon","coordinates":[[[1,2],[3,4]]]},"properties":{"id":"c-1-1-3","class":"uncertain","area_m2":100.0,"area_id":"z18-1-1","reason":"new_absent_2018"}}]` {
 		t.Errorf("features = %s", got)
 	}
 	if feats, _ := s.CandidateFeatures(ctx, "r1", Filter{Class: "nothing"}); feats == nil || len(feats) != 0 {

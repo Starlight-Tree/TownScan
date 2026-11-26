@@ -139,7 +139,7 @@ def test_geojson_is_a_feature_collection_in_the_same_order(api):
     for feature, cand in zip(fc["features"], expected.CANDIDATES):
         assert set(feature) == {"type", "id", "geometry", "properties"}
         assert feature["type"] == "Feature" and feature["id"] == cand.id
-        assert feature["properties"] == {"id": cand.id, "class": cand.cls, "area_m2": cand.area_m2, "area_id": cand.area_id}
+        assert feature["properties"] == {"id": cand.id, "class": cand.cls, "area_m2": cand.area_m2, "area_id": cand.area_id, "reason": cand.reason}
         assert feature["geometry"]["type"] == "Polygon"
         assert_close(feature["geometry"]["coordinates"], [cand.ring])  # 外周 1 つ・5 点（閉じている）
 

@@ -44,7 +44,7 @@ type Breakdown struct {
 // Overall は、分類で絞った件数に添える、同じ地区の候補の全体（絞り込み前）。
 type Overall struct {
 	Total     int64 `json:"total"`
-	Uncertain int64 `json:"uncertain"` // うち判定保留
+	Uncertain int64 `json:"uncertain"` // うち未判定
 }
 
 // CountResult は、件数（type: count）。
@@ -53,6 +53,7 @@ type CountResult struct {
 	Title      string           `json:"title"`
 	Total      int64            `json:"total"`
 	Breakdown  []Breakdown      `json:"breakdown"`
+	Held       []Breakdown      `json:"held,omitempty"`    // 未判定を理由で分けた内訳。未判定を数えないときは無し
 	Overall    *Overall         `json:"overall,omitempty"` // 分類で絞ったときだけ
 	Filter     FilterInfo       `json:"filter"`
 	Provenance store.Provenance `json:"provenance"`
@@ -165,7 +166,7 @@ var refusalReasons = []string{"out_of_scope", "no_photo_period", "not_implemente
 var defaultSuggestions = []string{
 	"候補は何件ありますか？",
 	"地区ごとに候補数を比べてください",
-	"一番大きい新規出現の写真を見せてください",
+	"2018 年は未検出で一番大きい候補の写真を見せてください",
 	"このアプリの精度は？",
 }
 
@@ -179,7 +180,40 @@ func newRefusal(reason, message string, suggestions []string) RefusalResult {
 
 // 分類の表示名（candidates.class → 画面・返答文に出す名前）。backend/app/queries.py の CLASS_LABELS と同じ
 var classLabels = map[string]string{
-	"confirmed_new":     "新規出現（旧写真に無い）",
-	"existing_omission": "既存の描き漏れ（旧写真に既にある）",
-	"uncertain":         "判定保留",
+	"confirmed_new":     "2018 年は未検出",
+	"existing_omission": "2018 年も検出",
+	"uncertain":         "未判定",
+}
+
+// 未判定の候補は、理由（candidates.reason）で呼び分ける
+var heldLabels = map[string]string{
+	"ambiguous": "要確認",
+	"edge":      "端のため未判定",
+}
+
+// candidateLabel は、候補 1 件の呼び名。未判定で理由が分かるときは、理由の呼び名。
+func candidateLabel(class, reason string) string {
+	if class == "uncertain" {
+		if label, ok := heldLabels[reason]; ok {
+			return label
+		}
+	}
+	return classLabels[class]
+}
+
+// heldBreakdown は、未判定を理由で分けた内訳（0 件の行は出さない）。理由の合計が未判定の件数と合わないときは、分けない。
+func heldBreakdown(c store.ClassCounts) []Breakdown {
+	if c.Uncertain == 0 || c.UncertainReview+c.UncertainEdge != c.Uncertain {
+		return nil
+	}
+	var out []Breakdown
+	for _, h := range []struct {
+		key string
+		n   int64
+	}{{"ambiguous", c.UncertainReview}, {"edge", c.UncertainEdge}} {
+		if h.n > 0 {
+			out = append(out, Breakdown{Key: h.key, Label: heldLabels[h.key], Value: h.n})
+		}
+	}
+	return out
 }

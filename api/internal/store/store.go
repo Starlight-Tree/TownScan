@@ -193,6 +193,7 @@ type FeatureProps struct {
 	Class  string       `json:"class"`
 	AreaM2 pyjson.Float `json:"area_m2"`
 	AreaID string       `json:"area_id"`
+	Reason string       `json:"reason"`
 }
 
 // Filter は、候補の絞り込み。AreaIDs が nil なら地区で絞らない。Class が "" なら分類で絞らない。
@@ -374,17 +375,17 @@ func (s *Store) CandidateFeatures(ctx context.Context, runID string, f Filter) (
 	defer c.Release()
 	where, args := filterSQL(runID, f)
 	rows, err := c.Query(ctx,
-		"SELECT c.id, c.area_id, c.class, c.area_m2, c.geom FROM candidates c WHERE "+where+" ORDER BY c.area_m2 DESC, c.id ASC", args...)
+		"SELECT c.id, c.area_id, c.class, c.area_m2, c.geom, c.reason FROM candidates c WHERE "+where+" ORDER BY c.area_m2 DESC, c.id ASC", args...)
 	if err != nil {
 		return nil, classify(err)
 	}
 	defer rows.Close()
 	out := []Feature{}
 	for rows.Next() {
-		var id, areaID, class string
+		var id, areaID, class, reason string
 		var area float64
 		var geom json.RawMessage
-		if err := rows.Scan(&id, &areaID, &class, &area, &geom); err != nil {
+		if err := rows.Scan(&id, &areaID, &class, &area, &geom, &reason); err != nil {
 			return nil, classify(err)
 		}
 		g, err := pyjson.Normalize(geom)
@@ -393,7 +394,7 @@ func (s *Store) CandidateFeatures(ctx context.Context, runID string, f Filter) (
 		}
 		out = append(out, Feature{
 			Type: "Feature", ID: id, Geometry: g,
-			Properties: FeatureProps{ID: id, Class: class, AreaM2: pyjson.Float(area), AreaID: areaID},
+			Properties: FeatureProps{ID: id, Class: class, AreaM2: pyjson.Float(area), AreaID: areaID, Reason: reason},
 		})
 	}
 	return out, classify(rows.Err())

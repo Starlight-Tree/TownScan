@@ -341,12 +341,12 @@ func TestGeoJSON(t *testing.T) {
 	feat := store.Feature{
 		Type: "Feature", ID: "c-226250-105759-1",
 		Geometry:   json.RawMessage(`{"type":"Polygon","coordinates":[[[130.7074142,32.8066285],[130.7074142,32.8064481]]]}`),
-		Properties: store.FeatureProps{ID: "c-226250-105759-1", Class: "confirmed_new", AreaM2: 503.8, AreaID: "z18-226250-105759"},
+		Properties: store.FeatureProps{ID: "c-226250-105759-1", Class: "confirmed_new", AreaM2: 503.8, AreaID: "z18-226250-105759", Reason: "new_absent_2018"},
 	}
 	fake := &fakeStore{run: syntheticRun(), features: []store.Feature{feat}}
 	tt := newTester(t, fake)
 	tt.wantJSON(tt.get("/api/candidates.geojson?cls=uncertain&area_id=z18-1-1"), 200, "application/geo+json",
-		`{"type":"FeatureCollection","features":[{"type":"Feature","id":"c-226250-105759-1","geometry":{"type":"Polygon","coordinates":[[[130.7074142,32.8066285],[130.7074142,32.8064481]]]},"properties":{"id":"c-226250-105759-1","class":"confirmed_new","area_m2":503.8,"area_id":"z18-226250-105759"}}]}`)
+		`{"type":"FeatureCollection","features":[{"type":"Feature","id":"c-226250-105759-1","geometry":{"type":"Polygon","coordinates":[[[130.7074142,32.8066285],[130.7074142,32.8064481]]]},"properties":{"id":"c-226250-105759-1","class":"confirmed_new","area_m2":503.8,"area_id":"z18-226250-105759","reason":"new_absent_2018"}}]}`)
 	if fake.gotFeat.Class != "uncertain" || len(fake.gotFeat.AreaIDs) != 1 {
 		t.Errorf("絞り込み = %+v", fake.gotFeat)
 	}
@@ -378,7 +378,7 @@ func TestCandidateDetail(t *testing.T) {
 		`{"id":"c-226250-105759-1","area_id":"z18-226250-105759","area_name":"試験町","ward":"中央区","class":"confirmed_new","area_m2":503.8,`+
 			`"bbox":[130.7074142,32.8064481,130.7076824,32.8066285],"centroid":[130.70754829999998,32.8065383],"reason":"new_absent_2018",`+
 			`"evidence":{"ov_2018":0.02,"edge_touch":false,"prob_2023_mean":0.91},"geometry":{"type":"Polygon","coordinates":[[[1.5,2.0]]]},`+
-			`"explanation_key":"new_absent_2018","explanation":"2023 年の写真には建物があり、2018 年の写真にはその場所に何も見当たりません。新しく建った可能性があります。",`+
+			`"explanation_key":"new_absent_2018","explanation":"2023 年の写真では建物を検出し、2018 年の写真では検出していません。前からある建物の場合もあるので、写真で確かめてください。",`+
 			`"images":[{"year":2018,"url":"/api/candidates/c-226250-105759-1/image?year=2018&size=512"},{"year":2023,"url":"/api/candidates/c-226250-105759-1/image?year=2023&size=512"}],`+
 			`"provenance":{"source":"国土地理院 空中写真（年度別 2018・2023 年）から建物を抽出し、2 時点を比較した結果","photo_years":[2018,2023],"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic","note":"合成データ（テスト用）です。実データではありません。"}}`)
 	if fake.gotCandI != "c-226250-105759-1" {

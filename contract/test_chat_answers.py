@@ -27,9 +27,9 @@ CONFIRMED = CLASS_LABELS["confirmed_new"]
 OMISSION = CLASS_LABELS["existing_omission"]
 UNCERTAIN = CLASS_LABELS["uncertain"]
 NOTICE = "機械が写真から見つけた候補で、確定ではありません。"
-SUGGESTIONS = ["候補は何件ありますか？", "地区ごとに候補数を比べてください", "一番大きい新規出現の写真を見せてください", "このアプリの精度は？"]
+SUGGESTIONS = ["候補は何件ありますか？", "地区ごとに候補数を比べてください", "2018 年は未検出で一番大きい候補の写真を見せてください", "このアプリの精度は？"]
 LISTED = [  # 面積の大きい順の表の行（id・地区名・分類の名前・面積）
-    {"id": c.id, "area": c.area.name, "class": CLASS_LABELS[c.cls], "area_m2": c.area_m2} for c in CANDIDATES
+    {"id": c.id, "area": c.area.name, "class": expected.row_label(c.cls, c.reason), "area_m2": c.area_m2} for c in CANDIDATES
 ]
 TABLE_COLUMNS = [{"key": "id", "label": "候補 ID"}, {"key": "area", "label": "地区"}, {"key": "class", "label": "分類"}, {"key": "area_m2", "label": "面積（m²）"}]
 BREAKDOWN_ALL = [
@@ -45,8 +45,11 @@ def call(name: str, **args) -> dict:
 
 def count(title: str, total: int, breakdown: list[dict], flt: dict) -> dict:
     out = {"type": "count", "title": title, "total": total, "breakdown": breakdown, "filter": flt, "provenance": PROV}
-    if "cls" in flt:  # 分類で絞った件数には、同じ地区の全体と、うち判定保留が付く。期待値は、地区ごとの件数（expected.py）から数える
-        ids = flt.get("area_ids") or ([flt["area_id"]] if "area_id" in flt else [a.id for a in expected.AREAS])
+    ids = flt.get("area_ids") or ([flt["area_id"]] if "area_id" in flt else [a.id for a in expected.AREAS])
+    if any(b["key"] == "uncertain" and b["value"] for b in breakdown):  # 未判定の理由ごとの内訳は、合成データの候補から数える
+        held = {k: sum(1 for c in CANDIDATES if c.cls == "uncertain" and c.reason == k and c.area.id in ids) for k in expected.HELD_LABELS}
+        out["held"] = [{"key": k, "label": expected.HELD_LABELS[k], "value": n} for k, n in held.items() if n]
+    if "cls" in flt:  # 分類で絞った件数には、同じ地区の全体と、うち未判定が付く。期待値は、地区ごとの件数（expected.py）から数える
         out["overall"] = {k: sum(expected.AREA_BY_ID[i].counts[k] for i in ids) for k in ("total", "uncertain")}
     return out
 
@@ -67,7 +70,7 @@ def refusal(reason: str, message: str, suggestions: list[str] | None = None) -> 
 MSG_OUT_OF_SCOPE = "このアプリは、熊本市中心部の空中写真から見つけた新築の候補（2018 年と 2023 年の写真の比較）についてだけ答えます。天気・雑談・設定の話などには答えられません。"
 MSG_SATELLITE = "衛星による「変化の当たり」は未実装です。いま答えられるのは、空中写真から棟ごとに見つけた候補の件数・一覧・写真の見比べ・精度です。"
 MSG_PANEL = "屋根の太陽光パネルの検出は未実装です。いま答えられるのは、空中写真から棟ごとに見つけた新築の候補についてです。"
-MSG_DISAPPEAR = "取り壊し・減少（2018 年にあって 2023 年に無い建物）は調べていません。このアプリが答えるのは、2018 年の写真に無く 2023 年の写真に新しく現れた建物（新築の候補）だけです。"
+MSG_DISAPPEAR = "取り壊し・減少（2018 年にあって 2023 年に無い建物）は調べていません。このアプリが答えるのは、建物データに載っていない建物の候補だけです。"
 MSG_YEAR = "写真があるのは 2018 年と 2023 年だけです。それ以外の年（2024 年以降を含む）の棟の確認はできません。"
 LISTING = "解析した地区は、合成町、試験町、仮想町 です。"
 SUGGEST_AREA = ["合成町の候補は何件ですか？"]
@@ -122,7 +125,7 @@ HELP_ROWS = [
     {"example": "候補は何件ありますか？", "result": "件数と分類ごとの内訳"},
     {"example": "地区ごとに候補数を比べてください", "result": "地区の比較"},
     {"example": "面積の大きい候補を一覧で見せてください", "result": "候補の一覧（表）"},
-    {"example": "一番大きい新規出現の写真を見せてください", "result": "2018 年と 2023 年の写真の見比べ"},
+    {"example": "2018 年は未検出で一番大きい候補の写真を見せてください", "result": "2018 年と 2023 年の写真の見比べ"},
     {"example": "その地図での位置は？", "result": "地図で場所を示す"},
     {"example": "このアプリの精度は？", "result": "実測した精度の数字"},
 ]
@@ -132,7 +135,7 @@ ANSWERS = [
     pytest.param(
         "新規出現の候補は何件ありますか？",
         [call("count_candidates", cls="confirmed_new")],
-        [count("「新規出現（旧写真に無い）」の件数（全地区）", 4, BREAKDOWN_ALL[:1], {"cls": "confirmed_new", "scope": "全地区"})],
+        [count("「2018 年は未検出」の件数（全地区）", 4, BREAKDOWN_ALL[:1], {"cls": "confirmed_new", "scope": "全地区"})],
         f"全地区の「{CONFIRMED}」は 4 件です。{NOTICE}",
         id="count-new",
     ),
@@ -140,20 +143,20 @@ ANSWERS = [
         "候補は全部で何件ですか",
         [call("count_candidates")],
         [count("候補の件数（全地区）", 9, BREAKDOWN_ALL, {"scope": "全地区"})],
-        f"全地区の候補は 9 件です。内訳は、{CONFIRMED} 4 件、{OMISSION} 3 件、{UNCERTAIN} 2 件 です。{NOTICE}",
+        f"全地区の候補は 9 件です。内訳は、{CONFIRMED} 4 件、{OMISSION} 3 件、端のため未判定 2 件 です。{NOTICE}",
         id="count-all",
     ),
     pytest.param(
         "合成町の新規出現は何件？",
         [call("count_candidates", area_ids=[A1], cls="confirmed_new")],
-        [count("「新規出現（旧写真に無い）」の件数（合成町）", 1, [{"key": "confirmed_new", "label": CONFIRMED, "value": 1}], {"area_id": A1, "cls": "confirmed_new", "scope": "合成町"})],
+        [count("「2018 年は未検出」の件数（合成町）", 1, [{"key": "confirmed_new", "label": CONFIRMED, "value": 1}], {"area_id": A1, "cls": "confirmed_new", "scope": "合成町"})],
         f"合成町の「{CONFIRMED}」は 1 件です。{NOTICE}",
         id="count-area-class",
     ),
     pytest.param(
         "仮想町の判定保留は何件？",
         [call("count_candidates", area_ids=[A3], cls="uncertain")],
-        [count("「判定保留」の件数（仮想町）", 0, [{"key": "uncertain", "label": UNCERTAIN, "value": 0}], {"area_id": A3, "cls": "uncertain", "scope": "仮想町"})],
+        [count("「未判定」の件数（仮想町）", 0, [{"key": "uncertain", "label": UNCERTAIN, "value": 0}], {"area_id": A3, "cls": "uncertain", "scope": "仮想町"})],
         "仮想町には、該当する候補はありません。",
         id="count-zero",
     ),
@@ -165,14 +168,14 @@ ANSWERS = [
             [{"key": "confirmed_new", "label": CONFIRMED, "value": 3}, {"key": "existing_omission", "label": OMISSION, "value": 1}, {"key": "uncertain", "label": UNCERTAIN, "value": 2}],
             {"area_ids": [A1, A2], "scope": "中央区"},
         )],
-        f"中央区の候補は 6 件です。内訳は、{CONFIRMED} 3 件、{OMISSION} 1 件、{UNCERTAIN} 2 件 です。{NOTICE}",
+        f"中央区の候補は 6 件です。内訳は、{CONFIRMED} 3 件、{OMISSION} 1 件、端のため未判定 2 件 です。{NOTICE}",
         id="count-ward",
     ),
     pytest.param(
         "中央区と東区の新規出現は何件？",
         [call("count_candidates", wards=["中央区", "東区"], cls="confirmed_new")],
         # 区が複数なら、その区の地区の和集合。area_ids は文字列の昇順（z18-226249-105759 < …-105760 < z18-226250-…）
-        [count("「新規出現（旧写真に無い）」の件数（中央区・東区）", 4, BREAKDOWN_ALL[:1], {"area_ids": [A1, A3, A2], "cls": "confirmed_new", "scope": "中央区・東区"})],
+        [count("「2018 年は未検出」の件数（中央区・東区）", 4, BREAKDOWN_ALL[:1], {"area_ids": [A1, A3, A2], "cls": "confirmed_new", "scope": "中央区・東区"})],
         f"中央区・東区の「{CONFIRMED}」は 4 件です。{NOTICE}",
         id="count-two-wards",
     ),
@@ -194,8 +197,8 @@ ANSWERS = [
         "新規出現の件数と一覧を見せて",
         [call("count_candidates", cls="confirmed_new"), call("list_candidates", cls="confirmed_new")],
         [
-            count("「新規出現（旧写真に無い）」の件数（全地区）", 4, BREAKDOWN_ALL[:1], {"cls": "confirmed_new", "scope": "全地区"}),
-            table("「新規出現（旧写真に無い）」の一覧（全地区・面積の大きい順）", [r for r in LISTED if r["class"] == CONFIRMED], 4, {"cls": "confirmed_new", "scope": "全地区"}),
+            count("「2018 年は未検出」の件数（全地区）", 4, BREAKDOWN_ALL[:1], {"cls": "confirmed_new", "scope": "全地区"}),
+            table("「2018 年は未検出」の一覧（全地区・面積の大きい順）", [r for r in LISTED if r["class"] == CONFIRMED], 4, {"cls": "confirmed_new", "scope": "全地区"}),
         ],
         f"全地区の「{CONFIRMED}」は 4 件です。{NOTICE}全地区の候補を、面積の大きい順に 4 件表示します（該当は全部で 4 件）。候補の ID を使って、その写真を見せて、と聞けます。",
         id="count-and-list",
@@ -211,7 +214,7 @@ ANSWERS = [
     pytest.param(
         "新規出現が多い地区はどこ？",
         [call("compare_areas", cls="confirmed_new")],
-        [compare("地区ごとの比較（全地区・「新規出現（旧写真に無い）」の多い順）", [A2, A3, A1], "confirmed_new", {"cls": "confirmed_new", "scope": "全地区"})],
+        [compare("地区ごとの比較（全地区・「2018 年は未検出」の多い順）", [A2, A3, A1], "confirmed_new", {"cls": "confirmed_new", "scope": "全地区"})],
         f"全地区の地区ごとの件数を比べました。「{CONFIRMED}」が最も多いのは 試験町 で、2 件です。",
         id="compare-class",
     ),
