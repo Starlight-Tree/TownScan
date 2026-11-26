@@ -3,7 +3,7 @@
 import type { CandidateClass, ToolResult } from '../../lib/api-types';
 import { useAreas } from '../../lib/areas-context';
 import { CLASS_INFO, isCandidateClass } from '../../lib/classes';
-import { areaLabel, filterFromResults, isWellFormedResult } from '../../lib/result-view';
+import { areaLabel, areaScopeIds, filterFromResults, isWellFormedResult } from '../../lib/result-view';
 import { ClassBadge } from '../ClassBadge';
 import { areaScopeHint } from './area-scale';
 
@@ -15,7 +15,7 @@ export interface ScopeItem {
   cls?: CandidateClass;
 }
 
-/** 比べる地区が多いとき、行に並べる名前の数。残りは「ほか N 地区」にまとめる（全部は、すぐ下の比較の表にある） */
+/** 比べる地区が多いとき、行に並べる名前の数。残りは「ほか N 地区」にまとめる（全部は、すぐ下のグラフにある） */
 const MAX_COMPARE_NAMES = 4;
 const SHOWN_WHEN_TRUNCATED = 3;
 
@@ -38,11 +38,11 @@ function classText(cls: string): string {
  *   1 回答に両方あっても、拡大ビューの絞り込みと食い違わない（先に件数、あとに比較なら、比較の条件）。
  *   - 地区: その結果の filter から、filterFromResults をそのまま使う（複数の地区は、API の scope をそのまま。scope が無ければ「N 地区」。地区の条件が無ければ「すべて」）
  *   - 分類: 最後が count のときだけ。結果の値のまま（未知の分類もそのまま出す）。compare には出さない: 比較のカードは 3 分類と合計を並べ、filter.cls は並べ替えの分類にすぎない
- * - compare: 比べる地区の名前（結果の items の name）も、別の行に出す
+ * - compare: 比べる地区の名前（結果の items の name）も、別の行に出す。ただし、全地区を比べたとき（totalAreas 以上）は、地区の行が言っているので出さない
  * - 写真の年: count・compare は provenance.photo_years、detection_image は images の year
  * 表・地図の表示・精度・お断りは、条件を持たない（結果に値が無い）ので、項目を出さない。
  */
-export function answerScope(results: readonly unknown[], nameOf: (areaId: string) => string): ScopeItem[] {
+export function answerScope(results: readonly unknown[], nameOf: (areaId: string) => string, totalAreas = 0): ScopeItem[] {
   const valid = results.filter(isWellFormedResult);
   const items: ScopeItem[] = [];
 
@@ -72,7 +72,10 @@ export function answerScope(results: readonly unknown[], nameOf: (areaId: string
       if (name && !names.includes(name)) names.push(name);
     }
   }
-  if (names.length > 0) {
+  // 条件の地区が「すべて」で、解析した全地区を比べたなら、地区の行（「すべて（解析した全 N 地区…）」）がすでに言っている。
+  // 地区の名前の列と「ほか 9 地区」を重ねると、地区の数が 3 通り（全 12・ほか 9・5 表示）に見えて、どれが何か分からなくなる
+  const comparedAll = totalAreas > 0 && names.length >= totalAreas && filter !== null && areaScopeIds(filter) === null;
+  if (names.length > 0 && !comparedAll) {
     const text =
       names.length <= MAX_COMPARE_NAMES
         ? names.join('、')
@@ -108,7 +111,7 @@ export function answerAreaHint(results: readonly unknown[], totalAreas: number):
 /** 回答の「対象・条件」の行。出せる値が無い回答（表・精度・お断りなど）には何も出さない */
 export function AnswerScope({ results }: { results: readonly ToolResult[] }) {
   const { nameOf, areas } = useAreas();
-  const items = answerScope(results, nameOf);
+  const items = answerScope(results, nameOf, areas.length);
   const areaHint = answerAreaHint(results, areas.length);
   if (items.length === 0) return null;
   return (

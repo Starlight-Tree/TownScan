@@ -262,7 +262,7 @@ describe('最初の画面と、回答が届いたとき（チャットの 1 列�
     expect(screen.getAllByRole('region', { name: '地図' })).toHaveLength(2);
   });
 
-  it('比較の回答は、上位 5 地区までを会話に出し、6 地区以上のときは「全 N 地区中 5 地区を表示」と言う（全地区は、拡大ビューのグラフで読める）', async () => {
+  it('比較の回答は、地区の数字の表を会話に出さず、要点（最多の地区・合計）だけを出す。全地区は、回答の中のグラフで読める。拡大ビューは開かない', async () => {
     const items = Array.from({ length: 8 }, (_, i) => ({
       area_id: `z18-${i + 1}-1`,
       name: `地区 ${i + 1}`,
@@ -270,9 +270,9 @@ describe('最初の画面と、回答が届いたとき（チャットの 1 列�
     }));
     await ask([{ ...compare, items }], '比べました。');
     const card = screen.getByRole('region', { name: compare.title });
-    expect(within(card).getAllByRole('row')).toHaveLength(1 + 5);
-    expect(within(card).getByText('全 8 地区中 5 地区を表示')).toBeInTheDocument();
-    expect(within(card).queryByText('地区 6')).not.toBeInTheDocument();
+    expect(within(card).queryAllByRole('row')).toHaveLength(0);
+    expect(within(card).getByText('候補が最も多いのは地区 1で、8 件です。')).toBeInTheDocument();
+    expect(within(card).queryByText(/地区中 5 地区を表示/)).not.toBeInTheDocument();
     expect(dialog()).toBeNull();
   });
 });

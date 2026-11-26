@@ -12,7 +12,8 @@ import type {
   TableCell,
   TableResult,
 } from '../../lib/api-types';
-import { CLASS_INFO, CLASS_ORDER, isCandidateClass, refusalTitle } from '../../lib/classes';
+import { CLASS_INFO, isCandidateClass, refusalTitle } from '../../lib/classes';
+import { compareSummary } from '../../lib/compare-summary';
 import { candidateImageUrl } from '../../lib/api';
 import { formatNumber } from '../../lib/format';
 import { ALL_FILTER, areaLabel, filterFromResults } from '../../lib/result-view';
@@ -43,9 +44,6 @@ function SyntheticChip({ kind }: { kind: string }) {
 function barColor(key: string): string {
   return isCandidateClass(key) ? CLASS_INFO[key].color : 'var(--primary)';
 }
-
-/** 比較のカードに出す地区の数。これを超える分は、回答の中のグラフ（「表で見る」で表も）で読む */
-const COMPARE_ROWS = 5;
 
 // ---- 件数 ----
 
@@ -186,88 +184,27 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
 
 // ---- 比較 ----
 
+/**
+ * 比較のカード。地区ごとの数字の表は出さない（全地区の棒グラフが、回答の中の図に出る。分類ごとの件数は棒の中に書き、「表で見る」で表も読める）。
+ * 同じ数字を表とグラフで 2 回見せず、カードは、いちばん知りたい要点（どこが多いか・全体の内訳）を言う（lib/compare-summary.ts）
+ */
 export function CompareCard({ result }: { result: CompareResult }) {
-  // 会話の中で読み切れる大きさにするため、API の並びの先頭から上位 5 地区まで。全地区は、回答の中のグラフ（「表で見る」で表も）で読める
-  const items = result.items.slice(0, COMPARE_ROWS);
-  const known: string[] = [...CLASS_ORDER];
-  const extraKeys = new Set<string>();
-  for (const item of items) {
-    for (const key of Object.keys(item.counts)) {
-      if (!known.includes(key) && key !== 'total') extraKeys.add(key);
-    }
-  }
-  const hasTotal = items.some((i) => typeof i.counts.total === 'number');
-  const max = Math.max(1, ...items.flatMap((i) => Object.entries(i.counts).filter(([k]) => k !== 'total').map(([, v]) => v)));
-  const classColumns = [
-    ...CLASS_ORDER.map((k) => ({ key: k as string, label: CLASS_INFO[k].short, color: CLASS_INFO[k].color })),
-    ...[...extraKeys].map((k) => ({ key: k, label: k, color: 'var(--primary)' })),
-  ];
-  // 並びの基準の列（backend は、分類を指定したときはその分類の件数、なければ合計の多い順に並べる。filter.cls が、その分類）を、地区の次（先頭側）に置く。
-  // 狭いチャットでは、右の列が横スクロールの先に隠れる。並びの基準が見えないと、数字（3, 2, 1, 0…）が乱れて見える
-  const sortCls = isCandidateClass(result.filter?.cls) ? result.filter.cls : null;
-  const sortKey = sortCls ?? (hasTotal ? 'total' : null);
-  const ordered = sortCls
-    ? [...classColumns.filter((c) => c.key === sortCls), ...classColumns.filter((c) => c.key !== sortCls)]
-    : classColumns;
+  const summary = compareSummary(result);
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
         <h3 className="result-card__title">{result.title}</h3>
         <SyntheticChip kind={result.provenance.run_kind} />
       </header>
-      {result.items.length === 0 ? (
+      {summary === null ? (
         <p className="empty-note">比べる地区がありません。</p>
       ) : (
-        <ScrollHint label={`${result.title}（横にスクロールできます）`}>
-          <table className="data-table data-table--chat compare-table">
-            <thead>
-              <tr>
-                <th scope="col">地区</th>
-                {/* 合計で並べるときは、合計を最初に。分類で並べるときは、その分類を最初にして、合計は最後 */}
-                {hasTotal && !sortCls && (
-                  <th scope="col" aria-sort="descending">
-                    合計
-                  </th>
-                )}
-                {ordered.map((c) => (
-                  <th key={c.key} scope="col" aria-sort={sortKey === c.key ? 'descending' : undefined}>
-                    {c.label}
-                  </th>
-                ))}
-                {hasTotal && sortCls && <th scope="col">合計</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.area_id}>
-                  <th scope="row">{item.name}</th>
-                  {hasTotal && !sortCls && <td className="mini-cell__value">{formatNumber(item.counts.total ?? 0)}</td>}
-                  {ordered.map((c) => {
-                    const v = item.counts[c.key] ?? 0;
-                    return (
-                      <td key={c.key}>
-                        <span className="mini-cell">
-                          <span className="bar bar--mini" aria-hidden="true">
-                            <span className="bar__fill" style={{ width: `${(v / max) * 100}%`, background: c.color }} />
-                          </span>
-                          <span className="mini-cell__value">{formatNumber(v)}</span>
-                        </span>
-                      </td>
-                    );
-                  })}
-                  {hasTotal && sortCls && <td className="mini-cell__value">{formatNumber(item.counts.total ?? 0)}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollHint>
+        <div className="compare-summary">
+          <p className="compare-summary__lead">{summary.lead}</p>
+          {summary.sub && <p className="compare-summary__sub">{summary.sub}</p>}
+        </div>
       )}
-      {result.items.length > COMPARE_ROWS && (
-        <p className="result-card__note">
-          全 {formatNumber(result.items.length)} 地区中 {formatNumber(COMPARE_ROWS)} 地区を表示
-        </p>
-      )}
-      {result.items.length > 0 && <ClassGuide />}
+      {summary !== null && <ClassGuide />}
       <ProvenanceBox provenance={result.provenance} />
     </section>
   );

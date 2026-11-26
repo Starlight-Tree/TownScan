@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AreaSummary, CandidateClass } from '../../lib/api-types';
 import { ALL_FILTER, type MapFilter } from '../../lib/result-view';
-import { AreaChartView } from './AreaChartView';
+import { AreaChartView, showSegmentCount } from './AreaChartView';
 
 function area(id: string, name: string, ward: string, counts: [number, number, number]): AreaSummary {
   const [confirmed_new, existing_omission, uncertain] = counts;
@@ -39,21 +39,59 @@ const rowButtons = () => within(screen.getByRole('list')).getAllByRole('button')
 const widths = (row: HTMLElement) => Array.from(row.querySelectorAll<HTMLElement>('.area-chart__seg')).map((s) => [s.dataset.class, parseFloat(s.style.width)]);
 
 describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
-  it('合計の多い順に並べる（同数は地区名の順）。1 行 = 1 地区で、地区名・区・合計を出す', () => {
+  it('合計の多い順に並べる（同数は地区名の順）。1 行 = 1 地区で、地区名・区・合計を出す。0 件の地区は、行にせず 1 行にまとめる', () => {
     setup();
     const rows = rowButtons();
-    expect(rows.map((r) => r.querySelector('.area-chart__name')?.textContent)).toEqual([
-      'アサヒ地区（中央区）',
-      'イースト地区（東区）',
-      'ノース地区（北区）',
-      'ゼロ地区（南区）',
+    expect(rows.map((r) => r.querySelector('.area-chart__name')?.textContent)).toEqual(['アサヒ地区（中央区）', 'イースト地区（東区）', 'ノース地区（北区）']);
+    expect(rows.map((r) => r.querySelector('.area-chart__total strong')?.textContent)).toEqual(['10', '10', '9']);
+    expect(document.querySelector('.area-chart__zero')).toHaveTextContent('0 件の地区（1） ゼロ地区');
+    // まとめた地区も、「表で見る」の表には残る（全地区の数字は、表で読める）
+    expect(screen.getByRole('row', { name: /ゼロ地区/ })).toBeInTheDocument();
+  });
+
+  it('0 件の地区が複数なら、数と名前を 1 行に並べる。選んでいる地区は、0 件でも行に残す（押し直して戻せる）', () => {
+    const many = [...areas, area('e', 'ゼロ二地区', '西区', [0, 0, 0])];
+    const { rerender } = render(<AreaChartView areas={many} filter={ALL_FILTER} onFilterChange={vi.fn()} />);
+    const zero = document.querySelector('.area-chart__zero')!;
+    expect(zero).toHaveTextContent('0 件の地区（2）');
+    expect(zero).toHaveTextContent('ゼロ地区');
+    expect(zero).toHaveTextContent('ゼロ二地区');
+    expect(rowButtons()).toHaveLength(3);
+    rerender(<AreaChartView areas={many} filter={{ ...ALL_FILTER, areaId: 'd' }} onFilterChange={vi.fn()} />);
+    expect(rowButtons().map((r) => r.querySelector('.area-chart__name')?.textContent)).toContain('ゼロ地区（南区）');
+    expect(document.querySelector('.area-chart__zero')).toHaveTextContent('0 件の地区（1） ゼロ二地区');
+  });
+
+  it('0 件の地区が無ければ、まとめの行は出さない。全部が 0 件なら、行は無く、その旨と 0 件の地区の一覧を出す', () => {
+    const { unmount } = render(<AreaChartView areas={areas.slice(0, 3)} filter={ALL_FILTER} onFilterChange={vi.fn()} />);
+    expect(document.querySelector('.area-chart__zero')).toBeNull();
+    unmount();
+    render(<AreaChartView areas={[areas[3]!]} filter={ALL_FILTER} onFilterChange={vi.fn()} />);
+    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.getByText('表示中の分類の候補は、どの地区にもありません。')).toBeInTheDocument();
+    expect(document.querySelector('.area-chart__zero')).toHaveTextContent('0 件の地区（1） ゼロ地区');
+  });
+
+  it('区間の中に件数を書く（棒に対して十分な幅があるときだけ）。書かない区間も、ホバーの題と行の読み上げで読める', () => {
+    setup();
+    const [asahi] = rowButtons() as [HTMLElement];
+    const labels = Array.from(asahi.querySelectorAll('.area-chart__seg')).map((seg) => [seg.getAttribute('title'), seg.querySelector('.area-chart__seg-n')?.textContent]);
+    expect(labels).toEqual([
+      ['新規出現 4 件', '4'],
+      ['既存の描き漏れ 4 件', '4'],
+      ['判定保留 2 件', '2'],
     ]);
-    expect(rows.map((r) => r.querySelector('.area-chart__total strong')?.textContent)).toEqual(['10', '10', '9', '0']);
+    // 書くかどうかは、棒に対する割合（1 桁は 10% 以上、2 桁は 18% 以上）
+    expect(showSegmentCount(1, 10)).toBe(true);
+    expect(showSegmentCount(1, 11)).toBe(false);
+    expect(showSegmentCount(10, 100)).toBe(false);
+    expect(showSegmentCount(18, 100)).toBe(true);
+    expect(showSegmentCount(0, 10)).toBe(false);
   });
 
   it('3 分類を積み上げる。幅は、最大の合計（10）に対する割合。0 件の分類は描かない', () => {
     setup();
-    const [asahi, , north, zero] = rowButtons() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    const [asahi, , north] = rowButtons() as [HTMLElement, HTMLElement, HTMLElement];
     expect(widths(asahi)).toEqual([
       ['confirmed_new', 40],
       ['existing_omission', 40],
@@ -64,7 +102,6 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
       ['existing_omission', 30],
       ['uncertain', 10],
     ]);
-    expect(widths(zero)).toEqual([]);
     // 棒は装飾（読み上げは行の aria-label が担う）
     expect(asahi.querySelector('.area-chart__bar')).toHaveAttribute('aria-hidden', 'true');
   });
@@ -73,8 +110,8 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     setup(only('existing_omission', 'uncertain'));
     const rows = rowButtons();
     // 並びも、表示する分類の和（イースト 8、アサヒ 6、ノース 4）の順
-    expect(rows.map((r) => r.querySelector('.area-chart__name')?.textContent)).toEqual(['イースト地区（東区）', 'アサヒ地区（中央区）', 'ノース地区（北区）', 'ゼロ地区（南区）']);
-    expect(rows.map((r) => r.querySelector('.area-chart__total strong')?.textContent)).toEqual(['8', '6', '4', '0']);
+    expect(rows.map((r) => r.querySelector('.area-chart__name')?.textContent)).toEqual(['イースト地区（東区）', 'アサヒ地区（中央区）', 'ノース地区（北区）']);
+    expect(rows.map((r) => r.querySelector('.area-chart__total strong')?.textContent)).toEqual(['8', '6', '4']);
     for (const r of rows) expect(r.querySelector('[data-class="confirmed_new"]')).toBeNull();
     // 最大の合計（8）が、棒の幅の基準になる
     expect(widths(rows[0]!)).toEqual([
@@ -235,9 +272,9 @@ describe('複数の地区（区など。areaIds）の条件', () => {
     expect([...next.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
   });
 
-  it('単一の地区を選んでいるときは、これまでどおり全行を出して、選んだ行に印を付ける（対象の行は出さない）', () => {
+  it('単一の地区を選んでいるときは、これまでどおり件数のある全行を出して、選んだ行に印を付ける（対象の行は出さない）', () => {
     setup({ ...ALL_FILTER, areaId: 'c' });
-    expect(rowButtons()).toHaveLength(4);
+    expect(rowButtons()).toHaveLength(3);
     expect(document.querySelector('.area-chart__scope')).toBeNull();
   });
 });
@@ -288,15 +325,20 @@ describe('グラフの操作が地図とつながっていることの案内', (
     view(ALL_FILTER);
     const hint = document.querySelector('.area-chart__hint')!;
     expect(hint).toHaveTextContent('表示中の分類の合計が多い順です');
-    expect(hint).toHaveTextContent('絞り込みは地図にも反映されます');
+    // 分類・地区の操作が地図にも効くことは、画面の文字で 1 回だけ言う（読み上げの名前にだけ書かない）
+    expect(hint).toHaveTextContent('分類・地区の絞り込みは、地図と集計の帯にも反映されます');
+    expect(document.querySelector('.area-chart__note')).toBeNull();
   });
 
-  it('分類のチップの近くに、地図にも反映されることを、目に見える文で言う（読み上げの名前にだけ書かない）', () => {
-    view(ALL_FILTER);
-    const note = document.querySelector('.area-chart__note')!;
-    expect(note).toHaveTextContent('分類を切り替えると、地図と集計の帯の表示にも反映されます');
-    // チップの群れの直後（aria-label ではなく、画面の文字）
-    expect(screen.getByRole('group', { name: /グラフに出す分類/ }).nextElementSibling).toBe(note);
+  it('凡例の近くに、判定保留の意味を 1 行で出す（「分類の意味」を開かなくても読める）。判定保留をグラフから外したときは出さない', () => {
+    const first = view(ALL_FILTER);
+    const gloss = document.querySelector('.area-chart__gloss')!;
+    expect(gloss).toHaveTextContent('判定保留は、新規か既存かを、写真から判断できませんでした。目で確かめる候補です。');
+    // チップの群れの直後
+    expect(screen.getByRole('group', { name: /グラフに出す分類/ }).nextElementSibling).toBe(gloss);
+    first.unmount();
+    view(only('confirmed_new'));
+    expect(document.querySelector('.area-chart__gloss')).toBeNull();
   });
 
   it('絞り込み中（地区・分類）で onShowMap があれば、「地図で見る」を出し、押すと呼ぶ', async () => {

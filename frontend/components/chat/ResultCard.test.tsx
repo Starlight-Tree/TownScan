@@ -80,15 +80,7 @@ describe('結果カード: 型ごとの描画', () => {
     expect(screen.getByText('該当する行はありません。')).toBeInTheDocument();
   });
 
-  it('compare: 地区ごとに分類別の件数と合計', () => {
-    render(<ResultCard result={compare} actions={makeActions()} />);
-    const row = screen.getByRole('row', { name: /テスト地区 02/ });
-    expect(within(row).getByText('6')).toBeInTheDocument();
-    expect(within(row).getByText('10')).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: '合計' })).toBeInTheDocument();
-  });
-
-  describe('compare: 上位 5 地区まで（全地区は、回答の中のグラフで読める）', () => {
+  describe('compare: 要点だけを言う（地区ごとの数字の表は出さない。全地区は、回答の中のグラフで読める）', () => {
     /** API の並びのまま、n 地区（件数は地区ごとに違う値） */
     const many = (n: number): CompareResult => ({
       ...compare,
@@ -98,42 +90,39 @@ describe('結果カード: 型ごとの描画', () => {
         counts: { confirmed_new: n - i, existing_omission: i, uncertain: 1, total: n + 1 },
       })),
     });
-    const dataRows = () => screen.getAllByRole('row').slice(1);
 
-    it('5 地区を超えるときは、API の並びの先頭 5 地区だけを出し、表の下に「全 N 地区中 5 地区を表示」と言う。数字は結果のまま', () => {
+    it('表は出さず、最も多い地区と、全地区の合計・内訳を、結果の数字から言う', () => {
+      render(<ResultCard result={compare} actions={makeActions()} />);
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      const card = screen.getByRole('region', { name: compare.title });
+      // テスト地区 02 が合計 10 で最多。2 地区の合計は 19 件（新規出現 7・既存の描き漏れ 9・判定保留 3）
+      expect(card).toHaveTextContent('候補が最も多いのはテスト地区 02で、10 件です。');
+      expect(card).toHaveTextContent('全 2 地区の合計は 19 件（新規出現 7・既存の描き漏れ 9・判定保留 3）。');
+      expect(card).not.toHaveTextContent('判定保留が過半');
+    });
+
+    it('地区の数が多くても、カードの大きさは同じ（地区の行を並べない。「N 地区中 5 地区を表示」とは言わない）', () => {
       render(<ResultCard result={many(12)} actions={makeActions()} />);
-      expect(dataRows().map((r) => within(r).getByRole('rowheader').textContent)).toEqual(['地区 01', '地区 02', '地区 03', '地区 04', '地区 05']);
-      expect(screen.queryByText('地区 06')).not.toBeInTheDocument();
-      expect(screen.getByText('全 12 地区中 5 地区を表示')).toBeInTheDocument();
-      // 表示した行の数字は、結果の値のまま（丸めない・並べ替えない）。地区 01: 新規出現 12・描き漏れ 0・保留 1・合計 13
-      const first = within(dataRows()[0]!);
-      expect(first.getByText('12')).toBeInTheDocument();
-      expect(first.getByText('13')).toBeInTheDocument();
-      // 表の下（分類の説明・根拠の手前）に出る。全地区は、回答の中のグラフで読める（ボタンは無い）
-      const note = screen.getByText('全 12 地区中 5 地区を表示');
-      expect(screen.getByRole('table').compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(note.compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByRole('row')).not.toBeInTheDocument();
+      expect(screen.queryByText(/地区中 5 地区を表示/)).not.toBeInTheDocument();
+      expect(screen.getByText(/全 12 地区の合計は/)).toBeInTheDocument();
     });
 
-    it('6 地区（5 をちょうど超える）でも、5 地区まで。注記の数は、結果の地区の数', () => {
-      render(<ResultCard result={many(6)} actions={makeActions()} />);
-      expect(dataRows()).toHaveLength(5);
-      expect(screen.getByText('全 6 地区中 5 地区を表示')).toBeInTheDocument();
+    it('並びの基準の分類（filter.cls）があれば、その分類で最多を言う', () => {
+      render(<ResultCard result={{ ...compare, filter: { cls: 'uncertain' } }} actions={makeActions()} />);
+      expect(screen.getByText('判定保留の候補が最も多いのはテスト地区 02で、2 件です。')).toBeInTheDocument();
     });
 
-    it('5 地区以下は、全部を出し、注記は出さない', () => {
-      for (const n of [5, 3, 1]) {
-        const { unmount } = render(<ResultCard result={many(n)} actions={makeActions()} />);
-        expect(dataRows()).toHaveLength(n);
-        expect(screen.queryByText(/地区中 5 地区を表示/)).not.toBeInTheDocument();
-        unmount();
-      }
+    it('要点は、分類の意味・根拠より前', () => {
+      render(<ResultCard result={compare} actions={makeActions()} />);
+      const lead = screen.getByText(/候補が最も多いのは/);
+      expect(lead.compareDocumentPosition(screen.getByText('分類の意味')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(lead.compareDocumentPosition(screen.getByText('根拠を見る')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('比べる地区が無いときは、注記を出さない', () => {
+    it('比べる地区が無いときは、その旨だけ', () => {
       render(<ResultCard result={many(0)} actions={makeActions()} />);
       expect(screen.getByText('比べる地区がありません。')).toBeInTheDocument();
-      expect(screen.queryByText(/地区中 5 地区を表示/)).not.toBeInTheDocument();
     });
   });
 
@@ -319,47 +308,12 @@ describe('結果カード: 表（チャットの狭い幅）', () => {
     expect(screen.queryByRole('button', { name: /詳細/ })).not.toBeInTheDocument();
   });
 
-  it('一覧・比較は、チャット用の表のクラスと、横にスクロールできる枠（フォーカスできる）に入る', () => {
-    const { unmount } = render(<ResultCard result={realTable} actions={makeActions()} />);
+  it('一覧は、チャット用の表のクラスと、横にスクロールできる枠（フォーカスできる）に入る', () => {
+    render(<ResultCard result={realTable} actions={makeActions()} />);
     const region = screen.getByRole('region', { name: `${realTable.title}（横にスクロールできます）` });
     expect(region).toHaveAttribute('tabindex', '0');
     expect(region.querySelector('table')).toHaveClass('data-table--chat');
     expect(region.parentElement).toHaveClass('table-scroll-wrap');
-    unmount();
-    render(<ResultCard result={compare} actions={makeActions()} />);
-    expect(screen.getByRole('region', { name: `${compare.title}（横にスクロールできます）` }).querySelector('table')).toHaveClass('data-table--chat');
-  });
-
-  it('比較（合計の多い順）: 並びの基準の「合計」を、地区の次（先頭側）に置く。昇降の印（aria-sort）も付ける', () => {
-    render(<ResultCard result={compare} actions={makeActions()} />);
-    const headers = screen.getAllByRole('columnheader');
-    expect(headers.map((h) => h.textContent)).toEqual(['地区', '合計', '新規出現', '既存の描き漏れ', '判定保留']);
-    expect(headers.map((h) => h.getAttribute('aria-sort'))).toEqual([null, 'descending', null, null, null]);
-    // 行の最初の数字は合計（5+3+1 = 9）
-    const row = screen.getByRole('row', { name: /テスト地区 01/ });
-    expect(within(row).getAllByRole('cell')[0]).toHaveTextContent('9');
-  });
-
-  it('比較（分類の多い順）: その分類の列を地区の次に置き、合計は最後。aria-sort はその分類の列だけ', () => {
-    const byUncertain: CompareResult = { ...compare, filter: { cls: 'uncertain' } };
-    render(<ResultCard result={byUncertain} actions={makeActions()} />);
-    const headers = screen.getAllByRole('columnheader');
-    expect(headers.map((h) => h.textContent)).toEqual(['地区', '判定保留', '新規出現', '既存の描き漏れ', '合計']);
-    expect(headers.map((h) => h.getAttribute('aria-sort'))).toEqual([null, 'descending', null, null, null]);
-    // 地区 01 の判定保留は 1、合計は 9。並びは 判定保留 → 新規出現 → 既存 → 合計
-    const cells = within(screen.getByRole('row', { name: /テスト地区 01/ })).getAllByRole('cell');
-    expect(cells.map((c) => c.textContent)).toEqual(['1', '5', '3', '9']);
-  });
-
-  it('比較: 合計が結果に無いときは、合計の列も aria-sort も出さない（分類の列は、これまでの順）', () => {
-    const noTotal: CompareResult = {
-      ...compare,
-      items: compare.items.map((i) => ({ ...i, counts: { confirmed_new: i.counts.confirmed_new!, existing_omission: 1, uncertain: 0 } })),
-    };
-    render(<ResultCard result={noTotal} actions={makeActions()} />);
-    const headers = screen.getAllByRole('columnheader');
-    expect(headers.map((h) => h.textContent)).toEqual(['地区', '新規出現', '既存の描き漏れ', '判定保留']);
-    expect(headers.every((h) => !h.hasAttribute('aria-sort'))).toBe(true);
   });
 });
 

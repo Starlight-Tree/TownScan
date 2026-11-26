@@ -20,6 +20,16 @@ interface Props {
   onShowMap?: () => void;
 }
 
+/**
+ * 棒の区間の中に件数を書くか。区間が狭いと数字が欠けるので、棒の長さに対する割合が十分あるときだけ書く
+ * （狭いチャットの棒は 140px ほど。1 桁は 10% 以上、2 桁は 18% 以上。書かない区間の数字は、行の右の合計・「表で見る」・ホバーで読める）
+ */
+export function showSegmentCount(count: number, scale: number): boolean {
+  if (count <= 0 || scale <= 0) return false;
+  const digits = formatNumber(count).length;
+  return count / scale >= 0.1 + 0.08 * (digits - 1);
+}
+
 /** 行を読み上げる文。色や棒の長さを見られない人にも、地区名と 3 分類の件数が伝わるようにする */
 function rowLabel(row: AreaRow, classes: ReadonlySet<CandidateClass>): string {
   const parts = CLASS_ORDER.map(
@@ -42,6 +52,9 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
   const multiIds = multiName === null ? null : areaScopeIds(filter);
   const rows = buildRows(areas, classes).filter((r) => multiIds === null || multiIds.has(r.area.id));
   const scale = Math.max(1, ...rows.map((r) => Math.max(r.total, r.stack)));
+  // 0 件の地区は、棒が空の行を並べず、1 行にまとめる（縦に長くなり、件数のある地区が埋もれる）。選んでいる地区は、押し直して戻せるよう、0 件でも行に残す
+  const barRows = rows.filter((r) => r.total > 0 || r.area.id === areaId);
+  const zeroRows = rows.filter((r) => r.total <= 0 && r.area.id !== areaId);
   const empty = areas.length === 0;
 
   // 複数の地区の条件（areaIds・scope）は、1 つの地区を選んだ時点で消す（フィルターを丸ごと写さない）
@@ -71,9 +84,9 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
             <span className="area-chart__scope-key">対象:</span> <strong>{multiName}</strong>
           </p>
         )}
-        {/* 右の数字・並び順は、表示している分類だけの合計（分類のチップを替えると、数字も並びも変わる） */}
+        {/* 右の数字・並び順は、表示している分類だけの合計（分類のチップを替えると、数字も並びも変わる）。分類・行の操作が地図にも効くことも、ここで 1 回だけ言う */}
         <p className="area-chart__hint">
-          表示中の分類の合計が多い順です。行を押すとその地区に絞り込み、もう一度押すと全地区に戻ります。絞り込みは地図にも反映されます。
+          表示中の分類の合計が多い順です。行を押すとその地区に絞り込み、もう一度押すと全地区に戻ります。分類・地区の絞り込みは、地図と集計の帯にも反映されます。
         </p>
       </header>
 
@@ -91,7 +104,11 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
               </button>
             ))}
           </div>
-          <p className="area-chart__note">分類を切り替えると、地図と集計の帯の表示にも反映されます。</p>
+          {classes.has('uncertain') && (
+            <p className="area-chart__gloss">
+              <strong>{CLASS_INFO.uncertain.short}</strong>は、{CLASS_INFO.uncertain.summary}目で確かめる候補です。
+            </p>
+          )}
           {onShowMap && !isAllFilter(filter) && (
             <div className="area-chart__linked">
               <span>いまの絞り込み（地区・分類）は、地図にも反映されています。</span>
@@ -107,8 +124,9 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
             </p>
           ) : (
             <>
+              {barRows.length > 0 && (
               <ol className="area-chart__rows">
-                {rows.map((row) => {
+                {barRows.map((row) => {
                   const selected = row.area.id === areaId;
                   return (
                     <li key={row.area.id}>
@@ -130,8 +148,11 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
                                 key={c}
                                 className="area-chart__seg"
                                 data-class={c}
+                                title={`${CLASS_INFO[c].short} ${formatNumber(row.byClass[c])} 件`}
                                 style={{ width: `${(row.byClass[c] * 100) / scale}%`, '--c': CLASS_INFO[c].color } as CSSProperties}
-                              />
+                              >
+                                {showSegmentCount(row.byClass[c], scale) && <span className="area-chart__seg-n">{formatNumber(row.byClass[c])}</span>}
+                              </span>
                             ) : null,
                           )}
                         </span>
@@ -143,6 +164,18 @@ export function AreaChartView({ areas, filter, onFilterChange, onShowMap }: Prop
                   );
                 })}
               </ol>
+              )}
+              {barRows.length === 0 && (
+                <p className="empty-note" role="status">
+                  表示中の分類の候補は、どの地区にもありません。
+                </p>
+              )}
+              {zeroRows.length > 0 && (
+                <p className="area-chart__zero">
+                  <strong>0 件の地区（{formatNumber(zeroRows.length)}）</strong>{' '}
+                  {zeroRows.map((r) => r.area.name).join('、')}
+                </p>
+              )}
 
               <details className="area-chart__details">
                 <summary>表で見る</summary>

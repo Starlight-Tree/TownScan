@@ -113,6 +113,29 @@ describe('answerScope（結果の値から対象・条件を作る）', () => {
     expect(answerScope([many], nameOf).find((i) => i.key === 'compare')?.text).toBe('地区1、地区2、地区3 ほか 9 地区');
   });
 
+  describe('compare: 解析した全地区を比べたときは、「比べる地区」の行を出さない（地区の行が「すべて（解析した全 N 地区…）」と言っている）', () => {
+    const byWard: CompareResult = { ...compare, filter: { area_ids: ['z18-1-2', 'z18-2-2'], scope: '中央区', cls: null } };
+
+    it('条件の地区が「すべて」で、比べた地区の数が全地区の数以上なら、行を出さない。地区の行は残る', () => {
+      const items = answerScope([compare], nameOf, 2);
+      expect(items.find((i) => i.key === 'compare')).toBeUndefined();
+      expect(items.find((i) => i.key === 'area')?.text).toBe('すべて');
+    });
+
+    it('全地区より少ない地区を比べたときは、行を出す（どの地区を比べたかを言う）', () => {
+      expect(answerScope([compare], nameOf, 12).find((i) => i.key === 'compare')?.text).toBe('テスト地区 01、テスト地区 02');
+    });
+
+    it('地区の数が分からない（0）ときは、これまでどおり出す', () => {
+      expect(answerScope([compare], nameOf).find((i) => i.key === 'compare')).toBeDefined();
+      expect(answerScope([compare], nameOf, 0).find((i) => i.key === 'compare')).toBeDefined();
+    });
+
+    it('区などの複数の地区の条件のときは、全地区の数と同じでも、行を出す（地区の行は区の名前で、中の地区を言わない）', () => {
+      expect(answerScope([byWard], nameOf, 2).find((i) => i.key === 'compare')).toBeDefined();
+    });
+  });
+
   it('compare: name が空なら、地区の一覧から名前を引く', () => {
     const noName: CompareResult = { ...compare, items: [{ area_id: 'z18-1-2', name: '', counts: { total: 1 } }] };
     expect(answerScope([noName], nameOf).find((i) => i.key === 'compare')?.text).toBe('テスト地区 01');

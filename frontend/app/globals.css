@@ -1320,6 +1320,31 @@ p.banner {
   border-style: dashed;
 }
 
+/* 比較カードの要点（lib/compare-summary.ts）。回答の文は数字を言わないので、ここが最初に読む文 */
+.compare-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.compare-summary__lead {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.compare-summary__sub {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* 結果カードの「分類の意味」「根拠を見る」: 折りたたみが続くとき、行のあいだを詰める（押す高さ 32px は保つ） */
+.result-card > .provenance + .provenance {
+  margin-top: -8px;
+}
+
 /* ---- 結果カード ---- */
 .result-card {
   display: flex;
@@ -1469,8 +1494,7 @@ p.banner {
   font-size: 13px;
 }
 
-.breakdown__value,
-.mini-cell__value {
+.breakdown__value {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -1633,19 +1657,6 @@ p.banner {
   padding: 0 10px;
 }
 
-.data-table--chat .mini-cell {
-  grid-template-columns: minmax(16px, 1fr) auto;
-  min-width: 0;
-}
-
-.data-table--chat .bar--mini {
-  min-width: 16px;
-}
-
-.data-table--chat .mini-cell__value {
-  white-space: nowrap;
-}
-
 /* 候補 ID は、最初の列の名前の下に、小さく添える（列にすると、狭いチャットで面積・詳細が隠れる） */
 .data-table__sub {
   display: block;
@@ -1673,14 +1684,6 @@ p.banner {
 .data-table tr.is-chosen td {
   background: var(--tag-bg);
   font-weight: 700;
-}
-
-.mini-cell {
-  display: grid;
-  grid-template-columns: minmax(36px, 1fr) 32px;
-  align-items: center;
-  gap: 6px;
-  min-width: 90px;
 }
 
 .empty-note {
@@ -2304,11 +2307,26 @@ p.banner {
   gap: 6px 8px;
 }
 
-/* 分類のチップ・行の操作が、地図にも効くことを、目に見える文で伝える（読み上げの名前にだけ書いていた） */
-.area-chart__note {
-  margin-top: -6px;
+/* 判定保留は、新規でも既存でもない第 3 の分類で、いちばん多いことがある。意味を、凡例の近くに 1 行で出す（「分類の意味」を開かなくても読める） */
+.area-chart__gloss {
+  margin-top: -4px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.area-chart__gloss strong {
+  color: var(--text);
+}
+
+/* 0 件の地区は、棒の行にせず 1 行にまとめる */
+.area-chart__zero {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.area-chart__zero strong {
+  color: var(--text);
 }
 
 .area-chart__linked {
@@ -2415,7 +2433,11 @@ p.banner {
 /* 3 分類を、色（--c）・縁の線（実線・破線・点線）・塗りの模様（無地・斜線・水玉）で区別する。lib/classes.ts の dash・shape の方針に合わせる */
 .area-chart__seg {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 100%;
+  overflow: hidden;
   border: 2px solid var(--c);
   background: color-mix(in srgb, var(--c) 30%, var(--surface));
 }
@@ -2429,6 +2451,18 @@ p.banner {
   border-style: dotted;
   background-image: radial-gradient(circle, var(--c) 1.2px, transparent 1.6px);
   background-size: 6px 6px;
+}
+
+/* 区間の中の件数。模様（斜線・水玉）の上に直接書くと読めないので、地色の小さな札に載せる */
+.area-chart__seg-n {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .area-chart__total {
