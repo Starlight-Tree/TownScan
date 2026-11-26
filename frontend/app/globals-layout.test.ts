@@ -46,7 +46,7 @@ const decl = (body: string, property: string): string | null => {
   return m ? m[1]!.trim() : null;
 };
 
-describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いたときだけ、広い幅は右に横パネル、狭い幅は 4 つのタブ（ADR 0007）', () => {
+describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いたときだけ、全幅の 4 つのタブ（ADR 0008）', () => {
   it('基本は 1 列で、枠も余白も持たない。幅 1000px 以上も同じ 1 列で、本文の高さいっぱい（幅の上限は .home に無い。会話の本文を 46rem の列に収めるのは、チャットの中の --chat-pad）', () => {
     const home = ruleIn(css, '.home');
     expect(decl(home, 'grid-template-columns')).toBe('minmax(0, 1fr)');
@@ -71,15 +71,16 @@ describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いた�
     expect(decl(chat, 'min-height')).toBe('min(420px, 64dvh)');
   });
 
-  it('広い幅で拡大ビューを開くと、チャットの右に横パネルが並ぶ（幅は 24〜32rem の初期値）', () => {
-    expect(decl(ruleIn(css, ".home[data-layout='wide'][data-open='true']"), 'grid-template-columns')).toBe('minmax(0, 1fr) minmax(24rem, 32rem)');
+  it('幅で形を替えない: 広い・狭いの判定（data-layout）も、チャットの右に並べる横パネルの規則も無い', () => {
+    expect(css).not.toContain('data-layout');
+    expect(css).not.toContain('minmax(24rem, 32rem)');
   });
 
-  it('狭い幅で開くと、1 行目がタブの帯、2 行目にチャットと画面が重なる。隠すほうは visibility: hidden のまま（display: none にしない。チャットのスクロール位置と、地図の大きさを保つ）', () => {
-    expect(decl(ruleIn(css, ".home[data-layout='narrow'][data-open='true']"), 'grid-template-rows')).toBe('auto minmax(0, 1fr)');
+  it('開くと、1 行目がタブの帯、2 行目にチャットと画面が重なる。隠すほうは visibility: hidden のまま（display: none にしない。チャットのスクロール位置と、地図の大きさを保つ）', () => {
+    expect(decl(ruleIn(css, ".home[data-open='true']"), 'grid-template-rows')).toBe('auto minmax(0, 1fr)');
     expect(decl(ruleIn(css, '.home__tabs'), 'grid-area')).toBe('1 / 1');
-    const stacked = /\.home\[data-layout='narrow'\]\[data-open='true'\] > \.home__chat,\s*\.home\[data-layout='narrow'\]\[data-open='true'\] > \.home__panel\s*\{([^}]*)\}/.exec(css);
-    expect(stacked, '狭い幅で、チャットと画面を同じ場所に重ねる規則が無い').not.toBeNull();
+    const stacked = /\.home\[data-open='true'\] > \.home__chat,\s*\.home\[data-open='true'\] > \.home__panel\s*\{([^}]*)\}/.exec(css);
+    expect(stacked, 'チャットと画面を同じ場所に重ねる規則が無い').not.toBeNull();
     expect(decl(stacked![1]!, 'grid-area')).toBe('2 / 1');
     const hidden = /\.home__chat\[hidden\],\s*\.home__panel\[hidden\]\s*\{([^}]*)\}/.exec(css);
     expect(hidden, 'チャット・画面を隠す規則が無い').not.toBeNull();
@@ -108,7 +109,7 @@ describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いた�
 });
 
 describe('拡大ビュー（.expanded-view。モーダルではない。結果領域を入れる）', () => {
-  it('窓を覆わない（固定の層・暗い背景・z-index を持たない）。チャットを操作できるまま、横に並ぶ・タブの画面になる', () => {
+  it('窓を覆わない（固定の層・暗い背景・z-index を持たない）。タブの画面の一部になる', () => {
     const root = ruleIn(css, '.expanded-view');
     expect(decl(root, 'position')).toBeNull();
     expect(decl(root, 'inset')).toBeNull();
@@ -118,11 +119,11 @@ describe('拡大ビュー（.expanded-view。モーダルではない。結果�
     expect(decl(root, 'flex-direction')).toBe('column');
   });
 
-  it('広い幅は枠・角丸のある横パネル、狭い幅はタブの画面の一部（余白を詰め、枠・角丸なし）', () => {
-    expect(decl(ruleIn(css, '.expanded-view'), 'border')).toBe('1px solid var(--border)');
-    const narrow = ruleIn(css, ".expanded-view[data-layout='narrow']");
-    expect(decl(narrow, 'border')).toBe('0');
-    expect(decl(narrow, 'border-radius')).toBe('0');
+  it('タブの画面の一部（余白を詰め、枠・角丸なし）。横パネルの枠は無い', () => {
+    const root = ruleIn(css, '.expanded-view');
+    expect(decl(root, 'padding')).toBe('8px');
+    expect(decl(root, 'border')).toBeNull();
+    expect(decl(root, 'border-radius')).toBeNull();
   });
 
   it('中の結果領域は、パネルの高さをすべて使い、3 つの画面は置き場いっぱいに重なる（選んでいない画面は、visibility: hidden のまま。display: none にしない）', () => {

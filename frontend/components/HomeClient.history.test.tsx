@@ -18,10 +18,8 @@ import { NewConversationProvider } from './NewConversation';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 vi.mock('./map/LeafletMap', () => ({ default: () => <div data-testid="leaflet" /> }));
-// 結果パネルの置き方は、本文の幅を JS で測って決める。jsdom には幅が無いので、広い幅に固定する（モーダルではなく、チャットの右の横パネル）
-vi.mock('../lib/layout-mode', async (importOriginal) => ({ ...(await importOriginal<typeof import('../lib/layout-mode')>()), useLayoutMode: () => 'wide' as const }));
-/** 拡大ビュー（横パネル。名前つきの領域）。開いていなければ null */
-const panel = () => screen.queryByRole('region', { name: '結果' });
+/** 拡大ビュー（タブの画面の側）。開いていなければ null */
+const panel = () => document.querySelector<HTMLElement>('.expanded-view');
 
 const c = (id: string, title: string): ConversationSummary => ({ id, title, created_at: '2026-11-25T01:00:00+00:00', updated_at: '2026-11-25T01:05:00+00:00' });
 const LIST = [c('c1', '新規出現の候補は何件ありますか？'), c('c2', '地区ごとの候補数を比べて')];
@@ -100,7 +98,7 @@ describe('開き直した会話（画面全体）', () => {
     await screen.findByText('地図です。');
     await waitFor(() => expect(screen.getByRole('button', { name: '地図で見る' })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: '地図で見る' }));
-    expect(await screen.findByRole('region', { name: '結果' })).toBeInTheDocument();
+    await waitFor(() => expect(panel()).not.toBeNull());
   });
 
   it('再読み込み（立ち上がり）の自動の開き直しは、React の StrictMode（開発の二重実行）でも、並べ終える', async () => {

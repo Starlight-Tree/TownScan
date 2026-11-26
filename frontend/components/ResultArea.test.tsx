@@ -231,7 +231,7 @@ describe('結果領域まわりの CSS（空の状態のフォーカスの輪・
     expect(bodies('.area-chart:focus-visible')[0]).toMatch(/outline-offset\s*:\s*-3px/);
   });
 
-  it('拡大ビュー（横パネル・タブの画面）の中の詳細は、その幅いっぱい。窓の幅（1257px 以上）で最大幅を決める規則は無い（ADR 0007。横パネルは約 32rem）', () => {
+  it('拡大ビュー（全幅のタブの画面）の中の詳細は、その幅いっぱい。窓の幅（1257px 以上）で最大幅を決める規則は無い（ADR 0007・0008）', () => {
     expect(css).not.toContain('.expanded-view .drawer__body > *');
     expect(css).not.toMatch(/max-width\s*:\s*clamp\(\d+px,\s*\d+vw,\s*\d+px\)/);
     const [base] = bodies('.drawer__body > *');
