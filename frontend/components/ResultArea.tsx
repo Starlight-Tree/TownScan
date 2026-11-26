@@ -24,6 +24,8 @@ interface TabsProps {
   marks?: Partial<Record<TabId, string>>;
   /** タブの帯の右端に置く部品（「閉じる」ボタン）。tablist の外に置く */
   trailing?: ReactNode;
+  /** 画面（tabpanel）がまだ無いタブ（拡大ビューを開く前の、地図・グラフ・写真の比較）。aria-controls を付けない（存在しない id を指さない） */
+  unmounted?: readonly TabId[];
   /** 帯の中の Esc（中の部品が使っていないとき）。広い幅は、拡大ビューの外枠が受けるので、渡さない */
   onEscape?: () => void;
 }
@@ -32,7 +34,7 @@ interface TabsProps {
  * タブの帯（WAI-ARIA の tabs。選ぶと同時に切り替わる方式）。選択中のタブだけ Tab キーの順に入り、タブの間は矢印キー（端で反対側へ回る）・Home・End で動く。
  * 広い幅は拡大ビューの中、狭い幅はチャットの上に置く（置き場は親が決める）
  */
-export function ResultTabs({ baseId, tabs, selected, onSelect, marks, trailing, onEscape }: TabsProps) {
+export function ResultTabs({ baseId, tabs, selected, onSelect, marks, trailing, unmounted, onEscape }: TabsProps) {
   const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({});
 
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -80,7 +82,7 @@ export function ResultTabs({ baseId, tabs, selected, onSelect, marks, trailing, 
               role="tab"
               className="result-area__tab"
               aria-selected={isSelected}
-              aria-controls={resultPanelId(baseId, v)}
+              aria-controls={unmounted?.includes(v) ? undefined : resultPanelId(baseId, v)}
               tabIndex={isSelected ? 0 : -1}
               onClick={() => onSelect(v)}
               onKeyDown={(e) => onKeyDown(e, i)}

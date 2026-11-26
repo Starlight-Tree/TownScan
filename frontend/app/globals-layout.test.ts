@@ -46,7 +46,7 @@ const decl = (body: string, property: string): string | null => {
   return m ? m[1]!.trim() : null;
 };
 
-describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いたときだけ、全幅の 4 つのタブ（ADR 0008）', () => {
+describe('チャット（`/`）: 基本は 1 列。上に、いつも出る全幅の 4 つのタブ（ADR 0008）', () => {
   it('基本は 1 列で、枠も余白も持たない。幅 1000px 以上も同じ 1 列で、本文の高さいっぱい（幅の上限は .home に無い。会話の本文を 46rem の列に収めるのは、チャットの中の --chat-pad）', () => {
     const home = ruleIn(css, '.home');
     expect(decl(home, 'grid-template-columns')).toBe('minmax(0, 1fr)');
@@ -76,10 +76,10 @@ describe('チャット（`/`）: 基本は 1 列。拡大ビューを開いた�
     expect(css).not.toContain('minmax(24rem, 32rem)');
   });
 
-  it('開くと、1 行目がタブの帯、2 行目にチャットと画面が重なる。隠すほうは visibility: hidden のまま（display: none にしない。チャットのスクロール位置と、地図の大きさを保つ）', () => {
-    expect(decl(ruleIn(css, ".home[data-open='true']"), 'grid-template-rows')).toBe('auto minmax(0, 1fr)');
+  it('1 行目がタブの帯（いつも出る）、2 行目にチャットと画面が重なる。隠すほうは visibility: hidden のまま（display: none にしない。チャットのスクロール位置と、地図の大きさを保つ）', () => {
+    expect(decl(ruleIn(css, '.home'), 'grid-template-rows')).toBe('auto minmax(0, 1fr)');
     expect(decl(ruleIn(css, '.home__tabs'), 'grid-area')).toBe('1 / 1');
-    const stacked = /\.home\[data-open='true'\] > \.home__chat,\s*\.home\[data-open='true'\] > \.home__panel\s*\{([^}]*)\}/.exec(css);
+    const stacked = /\.home > \.home__chat,\s*\.home > \.home__panel\s*\{([^}]*)\}/.exec(css);
     expect(stacked, 'チャットと画面を同じ場所に重ねる規則が無い').not.toBeNull();
     expect(decl(stacked![1]!, 'grid-area')).toBe('2 / 1');
     const hidden = /\.home__chat\[hidden\],\s*\.home__panel\[hidden\]\s*\{([^}]*)\}/.exec(css);

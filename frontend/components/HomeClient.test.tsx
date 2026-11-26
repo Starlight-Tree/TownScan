@@ -225,18 +225,19 @@ afterEach(() => {
 });
 
 describe('最初の画面と、回答が届いたとき（チャットの 1 列。拡大ビューは開かない）', () => {
-  it('最初の画面は、チャットだけの 1 列。拡大ビュー・地図・タブ・「拡大」ボタン・結果領域は、マウントもしない。画面を替えた知らせの live region も無い', async () => {
+  it('最初の画面は、チャットのタブを選んだ状態。タブの帯（4 つ。「閉じる」は無い）とチャットの枠と空の知らせの領域だけで、拡大ビュー・地図・「拡大」ボタン・結果領域は、マウントもしない。画面を替えた知らせの live region も無い', async () => {
     await renderLoaded();
     const home = document.querySelector('.home')!;
     expect(home).toHaveClass('home');
-    expect(home).toHaveAttribute('data-open', 'false');
-    // チャットの枠と、空の知らせの領域（新着用）だけ。タブの帯・パネルは無い
-    expect(Array.from(home.children).map((c) => c.className)).toEqual(['home__chat', 'visually-hidden']);
-    expect(home.firstElementChild!.firstElementChild).toHaveClass('chat');
-    expect(home.querySelector('.home__chat')).not.toHaveAttribute('role');
+    // タブの帯・チャットの枠・空の知らせの領域（新着用）だけ。パネルは無い
+    expect(Array.from(home.children).map((c) => c.className)).toEqual(['home__tabs', 'home__chat', 'visually-hidden']);
+    expect(home.querySelector('.home__chat')!.firstElementChild).toHaveClass('chat');
+    expect(home.querySelector('.home__chat')).toHaveAttribute('role', 'tabpanel');
+    expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((x) => x.textContent)).toEqual(['チャット', '地図', 'グラフ', '写真の比較']);
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: '閉じる' })).toBeNull();
     expect(panel()).toBeNull();
     expect(screen.queryByTestId('leaflet')).toBeNull();
-    expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('region', { name: '結果' })).toBeNull();
     expect(screen.queryByRole('button', { name: '拡大' })).toBeNull();
     // 新着の知らせの領域は、空のまま先に置いてある（何も入れていない）
@@ -260,7 +261,7 @@ describe('最初の画面と、回答が届いたとき（チャットの 1 列�
     expect(await screen.findAllByTestId('leaflet')).toHaveLength(1);
     expect(screen.getAllByTestId('chart')).toHaveLength(1);
     expect(panel()).toBeNull();
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
     expect(spy.drawer).toBeNull();
     expect(detailCalls()).toHaveLength(0);
     // 続けて、別の結果つきの回答（表・地図の表示）が届いても、拡大ビューは開かない（図は、その回答の中に増える）
@@ -379,9 +380,9 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
 
   it('拡大ビューは、開いているあいだだけマウントする（開く前は、タブも詳細も無く、閉じると外す）。回答の中の図は、拡大ビューとは別に、残る', async () => {
     await ask([table, mapFocus]);
-    // 開く前: 拡大ビューは無い。地図は、回答の中の図の 1 つだけ
+    // 開く前: 拡大ビューは無い（タブの帯は、チャットのタブを選んだ状態）。地図は、回答の中の図の 1 つだけ
     expect(panel()).toBeNull();
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
     const inline = await screen.findByTestId('leaflet');
     expect(screen.getAllByTestId('leaflet')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: /詳細.*c-1-2-1/ }));
@@ -392,7 +393,7 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     expect(inline.isConnected).toBe(true);
     await closeDialog();
     expect(panel()).toBeNull();
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByRole('region', { name: '候補の詳細' })).toBeNull();
     expect(screen.queryByTestId('chart')).toBeNull();
     // 閉じると、拡大ビューだけが外れ、図は残る
@@ -2246,10 +2247,12 @@ describe('全幅の 4 つのタブ: チャット・地図・グラフ・写真�
   const chatPanel = () => document.querySelector<HTMLElement>('.home__chat')!;
   const status = () => document.querySelector<HTMLElement>('.home > [role="status"]')!;
 
-  it('最初の画面は、チャットだけ（タブの帯は無い）。図の「拡大」で開くと、4 つのタブが出て、開いた画面のタブが選ばれ、チャットは隠れる（外れない）', async () => {
+  it('最初の画面から、タブの帯は出ている（チャットのタブを選んだ状態）。図の「拡大」で開くと、開いた画面のタブが選ばれ、チャットは隠れる（外れない）', async () => {
     await ask([count], '回答です。', '件数は？');
-    expect(screen.queryByRole('tablist')).toBeNull();
-    expect(chatPanel()).not.toHaveAttribute('role');
+    expect(names()).toEqual(['チャット', '地図', 'グラフ', '写真の比較']);
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
+    expect(chatPanel()).toHaveAttribute('role', 'tabpanel');
+    expect(chatPanel()).not.toHaveAttribute('hidden');
     const inputBefore = chatInput();
     const mapBefore = await within(figureRegion('map')).findByTestId('leaflet');
     await userEvent.click(figureExpand('chart'));
@@ -2269,6 +2272,28 @@ describe('全幅の 4 つのタブ: チャット・地図・グラフ・写真�
     expect(document.querySelector('[inert]')).toBeNull();
     expect(screen.queryByRole('region', { name: '結果' })).toBeNull();
     // フォーカスは、選んでいるタブへ
+    expect(tab('グラフ')).toHaveFocus();
+  });
+
+  it('最初の画面で、地図・グラフ・写真の比較のタブを押すと、回答を持たない拡大ビュー（全地区）がその画面で開く。「閉じる」が出て、閉じると押したタブへフォーカスが戻る。開く前の地図などのタブは、aria-controls を持たない', async () => {
+    await renderLoaded();
+    for (const name of ['地図', 'グラフ', '写真の比較']) expect(tab(name)).not.toHaveAttribute('aria-controls');
+    expect(tab('チャット')).toHaveAttribute('aria-controls');
+    await userEvent.click(tab('グラフ'));
+    expect(tab('グラフ')).toHaveAttribute('aria-selected', 'true');
+    expect(chart()).toHaveAttribute('data-area-id', '');
+    expect(within(panelEl()).getByText('解析した地区')).toBeInTheDocument();
+    expect(chatPanel()).toHaveAttribute('hidden');
+    expect(tab('グラフ')).toHaveFocus();
+    for (const t of tabs()) expect(t).toHaveAttribute('aria-controls');
+    // 別のタブへ替えても、拡大ビューは 1 つのまま
+    await userEvent.click(tab('地図'));
+    expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
+    expect(document.querySelectorAll('.expanded-view')).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: '閉じる' }));
+    expect(panel()).toBeNull();
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
+    // 押したタブ（開いたときに押した「グラフ」）が戻し先
     expect(tab('グラフ')).toHaveFocus();
   });
 
@@ -2331,19 +2356,20 @@ describe('全幅の 4 つのタブ: チャット・地図・グラフ・写真�
     expect(screen.getByRole('tablist')).toBeInTheDocument();
   });
 
-  it('「閉じる」: タブの帯を外し、チャットへ戻る（地図などの中身は外す）。フォーカスは、開いたボタンへ戻る。Esc も同じ', async () => {
+  it('「閉じる」: チャットのタブへ戻り、「閉じる」ボタンが消える（地図などの中身は外す。タブの帯は残る）。フォーカスは、開いたボタンへ戻る。Esc も同じ', async () => {
     await ask([count]);
     const opener = figureExpand('chart');
     await userEvent.click(opener);
     await userEvent.click(screen.getByRole('button', { name: '閉じる' }));
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: '閉じる' })).toBeNull();
     expect(document.querySelector('.home__panel')).toBeNull();
     expect(chatPanel()).not.toHaveAttribute('hidden');
-    expect(chatPanel()).not.toHaveAttribute('role');
     expect(opener).toHaveFocus();
     await userEvent.click(opener);
     await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(tab('チャット')).toHaveAttribute('aria-selected', 'true');
+    expect(document.querySelector('.home__panel')).toBeNull();
     expect(opener).toHaveFocus();
   });
 

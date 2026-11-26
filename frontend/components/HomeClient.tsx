@@ -261,19 +261,24 @@ export function HomeClient() {
 
   const chatHidden = current !== undefined && !showChat;
 
-  /** タブの帯から選ぶ。チャットのタブは、チャットを見せるだけ（拡大ビューは開いたまま）。ほかは、その画面を選ぶ */
+  /**
+   * タブの帯から選ぶ。チャットのタブは、チャットを見せるだけ（拡大ビューは開いたまま）。
+   * ほかは、その画面を選ぶ。拡大ビューがまだ開いていないとき（最初の画面など）は、回答を持たない拡大ビュー（全地区）を、その画面で開く（押したタブへ、閉じたあとのフォーカスを戻す）
+   */
   const selectTab = useCallback(
     (id: TabId) => {
       if (id === 'chat') {
         setShowChat(true);
         setUnread(false);
         setAnnouncement('');
+      } else if (openKeyRef.current === null) {
+        expand(null, { type: 'view', view: id }, document.getElementById(resultTabId(baseId, id)));
       } else {
         setShowChat(false);
         chooseView(id);
       }
     },
-    [chooseView],
+    [expand, chooseView, baseId],
   );
 
   /** 「チャットへ戻る」: チャットのタブへ（拡大ビューは閉じない） */
@@ -302,27 +307,29 @@ export function HomeClient() {
 
   return (
     <AreasProvider areas={areas}>
-      <div className="home" data-open={current ? 'true' : 'false'}>
-        {current && (
-          // チャット・地図・グラフ・写真の 4 つのタブ。拡大ビューを開いているあいだだけ出す（最初の画面は、チャットだけ）
-          <div className="home__tabs">
-            <ResultTabs
-              baseId={baseId}
-              tabs={TABS}
-              selected={showChat ? 'chat' : current.view}
-              onSelect={selectTab}
-              marks={unread ? { chat: '（新着）' } : undefined}
-              trailing={closeButton}
-              onEscape={showChat ? undefined : close}
-            />
-          </div>
-        )}
+      <div className="home">
+        {/* チャット・地図・グラフ・写真の 4 つのタブ。いつも出す（最初の画面は、チャットのタブを選んだ状態。地図などのタブを押すと、拡大ビューが開く） */}
+        <div className="home__tabs">
+          <ResultTabs
+            baseId={baseId}
+            tabs={TABS}
+            selected={current && !showChat ? current.view : 'chat'}
+            onSelect={selectTab}
+            marks={unread ? { chat: '（新着）' } : undefined}
+            trailing={current ? closeButton : undefined}
+            unmounted={current ? undefined : RESULT_VIEW_ORDER}
+            onEscape={current && !showChat ? close : undefined}
+          />
+        </div>
         <div
           className="home__chat"
           hidden={chatHidden}
-          // タブの画面になるとき（拡大ビューを開いているあいだ）だけ、tabpanel にする（チャットは、いつも同じ場所に置き、外さない。入力中の文・受信・スクロール位置を保つ）
+          // チャットは、いつも同じ場所に置き、外さない（入力中の文・受信・スクロール位置を保つ）
           // tabIndex 0: 画面の最初の要素（会話の一覧）はフォーカスを受けないので、キーボードでタブの次に画面へ入れるようにする（APG の注 4）
-          {...(current ? { id: resultPanelId(baseId, 'chat'), role: 'tabpanel', 'aria-labelledby': resultTabId(baseId, 'chat'), tabIndex: 0 } : {})}
+          id={resultPanelId(baseId, 'chat')}
+          role="tabpanel"
+          aria-labelledby={resultTabId(baseId, 'chat')}
+          tabIndex={0}
         >
           <ChatPanel actions={chatActions} renderFigure={renderFigure} onNewConversation={resetAll} onAnswer={onAnswer} />
         </div>
