@@ -460,6 +460,11 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
     - `new_building`: `{recall, precision, tp, n_ref, n_pred, with_uncertain:{recall, tp, n_pred}}`。割れない値は `null`
     - `excluded.*`: `{reference:{edge, small, overlap}, prediction:{edge, small, overlap}}`。両方に当たるものは `edge` に数える
   - `notes`
+- **モデルの比較（`pipeline/compare_fotbcd.py`。val だけ）:** `python -m pipeline.compare_fotbcd --tar data/fr/download/val-000000.tar --model 名前=推論の出力のフォルダ`（`--model` はモデルの数だけ）。`--out` の既定は `data/fr/compare_val.json`。
+  - FLAIR-HUB の学習・検証のパッチと地理座標で重なる 11 組（番号はコードの `OVERLAP_KEYS`）を、**全部のモデルから**外す。外す番号が tar に無いか、県が違えば止める。
+  - 倍率は、全部の組の配列があるものだけを使う（一部だけある倍率や、使える倍率が無いときは止める）。設定は、モデルごとに、上の評価と同じ規則（後の写真の建物の物体単位 F1）で選ぶ。調整に使ったデータの値になる。
+  - 画素の指標は前後の合計で、除外と小さい塊の除去をしない。確率は 512 px へ PIL の双一次で拡大して `>= 閾値`。正解は、画素の中心が枠の中。
+  - 出力は `dataset`（`pairs` と `excluded_keys`）・`used_for_tuning`・`models.{名前}`（`objects`＝上の評価の出力のうち `protocol`・`sweep`・`chosen`・`overall`・`by_dep`、`pixels`＝`sweep` と、選んだ設定の `overall`・`by_dep`、`inference`）・`notes`。
 
 以下は、正解の建物データがあるとき（`--fixed` を付けないとき）の評価と `eval.json` の形。
 

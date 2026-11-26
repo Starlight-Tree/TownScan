@@ -203,10 +203,14 @@ def run_evaluation(
     load_prob: LoadProb,
     *,
     fixed: tuple[float, float] | None = None,
+    scales: Sequence[float] | None = None,
     log: Callable[[str], None] = lambda _: None,
 ) -> dict:
-    """設定を後の写真の抽出だけで選び（fixed があれば選ばない）、選んだ値でだけ、前の写真と新築の指標を出す。"""
-    scales = [fixed[0]] if fixed else list(SCALE_SIZES)
+    """設定を後の写真の抽出だけで選び（fixed があれば選ばない）、選んだ値でだけ、前の写真と新築の指標を出す。
+
+    scales は、選ぶ対象の倍率（推論の出力が一部の倍率だけのモデル用。省けば全部）。
+    """
+    scales = [fixed[0]] if fixed else list(scales or SCALE_SIZES)
     thresholds = [fixed[1]] if fixed else list(THRESHOLDS)
     totals = {(s, t): Counter() for s in scales for t in thresholds}
     for scale in scales:
@@ -297,6 +301,17 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def load_meta(probs_dir, sha256: str) -> dict | None:
+    """推論の出力の meta.json（無ければ None）。別の tar から作った出力なら止める。"""
+    meta_path = Path(probs_dir) / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else None
+    made_from = ((meta or {}).get("dataset") or {}).get("sha256")
+    if made_from is not None and made_from != sha256:
+        # 組の番号は分割ごとに 0 から始まるので、別の tar の出力でも、ファイル名はそろってしまう
+        raise ValueError(f"推論の出力は、別の tar から作られている（meta.json の dataset.sha256 が違う）: {probs_dir}")
+    return meta
+
+
 def _notes(split: str) -> list[str]:
     notes = [
         "配布ページによると、人が選んで確認した組で、無作為の標本ではない。県や地区の全体の実力ではない。",
@@ -325,13 +340,8 @@ def evaluate_split(tar_path, probs_dir, split: str, *, fixed=None, log: Callable
     missing = missing_probs(probs_dir, pairs, sizes)
     if missing:
         raise FileNotFoundError(f"推論の出力が {len(missing)} 個足りない（例: {', '.join(missing[:3])}）: {probs_dir}")
-    meta_path = Path(probs_dir) / "meta.json"
-    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else None
     sha256 = _sha256(tar_path)
-    made_from = ((meta or {}).get("dataset") or {}).get("sha256")
-    if made_from is not None and made_from != sha256:
-        # 組の番号は分割ごとに 0 から始まるので、別の tar の出力でも、ファイル名はそろってしまう
-        raise ValueError(f"推論の出力は、別の tar から作られている（meta.json の dataset.sha256 が違う）: {probs_dir}")
+    meta = load_meta(probs_dir, sha256)
     footprints = Counter(f.label for p in pairs for f in p.footprints)
     log(f"{split}: {len(pairs)} 組・枠 {sum(footprints.values())}")
     result = {
