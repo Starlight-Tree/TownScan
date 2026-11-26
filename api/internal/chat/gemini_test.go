@@ -255,6 +255,18 @@ func noSecrets(t *testing.T, f *fakeGemini, label string, outputs ...string) {
 	}
 }
 
+// 写真 1 件だけの回答の本文は、LLM の文でなく、結果の説明（地区・面積・輪郭の注記）
+func TestPhotoOnlyAnswerIgnoresTheModelText(t *testing.T) {
+	f := newFakeGemini(t,
+		call("show_candidate", map[string]any{"candidate_id": "c-226249-105759-2"}, nil),
+		say("左側に 2018 年、右側に 2023 年の写真を表示しています。"))
+	s, _ := geminiService(t, f, newFakeData())
+	r := mustAsk(t, s, "c-226249-105759-2 の写真を見せて")
+	if want := r.Results[0].(DetectionImageResult).Caption; r.Content != want {
+		t.Errorf("content = %q（期待 %q）", r.Content, want)
+	}
+}
+
 // ---- (a) 件数の質問: functionCall → 結果 → 文 ----
 
 func TestCountQuestionRunsTheFunctionCallingLoop(t *testing.T) {
