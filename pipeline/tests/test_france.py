@@ -8,7 +8,7 @@ from pipeline import diff, geo, geocode, make_synthetic_run, run_postprocess
 
 
 def _classify(**kw):
-    base = dict(area_m2=100.0, ov_kiban=0.0, ov_2014=0.0, prob_2014_p90=0.0, edge_touch=False)
+    base = dict(area_m2=100.0, ov_kiban=0.0, ov_2014=0.0, prob_2014_p90=0.0)
     return diff.classify(**{**base, **kw})
 
 
@@ -17,8 +17,6 @@ def test_drop_present_before_drops_only_buildings_seen_in_the_earlier_photo():
     assert _classify(ov_2014=0.5, params=p) == diff.Decision(None, diff.DROP_PRESENT_BEFORE)
     assert _classify(ov_2014=0.49, params=p).cls == diff.CLASS_UNCERTAIN
     assert _classify(ov_2014=0.0, params=p).cls == diff.CLASS_NEW
-    # 写真の端で切れたものは、前の写真に写っていても、分けないで残す
-    assert _classify(ov_2014=0.9, edge_touch=True, params=p).cls == diff.CLASS_UNCERTAIN
     # 既定は落とさない
     assert _classify(ov_2014=0.5).cls == diff.CLASS_OMISSION
 

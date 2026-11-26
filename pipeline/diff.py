@@ -2,11 +2,12 @@
 
 入口: 2024 年の建物の塊 c のうち、正解の建物データに載っていないもの（ov_kiban < kiban_ov_max。建物データを使わないときは全部）。
   ov_kiban・kiban_ov_max・in_kiban の kiban は以前の参照データの名前の名残。DB・API・run.json の項目名なので変えていない。
-  面積が min_area_m2 未満は捨てる。次に、タイルの縁に接するものは uncertain（reason=edge）。
-  それ以外は 2014 年の確率で確かめる:
+  面積が min_area_m2 未満は捨てる。残りは 2014 年の確率で確かめる:
     existing_omission : ov_2014 >= omission_ov_2014_min（旧写真に既にある。建物データの描き漏れ。モデルが両年で同じ誤検出をした場合も入る）
     confirmed_new     : ov_2014 <= new_ov_2014_max かつ prob_2014_p90 < new_p90_max（2014 のモデルが c の範囲に何も見ていない）
     uncertain         : 上のどちらでもない（reason=ambiguous）
+  タイルの縁に接する塊も同じ決まりで分ける（面積と重なりは、見えている部分の値）。縁に接するかは根拠の edge_touch に残す。
+  reason=edge は前の決まりの解析結果にだけある（ローダーが読めるように REASONS に残す）。
 閾値は未検証の初期値（正解データで確かめていない）。run.json の params に残す。
 根拠の数字は丸めた値で分類する（出力した evidence から分類を再現できるように）。
 """
@@ -59,7 +60,6 @@ def classify(
     ov_kiban: float,
     ov_2014: float,
     prob_2014_p90: float,
-    edge_touch: bool,
     params: DiffParams = DiffParams(),
 ) -> Decision:
     """根拠の数字から分類を決める（純粋な関数）。cls が None のときは候補にしない（reason が捨てる理由）。"""
@@ -67,8 +67,6 @@ def classify(
         return Decision(None, DROP_IN_KIBAN)
     if area_m2 < params.min_area_m2:
         return Decision(None, DROP_SMALL)
-    if edge_touch:
-        return Decision(CLASS_UNCERTAIN, "edge")
     if ov_2014 >= params.omission_ov_2014_min:
         if params.drop_present_before:
             return Decision(None, DROP_PRESENT_BEFORE)
@@ -130,9 +128,7 @@ def build_candidates(
         ov_kiban = round(overlap_fraction(b.geom_m, cover_kiban), 4)
         ov_2014, p90 = evidence_vs_2014(b.geom_m, b.geom_merc, cover_2014, p2014, z, x, y)
         area = round(b.area_m2, 2)
-        d = classify(
-            area_m2=area, ov_kiban=ov_kiban, ov_2014=ov_2014, prob_2014_p90=p90, edge_touch=b.edge_touch, params=params
-        )
+        d = classify(area_m2=area, ov_kiban=ov_kiban, ov_2014=ov_2014, prob_2014_p90=p90, params=params)
         if d.cls is None:
             key = {DROP_IN_KIBAN: "in_kiban", DROP_SMALL: "dropped_small", DROP_PRESENT_BEFORE: "present_before"}[d.reason]
             stats[key] = stats.get(key, 0) + 1

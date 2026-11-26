@@ -7,7 +7,7 @@ from pipeline.diff import CLASS_NEW, CLASS_OMISSION, CLASS_UNCERTAIN, Decision, 
 
 from .helpers import TILE, prob_with_rects, rect_lonlat
 
-BASE = dict(area_m2=100.0, ov_kiban=0.0, ov_2014=0.0, prob_2014_p90=0.0, edge_touch=False)
+BASE = dict(area_m2=100.0, ov_kiban=0.0, ov_2014=0.0, prob_2014_p90=0.0)
 
 
 def c(**kw):
@@ -61,11 +61,28 @@ def test_minimum_area(area, kept):
         assert d == Decision(None, diff.DROP_SMALL)
 
 
-def test_edge_touch_is_uncertain_even_when_other_rules_would_apply():
-    assert c(edge_touch=True) == Decision(CLASS_UNCERTAIN, "edge")  # 新規の条件を満たしていても
-    assert c(edge_touch=True, ov_2014=0.9, prob_2014_p90=0.9) == Decision(CLASS_UNCERTAIN, "edge")  # 描き漏れの条件でも
-    assert c(edge_touch=True, area_m2=19.0) == Decision(None, diff.DROP_SMALL)  # 小さいものは捨てる（縁でも）
-    assert c(edge_touch=True, ov_kiban=0.25) == Decision(None, diff.DROP_IN_KIBAN)  # 建物データにあるものは対象外
+@pytest.mark.parametrize(
+    "rect_2014, expected",
+    [
+        (None, (CLASS_NEW, "new_absent_2014")),  # 2014 年は何も無い
+        ((236, 100, 256, 120), (CLASS_OMISSION, "present_2014")),  # 2014 年にも同じ形で見えている
+        ((250, 100, 256, 120), (CLASS_UNCERTAIN, "ambiguous")),  # 2014 年は右の 30% だけ
+    ],
+)
+def test_buildings_touching_the_edge_are_compared_with_2014_like_any_other(rect_2014, expected):
+    """縁に接する建物も、2014 年の写真と比べて分ける（仕様 §5・改訂 26）。縁に接することは根拠に残る。"""
+    b23 = vectorize.vectorize_tile(prob_with_rects([(236, 100, 256, 120)]), *TILE)
+    p14 = prob_with_rects([rect_2014] if rect_2014 else [])
+    cands, _ = diff.build_candidates(*TILE, b23, vectorize.vectorize_tile(p14, *TILE), p14, [])
+    assert [(x["properties"]["class"], x["properties"]["reason"]) for x in cands] == [expected]
+    assert cands[0]["properties"]["evidence"]["edge_touch"] is True
+
+
+def test_edge_building_seen_in_2014_is_not_a_candidate_when_present_before_is_dropped():
+    prob = prob_with_rects([(236, 100, 256, 120)])
+    b = vectorize.vectorize_tile(prob, *TILE)
+    cands, stats = diff.build_candidates(*TILE, b, b, prob, [], DiffParams(drop_present_before=True))
+    assert cands == [] and stats["present_before"] == 1
 
 
 def test_in_kiban_takes_precedence_over_small():
@@ -89,7 +106,7 @@ def test_params_are_adjustable_and_serializable():
 
 
 def test_reasons_are_in_the_spec_vocabulary():
-    seen = {c().reason, c(ov_2014=0.6).reason, c(ov_2014=0.3).reason, c(edge_touch=True).reason}
+    seen = {c().reason, c(ov_2014=0.6).reason, c(ov_2014=0.3).reason}
     assert seen <= set(diff.REASONS)
 
 
@@ -141,11 +158,11 @@ def test_build_candidates_from_polygons():
     assert by["N"]["properties"]["class"] == CLASS_NEW and by["N"]["properties"]["reason"] == "new_absent_2014"
     assert by["P"]["properties"]["class"] == CLASS_OMISSION and by["P"]["properties"]["reason"] == "present_2014"
     assert by["U"]["properties"]["class"] == CLASS_UNCERTAIN and by["U"]["properties"]["reason"] == "ambiguous"
-    assert by["E"]["properties"]["class"] == CLASS_UNCERTAIN and by["E"]["properties"]["reason"] == "edge"
+    assert by["E"]["properties"]["class"] == CLASS_NEW and by["E"]["properties"]["reason"] == "new_absent_2014"
     assert by["K"] is None  # 建物データにある → 対象外
     assert by["S"] is None  # 20 m² 未満 → 捨てる
     assert stats["in_kiban"] == 1 and stats["dropped_small"] == 1 and stats["candidates"] == 4
-    assert stats[CLASS_NEW] == 1 and stats[CLASS_OMISSION] == 1 and stats[CLASS_UNCERTAIN] == 2
+    assert stats[CLASS_NEW] == 2 and stats[CLASS_OMISSION] == 1 and stats[CLASS_UNCERTAIN] == 1
     assert stats["buildings_2024"] == 6
 
     # 根拠の数字

@@ -97,8 +97,8 @@ def side_counts(side: str, refs: Sequence[fotbcd.Footprint], preds: Sequence[Pre
 def classify_after(pred: Predicted, cover_before, prob_before: np.ndarray) -> str | None:
     """後の写真の建物 1 つの分類（diff.classify）。None は候補にしない（前の写真でも検出した）。
 
-    cover_before は、前の写真の建物の全部（除外の前）の和。edge_touch は常に False。本体の値では、端に接するものは除外で
-    消えている。併記では、端の建物もほかと同じ写真の比較で分類する（アプリの「端のため未判定」は使わない）。
+    cover_before は、前の写真の建物の全部（除外の前）の和。本体の値では、端に接するものは除外で消えている。
+    併記では、端の建物もほかと同じ写真の比較で分類する（アプリの分類と同じ。仕様 §5・改訂 26）。
     """
     res = fotbcd.PATCH_M / prob_before.shape[0]
     poly_px = affinity.scale(pred.geom, 1 / res, 1 / res, origin=(0, 0))
@@ -107,7 +107,6 @@ def classify_after(pred: Predicted, cover_before, prob_before: np.ndarray) -> st
         ov_kiban=0.0,  # 差し引く建物データは使わない
         ov_2014=round(diff.overlap_fraction(pred.geom, cover_before), 4),
         prob_2014_p90=diff.p90_of(vectorize.values_covering_px(prob_before, poly_px)),
-        edge_touch=False,
         params=DIFF_PARAMS,
     ).cls
 

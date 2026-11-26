@@ -206,9 +206,7 @@ def reference_vs_2014(
     for g_merc in reference.polys:
         g_m = geo.lonlat_to_metric_geom(geo.merc_to_lonlat_geom(g_merc))
         ov_2014, p90 = diff.evidence_vs_2014(g_m, g_merc, cover_2014, p, z, x, y)
-        d = diff.classify(
-            area_m2=round(g_m.area, 2), ov_kiban=0.0, ov_2014=ov_2014, prob_2014_p90=p90, edge_touch=False, params=params
-        )
+        d = diff.classify(area_m2=round(g_m.area, 2), ov_kiban=0.0, ov_2014=ov_2014, prob_2014_p90=p90, params=params)
         if d.cls is None:  # 面積が小さい
             continue
         n += 1

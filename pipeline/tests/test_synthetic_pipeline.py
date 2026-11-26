@@ -102,7 +102,7 @@ def test_candidates_geojson_matches_contract(synth):
         a = areas[p["area_id"]]
         assert f["id"].startswith(f"c-{a['x']}-{a['y']}-")
         assert p["evidence"]["ov_kiban"] < 0.25 and p["area_m2"] >= 20.0  # 入口の条件
-        assert p["evidence"]["edge_touch"] == (p["reason"] == "edge")
+        assert isinstance(p["evidence"]["edge_touch"], bool) and p["reason"] != "edge"
         # geometry は area の範囲の中
         minx, miny, maxx, maxy = shape(f["geometry"]).bounds
         eps = 1e-7  # 書き出しの丸め
@@ -124,7 +124,8 @@ def test_evidence_values_for_known_buildings(synth):
     assert ev("A_new")["ov_2014"] == 0.0 and ev("A_new")["prob_2014_p90"] < 0.2
     assert ev("A_omit")["ov_2014"] > 0.9 and ev("A_omit")["prob_2014_p90"] > 0.8
     assert 0.2 <= ev("A_unc")["prob_2014_p90"] < 0.5 and ev("A_unc")["ov_2014"] == 0.0  # 2014 の確率が弱く出ている
-    assert ev("A_edge")["edge_touch"] is True and ev("B_edge")["ov_2014"] > 0.9  # 描き漏れの値でも縁なら保留
+    assert ev("A_edge")["edge_touch"] is True and ev("B_edge")["edge_touch"] is True  # 縁に接することは根拠に残る
+    assert ev("A_edge")["ov_2014"] == 0.0 and ev("B_edge")["ov_2014"] > 0.9  # 分類は 2014 年との比較で決まる
 
 
 def test_buildings_geojson_properties_and_area_in_6670(synth):
@@ -360,7 +361,7 @@ def test_cli_main_runs(synth, tmp_path, capsys):
     assert run["params"]["diff"]["new_p90_max"] == 0.5  # 閾値は引数で変えられ、run.json に残る
     # p90 の上限を 0.5 に緩めると、A_unc（2014 の確率が 0.25 前後）が新規側に入る
     classes = [f["properties"]["class"] for f in json.loads((out / "candidates.geojson").read_text(encoding="utf-8"))["features"]]
-    assert classes.count("confirmed_new") == 4
+    assert classes.count("confirmed_new") == 5  # A_new・B_new1・B_new2・縁に接する A_edge と、A_unc
 
 
 def test_make_synthetic_run_cli_without_postprocess(tmp_path, capsys):

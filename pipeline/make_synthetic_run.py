@@ -58,7 +58,7 @@ OBJS: dict[str, list[Obj]] = {
         Obj("A_omit", (40, 150, 70, 180), 0.9, 0.9, True, True, None, expect=("existing_omission", "present_2014"), role="両年にあるが建物データに無い（描き漏れ）"),
         Obj("A_unc", (120, 170, 150, 200), 0.25, 0.9, False, True, None, expect=("uncertain", "ambiguous"), role="2014 年の確率が弱く出ている（判定保留）"),
         Obj("A_small", (200, 30, 206, 36), None, 0.9, False, True, None, expect=None, role="面積が 20 m² 未満（捨てる）"),
-        Obj("A_edge", (228, 200, 256, 225), None, 0.9, False, True, None, expect=("uncertain", "edge"), role="タイルの縁に接する（右）"),
+        Obj("A_edge", (228, 200, 256, 225), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2014"), role="タイルの縁に接する（右）。2024 年だけにある"),
         Obj("A_gone", (200, 100, 225, 125), None, None, False, False, (0, 0), role="建物データにだけある（評価で取りこぼしになる）"),
     ],
     "合成地区B": [
@@ -66,7 +66,7 @@ OBJS: dict[str, list[Obj]] = {
         Obj("B_new1", (80, 100, 115, 140), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2014"), role="2024 年だけにある（大きい）"),
         Obj("B_new2", (150, 150, 170, 170), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2014"), role="2024 年だけにある（小さい）"),
         Obj("B_miss", (200, 200, 225, 225), 0.2, 0.2, True, True, (0, 0), role="モデルが見逃す建物（評価で取りこぼしになる）"),
-        Obj("B_edge", (100, 0, 120, 18), 0.9, 0.9, True, True, None, expect=("uncertain", "edge"), role="両年にあり建物データに無いが、縁に接する"),
+        Obj("B_edge", (100, 0, 120, 18), 0.9, 0.9, True, True, None, expect=("existing_omission", "present_2014"), role="両年にあり建物データに無い。縁に接していても描き漏れ"),
     ],
 }
 
