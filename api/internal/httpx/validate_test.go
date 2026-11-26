@@ -102,7 +102,7 @@ func TestLiteralMessages(t *testing.T) {
 	if m := sorts.Check(""); m != "Input should be 'area_desc' or 'area_asc'" {
 		t.Error(m)
 	}
-	if m := (Literal{"2018", "2023"}).Check("2020"); m != "Input should be '2018' or '2023'" {
+	if m := (Literal{"2014", "2024"}).Check("2020"); m != "Input should be '2014' or '2024'" {
 		t.Error(m)
 	}
 	if m := (Literal{"x"}).Check("y"); m != "Input should be 'x'" {

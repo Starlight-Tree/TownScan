@@ -58,7 +58,7 @@ func seedArea(t *testing.T, s *Store, runID string, x, y int, name, ward, muni a
 func seedCandidate(t *testing.T, s *Store, runID, areaID, id, class string, area float64, geom, evidence string) {
 	t.Helper()
 	exec(t, s, "INSERT INTO candidates (id, run_id, area_id, class, area_m2, west, south, east, north, centroid_lon, centroid_lat, geom, evidence, reason)"+
-		" VALUES ($1, $2, $3, $4, $5, 1.5, 2.5, 3.5, 4.5, 2.5, 3.5, $6::jsonb, $7::jsonb, 'new_absent_2018')", id, runID, areaID, class, area, geom, evidence)
+		" VALUES ($1, $2, $3, $4, $5, 1.5, 2.5, 3.5, 4.5, 2.5, 3.5, $6::jsonb, $7::jsonb, 'new_absent_2014')", id, runID, areaID, class, area, geom, evidence)
 }
 
 func marshal(t *testing.T, v any) string {
@@ -182,7 +182,7 @@ func TestRunCountsOnlyCountsThatRun(t *testing.T) {
 	a2 := seedArea(t, s, "r2", 1, 1, "a", "w", "m")
 	seedCandidate(t, s, "r1", a1, "c-1-1-1", "confirmed_new", 10, `{}`, `{}`)
 	seedCandidate(t, s, "r2", a2, "c-1-1-1", "uncertain", 10, `{}`, `{}`)
-	exec(t, s, "INSERT INTO buildings (run_id, area_id, year, area_m2, geom) VALUES ('r1', $1, 2018, 1, '{}'), ('r1', $1, 2023, 1, '{}')", a1)
+	exec(t, s, "INSERT INTO buildings (run_id, area_id, year, area_m2, geom) VALUES ('r1', $1, 2014, 1, '{}'), ('r1', $1, 2024, 1, '{}')", a1)
 	n, err := s.RunCounts(ctx, "r1")
 	if err != nil || n != (Counts{Areas: 2, Candidates: 1, Buildings: 2}) {
 		t.Errorf("r1 = %+v, %v", n, err)
@@ -316,7 +316,7 @@ func TestListCandidatesRowShapeKeepsDBValues(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatal(items, err)
 	}
-	want := `{"id":"c-1-1-1","area_id":"z18-1-1","area_name":"甲","ward":"中央区","class":"confirmed_new","area_m2":300.5,"bbox":[1.5,2.5,3.5,4.5],"centroid":[2.5,3.5],"reason":"new_absent_2018"}`
+	want := `{"id":"c-1-1-1","area_id":"z18-1-1","area_name":"甲","ward":"中央区","class":"confirmed_new","area_m2":300.5,"bbox":[1.5,2.5,3.5,4.5],"centroid":[2.5,3.5],"reason":"new_absent_2014"}`
 	if got := marshal(t, items[0]); got != want {
 		t.Errorf("行 = %s\n期待 = %s", got, want)
 	}
@@ -337,9 +337,9 @@ func TestCandidateFeaturesAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := marshal(t, feats); got != `[`+
-		`{"type":"Feature","id":"c-1-1-1","geometry":{"type":"Polygon","coordinates":[[[1.5,2.25]]]},"properties":{"id":"c-1-1-1","class":"confirmed_new","area_m2":300.5,"area_id":"z18-1-1","reason":"new_absent_2018"}},`+
-		`{"type":"Feature","id":"c-1-1-2","geometry":{},"properties":{"id":"c-1-1-2","class":"existing_omission","area_m2":100.0,"area_id":"z18-1-1","reason":"new_absent_2018"}},`+
-		`{"type":"Feature","id":"c-1-1-3","geometry":{"type":"Polygon","coordinates":[[[1,2],[3,4]]]},"properties":{"id":"c-1-1-3","class":"uncertain","area_m2":100.0,"area_id":"z18-1-1","reason":"new_absent_2018"}}]` {
+		`{"type":"Feature","id":"c-1-1-1","geometry":{"type":"Polygon","coordinates":[[[1.5,2.25]]]},"properties":{"id":"c-1-1-1","class":"confirmed_new","area_m2":300.5,"area_id":"z18-1-1","reason":"new_absent_2014"}},`+
+		`{"type":"Feature","id":"c-1-1-2","geometry":{},"properties":{"id":"c-1-1-2","class":"existing_omission","area_m2":100.0,"area_id":"z18-1-1","reason":"new_absent_2014"}},`+
+		`{"type":"Feature","id":"c-1-1-3","geometry":{"type":"Polygon","coordinates":[[[1,2],[3,4]]]},"properties":{"id":"c-1-1-3","class":"uncertain","area_m2":100.0,"area_id":"z18-1-1","reason":"new_absent_2014"}}]` {
 		t.Errorf("features = %s", got)
 	}
 	if feats, _ := s.CandidateFeatures(ctx, "r1", Filter{Class: "nothing"}); feats == nil || len(feats) != 0 {

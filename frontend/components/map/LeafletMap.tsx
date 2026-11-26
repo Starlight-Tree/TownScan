@@ -64,7 +64,7 @@ const styleOf = (cls: CandidateClass, plain: boolean) => (plain ? PLAIN_STYLE : 
 
 interface Entry {
   cls: CandidateClass;
-  /** 印・形の名前（読み上げ・ツールチップ。「2018 年は未検出・231.9 m²」） */
+  /** 印・形の名前（読み上げ・ツールチップ。「2014 年は未検出・231.9 m²」） */
   label: string;
   latlngs: L.LatLngExpression[][];
   /** 形（ポリゴン）を入れているグループ。選択・強調の輪を、必要なときだけ足し引きする */

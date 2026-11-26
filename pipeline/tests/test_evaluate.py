@@ -293,9 +293,9 @@ def test_run_evaluation_adds_year_compare_without_changing_existing_keys():
     tiles = _four_tiles()
     refs, load, _ = _refs_and_loader(tiles, good_scale=1.5)
     base = evaluate.run_evaluation(tiles, load, refs, thresholds=(0.3, 0.5, 0.7))
-    # 評価の年（2018）は参照と一致する抽出。比べる年（2023）は何も抽出しない配列。2 年の値が混ざらないことも見る
+    # 評価の年（2014）は参照と一致する抽出。比べる年（2024）は何も抽出しない配列。2 年の値が混ざらないことも見る
     out = evaluate.run_evaluation(
-        tiles, load, refs, thresholds=(0.3, 0.5, 0.7), load_prob_compare=lambda k, s: np.zeros((int(256 * s),) * 2), compare_year=2023
+        tiles, load, refs, thresholds=(0.3, 0.5, 0.7), load_prob_compare=lambda k, s: np.zeros((int(256 * s),) * 2), compare_year=2024
     )
     assert "year_compare" not in base and "compare_year" not in base["protocol"]
     # 既存のキー・値は、追加の有無で変わらない
@@ -303,15 +303,15 @@ def test_run_evaluation_adds_year_compare_without_changing_existing_keys():
         if key not in ("notes",):
             assert out[key] == base[key] or key == "protocol", key
     assert {k: v for k, v in out["protocol"].items() if k != "compare_year"} == base["protocol"]
-    assert out["protocol"]["year"] == 2018 and out["protocol"]["compare_year"] == 2023  # 評価の年は 2018 のまま。比べる年を別に明示
+    assert out["protocol"]["year"] == 2014 and out["protocol"]["compare_year"] == 2024  # 評価の年は 2014 のまま。比べる年を別に明示
     yc = out["year_compare"]
-    assert (yc["selected_on_year"], yc["compare_year"]) == (2018, 2023)
+    assert (yc["selected_on_year"], yc["compare_year"]) == (2014, 2024)
     assert yc["setting"] == {"scale": out["chosen"]["scale"], "threshold": out["chosen"]["threshold"]}
-    assert set(yc["by_year"]) == {"2018", "2023"} and set(yc["by_year"]["2023"]) == {"tune", "holdout", "overall"}
-    # 2018 年の側は、トップレベルの値と同じ（同じ集計から出す）。2023 年（何も抽出しない）は 0
-    assert yc["by_year"]["2018"] == {"tune": out["tune"], "holdout": out["holdout"], "overall": out["overall"]}
-    assert yc["by_year"]["2023"]["overall"]["object"]["tp"] == 0 and yc["by_year"]["2023"]["overall"]["object"]["fn"] == 4
-    assert yc["by_year"]["2023"]["overall"]["pixel"]["recall"] == 0.0 and yc["by_year"]["2023"]["overall"]["pixel"]["precision"] is None
+    assert set(yc["by_year"]) == {"2014", "2024"} and set(yc["by_year"]["2024"]) == {"tune", "holdout", "overall"}
+    # 2014 年の側は、トップレベルの値と同じ（同じ集計から出す）。2024 年（何も抽出しない）は 0
+    assert yc["by_year"]["2014"] == {"tune": out["tune"], "holdout": out["holdout"], "overall": out["overall"]}
+    assert yc["by_year"]["2024"]["overall"]["object"]["tp"] == 0 and yc["by_year"]["2024"]["overall"]["object"]["fn"] == 4
+    assert yc["by_year"]["2024"]["overall"]["pixel"]["recall"] == 0.0 and yc["by_year"]["2024"]["overall"]["pixel"]["precision"] is None
     assert any("year_compare" in n for n in out["notes"]) and not any("year_compare" in n for n in base["notes"])
 
 
@@ -321,13 +321,13 @@ def test_year_compare_arguments_are_validated():
     with pytest.raises(ValueError):
         evaluate.run_evaluation(tiles, load, refs, load_prob_compare=load)  # 年が無い
     with pytest.raises(ValueError):
-        evaluate.run_evaluation(tiles, load, refs, compare_year=2023)  # 読み込み関数が無い
+        evaluate.run_evaluation(tiles, load, refs, compare_year=2024)  # 読み込み関数が無い
     with pytest.raises(ValueError):
         evaluate.run_evaluation(tiles, load, refs, load_prob_compare=load, compare_year=evaluate.EVAL_YEAR)  # 同じ年
 
 
 def _absence_setup():
-    """参照 4 棟 + 小さい 1 棟 + 縁の 1 棟。2018 年の確率は、A にだけ高く、D には弱く（閾値未満）、B・C には無い。"""
+    """参照 4 棟 + 小さい 1 棟 + 縁の 1 棟。2014 年の確率は、A にだけ高く、D には弱く（閾値未満）、B・C には無い。"""
     A, B, D = (50, 50, 70, 70), (100, 100, 120, 120), (150, 50, 170, 70)
     small = (200, 200, 205, 205)  # 約 3 m 四方 = 9 m² < 20 m²
     edge = (236, 100, 256, 120)
@@ -336,32 +336,32 @@ def _absence_setup():
     return reference, prob
 
 
-def test_reference_vs_2018_counts_absent_and_present_with_the_diff_rules():
+def test_reference_vs_2014_counts_absent_and_present_with_the_diff_rules():
     reference, prob = _absence_setup()
-    r = evaluate.reference_vs_2018(prob, *TILE, reference, threshold=0.5, params=diff.DiffParams())
+    r = evaluate.reference_vs_2014(prob, *TILE, reference, threshold=0.5, params=diff.DiffParams())
     # 数える: A（覆われる=present）・B（何も無い=absent）・D（弱く出ていて、どちらでもない）。小さい 1 棟と縁の 1 棟は数えない
     assert r == {"n": 3, "absent": 1, "present": 1}
     # 閾値を下げると D も抽出される → absent は B だけのまま、present が増える
-    assert evaluate.reference_vs_2018(prob, *TILE, reference, threshold=0.3, params=diff.DiffParams()) == {"n": 3, "absent": 1, "present": 2}
+    assert evaluate.reference_vs_2014(prob, *TILE, reference, threshold=0.3, params=diff.DiffParams()) == {"n": 3, "absent": 1, "present": 2}
     # 面積の下限を上げると、数える建物が減る（params をそのまま使う）
     big_only = diff.DiffParams(min_area_m2=200.0)
-    assert evaluate.reference_vs_2018(prob, *TILE, reference, threshold=0.5, params=big_only)["n"] == 0
+    assert evaluate.reference_vs_2014(prob, *TILE, reference, threshold=0.5, params=big_only)["n"] == 0
 
 
-def test_run_evaluation_reports_existing_absent_in_2018_by_split():
+def test_run_evaluation_reports_existing_absent_in_2014_by_split():
     tiles = _four_tiles()
     refs, load, _ = _refs_and_loader(tiles, good_scale=1.0)  # 参照の矩形 (60,60,100,100) と一致する抽出
     out = evaluate.run_evaluation(tiles, load, refs, thresholds=(0.5,), scales=(1.0,))
-    e = out["existing_absent_in_2018"]
+    e = out["existing_absent_in_2014"]
     assert e["setting"] == {"scale": 1.0, "threshold": 0.5} and e["params"] == diff.DiffParams().to_dict()
     for part in ("tune", "holdout", "overall"):
         assert set(e[part]) == {"n_buildings", "absent", "absent_share", "present", "present_share"}
     assert e["overall"] == {"n_buildings": 4, "absent": 0, "absent_share": 0.0, "present": 4, "present_share": 1.0}
     assert e["tune"]["n_buildings"] == e["holdout"]["n_buildings"] == 2
-    assert any("existing_absent_in_2018" in n and "正解データの代わりにはならない" in n for n in out["notes"])
+    assert any("existing_absent_in_2014" in n and "正解データの代わりにはならない" in n for n in out["notes"])
     # 抽出が何も無ければ、既存の建物はすべて「何も見ていない」
     none = evaluate.run_evaluation(tiles, lambda k, s: np.zeros((int(256 * s),) * 2), refs, thresholds=(0.5,), scales=(1.0,))
-    assert none["existing_absent_in_2018"]["overall"] == {"n_buildings": 4, "absent": 4, "absent_share": 1.0, "present": 0, "present_share": 0.0}
+    assert none["existing_absent_in_2014"]["overall"] == {"n_buildings": 4, "absent": 4, "absent_share": 1.0, "present": 0, "present_share": 0.0}
 
 
 def test_excluded_edge_detail_adds_up_to_excluded_edge_objects():

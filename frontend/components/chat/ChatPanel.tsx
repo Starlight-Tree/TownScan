@@ -643,9 +643,9 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
   const { areas } = useAreas();
   return (
     <div className="welcome">
-      <h2 className="welcome__title">熊本市中心部の変化を、写真と会話で調べる</h2>
+      <h2 className="welcome__title">パリ近郊の街の変化を、写真と会話で調べる</h2>
       <p className="welcome__lead">
-        熊本市中心部の航空写真（2018 年と 2023 年）から、<b>建物データに載っていない建物の候補</b>を棟ごとに見つけています（新築と断定するものではありません）。質問すると、短い文と、写真・グラフ・地図で答えます。
+        フランスのパリ南西の近郊の航空写真（2014 年と 2024 年）から、<b>2024 年に現れた建物の候補</b>を棟ごとに見つけています（新築と断定するものではありません）。質問すると、短い文と、写真・グラフ・地図で答えます。
       </p>
       <div className="welcome__actions">
         <button type="button" className="btn" onClick={(e) => onShowMap(e.currentTarget)}>
@@ -669,25 +669,25 @@ function Welcome({ onPick, onShowMap }: { onPick: (text: string) => void; onShow
             <dt>対象</dt>
             <dd>
               {areas.length > 0
-                ? `熊本市中心部の ${areas.length} 地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`
-                : `熊本市中心部の地区（1 地区 = 地理院タイル 1 枚 = ${TILE_SIDE_TEXT}）`}
+                ? `パリ南西の近郊の ${areas.length} 地区（1 地区 = 地図タイル 1 枚 = ${TILE_SIDE_TEXT}）`
+                : `パリ南西の近郊の地区（1 地区 = 地図タイル 1 枚 = ${TILE_SIDE_TEXT}）`}
             </dd>
           </div>
           <div>
             <dt>地区の名前</dt>
-            <dd>タイルの中心にある住所の名前です。丁目や区の全体を数えた値ではありません。</dd>
+            <dd>タイルの中心にある住所の通り名と市町村です。通りや市町村の全体を数えた値ではありません。</dd>
           </div>
           <div>
             <dt>比較</dt>
-            <dd>2018 年と 2023 年の航空写真</dd>
+            <dd>2014 年と 2024 年の航空写真</dd>
           </div>
           <div>
             <dt>出典</dt>
-            <dd>国土地理院（地理院タイル・基盤地図情報）</dd>
+            <dd>IGN（フランス国土地理院）の航空写真と地図</dd>
           </div>
         </dl>
         <div className="welcome__classes">
-          <span className="suggest-block__label">見つけた候補は、次の 3 つの分類に分けています（3 つの合計が、候補の数です）</span>
+          <span className="suggest-block__label">見つけた候補は、次の 2 つの分類に分けています（2 つの合計が、候補の数です）</span>
           <ClassDefinitions />
         </div>
         <div className="suggest-block suggest-block--refuse">

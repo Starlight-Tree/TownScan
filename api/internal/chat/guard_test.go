@@ -28,11 +28,11 @@ func generic(t *testing.T, s string) any {
 
 const guardResults = `[{"type":"count","title":"新規出現候補の件数（全地区）","total":1234,` +
 	`"breakdown":[{"key":"confirmed_new","label":"新規出現","value":3},{"key":"x","label":"y","value":0}],` +
-	`"filter":{"area_id":"z18-226249-105759"},"provenance":{"photo_years":[2018,2023],"run_id":"synthetic-test","model":"m"}}]`
+	`"filter":{"area_id":"z18-226249-105759"},"provenance":{"photo_years":[2014,2024],"run_id":"synthetic-test","model":"m"}}]`
 
 func TestGuardNumbersFromResultsPass(t *testing.T) {
 	res := generic(t, guardResults)
-	text := "全地区の候補は 1,234 件です。内訳は新規出現 3 件、2018 年と 2023 年の写真から。"
+	text := "全地区の候補は 1,234 件です。内訳は新規出現 3 件、2014 年と 2024 年の写真から。"
 	if bad := findUnsupportedNumbers(text, res); len(bad) != 0 {
 		t.Errorf("bad = %v", bad)
 	}
@@ -84,8 +84,8 @@ func TestGuardNumbersReplacesWithTheSafeTemplate(t *testing.T) {
 }
 
 func TestIDsInResultStringsAreAllowed(t *testing.T) {
-	res := generic(t, `[{"type":"detection_image","candidate_id":"c-226249-105759-1","images":[{"year":2018},{"year":2023}]}]`)
-	if bad := findUnsupportedNumbers("候補 c-226249-105759-1 の 2018 年と 2023 年", res); len(bad) != 0 {
+	res := generic(t, `[{"type":"detection_image","candidate_id":"c-226249-105759-1","images":[{"year":2014},{"year":2024}]}]`)
+	if bad := findUnsupportedNumbers("候補 c-226249-105759-1 の 2014 年と 2024 年", res); len(bad) != 0 {
 		t.Errorf("bad = %v", bad)
 	}
 	if bad := findUnsupportedNumbers("候補 c-226249-105759-2 です", res); !slices.Equal(bad, []string{"2"}) { // 末尾の番号を取り違えている
@@ -137,10 +137,10 @@ func TestBoolAndNullAreIgnoredAndKeysAreNotASource(t *testing.T) {
 	if got := allowedNumbers(generic(t, `{"a":true,"b":null}`)); len(got) != 0 {
 		t.Errorf("allowed = %v", got)
 	}
-	if got := allowedNumbers(generic(t, `{"2018":"x"}`)); len(got) != 0 {
+	if got := allowedNumbers(generic(t, `{"2014":"x"}`)); len(got) != 0 {
 		t.Errorf("キー名から出た: %v", got)
 	}
-	if bad := findUnsupportedNumbers("2018 年", generic(t, `[{"2018":"x"}]`)); !slices.Equal(bad, []string{"2018"}) {
+	if bad := findUnsupportedNumbers("2014 年", generic(t, `[{"2014":"x"}]`)); !slices.Equal(bad, []string{"2014"}) {
 		t.Errorf("bad = %v", bad)
 	}
 }
@@ -170,7 +170,7 @@ func TestNumberTokens(t *testing.T) {
 		{"m2 と z18", []string{"8"}},
 		{"a1b2", nil},
 		{"A 1", []string{"1"}},
-		{"2018年と2023年", []string{"2018", "2023"}},
+		{"2014年と2024年", []string{"2014", "2024"}},
 		{"c-226249-105759-1", []string{"226249", "105759", "1"}},
 	}
 	for _, c := range cases {

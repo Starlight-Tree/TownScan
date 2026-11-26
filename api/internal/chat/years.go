@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-// 文に出る「年」の読み取り。写真があるのは 2018・2023 年だけなので、それ以外の年（と、いまに近い相対語）は、答えられない質問として断る。
+// 文に出る「年」の読み取り。写真があるのは 2014・2024 年だけなので、それ以外の年（と、いまに近い相対語）は、答えられない質問として断る。
 // 年の書き方の揺れ: 西暦（2024）・漢数字（二〇二四・二千二十四）・和暦（令和6年・令和六年・R6年）を西暦に直して判定する。
 
-var photoYears = map[int]bool{2018: true, 2023: true}
+var photoYears = map[int]bool{2014: true, 2024: true}
 
 const kanjiNum = "〇零一二三四五六七八九十百千"
 
@@ -168,7 +168,7 @@ func stripYears(text string) string {
 	return b.String()
 }
 
-// hasUnphotographedYear は、写真が無い年（2018・2023 以外）が出ているか。
+// hasUnphotographedYear は、写真が無い年（2014・2024 以外）が出ているか。
 func hasUnphotographedYear(text string) bool {
 	for y := range mentionedYears(text) {
 		if !photoYears[y] {

@@ -88,13 +88,13 @@ func TestIDMatching(t *testing.T) {
 func TestOtherPlaces(t *testing.T) {
 	cases := map[string]string{
 		"福岡の新築":       "福岡",
-		"熊本県の新築":      "熊本県",
-		"熊本市全域の新築":    "", // 対象そのもの
-		"熊本市全体の新築":    "",
+		"熊本県の新築":      "熊本",
+		"熊本市全域の新築":    "熊本", // 熊本は対象外になった（対象はフランス）
+		"熊本市全体の新築":    "熊本",
 		"福岡市全域":       "福岡", // いちばん左の一致
 		"渋谷市全域":       "市全域",
 		"市全体":         "市全体",
-		"熊本市全域と渋谷市全体": "市全体", // 熊本の直後のものは外し、別の出現を取る
+		"熊本市全域と渋谷市全体": "熊本", // いちばん左の一致
 		"北九州":         "北九州",
 		"東京と大阪":       "東京",
 		"県全域":         "県全域",
@@ -109,16 +109,33 @@ func TestOtherPlaces(t *testing.T) {
 }
 
 func TestIsOwnPlaceWord(t *testing.T) {
-	own := []string{"熊本", "熊本市", "市内", "中心部", "熊本市内", "全域", "対象", "対象エリア", "解析範囲", "以前", "過去", "新築", "最新", "熊本市全域", "全エリア", "地域", ""}
+	own := []string{"フランス", "パリ近郊", "市内", "中心部", "パリ南西の近郊", "全域", "対象", "対象エリア", "解析範囲", "以前", "過去", "新築", "最新", "オー・ド・セーヌ県", "全エリア", "地域", ""}
 	for _, w := range own {
 		if !isOwnPlaceWord(w) {
 			t.Errorf("isOwnPlaceWord(%q) = false", w)
 		}
 	}
-	other := []string{"渋谷", "渋谷全域", "渋谷エリア", "六本木ヒルズ", "熊本城", "福岡市内", "手取本町", "ニューヨーク"}
+	other := []string{"渋谷", "渋谷全域", "渋谷エリア", "六本木ヒルズ", "熊本", "熊本市内", "熊本城", "福岡市内", "手取本町", "ニューヨーク"}
 	for _, w := range other {
 		if isOwnPlaceWord(w) {
 			t.Errorf("isOwnPlaceWord(%q) = true", w)
+		}
+	}
+}
+
+// 対象をフランスに変えて足した・外した語（ADR 0015）。
+func TestFranceWords(t *testing.T) {
+	for _, w := range []string{"フランス", "パリ"} {
+		if !ruleDomain.matches(w) {
+			t.Errorf("DOMAIN が %q に当たらない", w)
+		}
+	}
+	if ruleDomain.matches("熊本") {
+		t.Error("DOMAIN が熊本に当たる")
+	}
+	for _, q := range []string{"市ごとに比べて", "市町村ごとの件数"} {
+		if !ruleCompareStrong.matches(q) {
+			t.Errorf("COMPARE_STRONG が %q に当たらない", q)
 		}
 	}
 }

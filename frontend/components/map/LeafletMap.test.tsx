@@ -46,7 +46,7 @@ const features = [feature('c-1-2-1', 'confirmed_new', 0), feature('c-1-2-2', 'ex
 
 function props(over: Partial<LeafletMapProps> = {}): LeafletMapProps {
   return {
-    base: 'photo2023',
+    base: 'photo2024',
     areas,
     features,
     showFrames: true,
@@ -99,7 +99,7 @@ describe('Leaflet の地図', () => {
   it('標準地図のときは下地 1 枚だけ。切り替えても壊れない', () => {
     const { container, rerender } = render(<LeafletMap {...props({ base: 'std' })} />);
     expect(container.querySelectorAll('.leaflet-tile-pane .leaflet-layer').length).toBe(1);
-    rerender(<LeafletMap {...props({ base: 'photo2018' })} />);
+    rerender(<LeafletMap {...props({ base: 'photo2014' })} />);
     expect(container.querySelectorAll('.leaflet-tile-pane .leaflet-layer').length).toBe(2);
     rerender(<LeafletMap {...props({ base: 'std', showFrames: false })} />);
     expect(container.querySelectorAll('.leaflet-tile-pane .leaflet-layer').length).toBe(1);
@@ -111,7 +111,7 @@ describe('Leaflet の地図', () => {
     const marks = container.querySelectorAll<HTMLElement>('.leaflet-marker-icon');
     expect(marks).toHaveLength(3);
     expect(marks[0]).toHaveAttribute('tabindex', '0');
-    expect(marks[0]).toHaveAttribute('title', expect.stringContaining('2018 年は未検出'));
+    expect(marks[0]).toHaveAttribute('title', expect.stringContaining('2014 年は未検出'));
     await userEvent.click(marks[1]!);
     expect(onSelect).toHaveBeenCalledWith('c-1-2-2');
     fireEvent.keyDown(marks[0]!, { key: 'Enter' });
@@ -442,28 +442,28 @@ describe('結果領域の拡大・縮小（地図の枠の大きさが変わる�
 
 describe('下地（年・標準地図）の切り替え', () => {
   it('年を切り替えたあとに、地図を寄せても落ちない（候補の一覧の行を押すと「Cannot read properties of null (reading getCenter)」で全体が落ちた）', () => {
-    const { rerender } = render(<LeafletMap {...props({ base: 'photo2023' })} />);
-    rerender(<LeafletMap {...props({ base: 'photo2018' })} />);
+    const { rerender } = render(<LeafletMap {...props({ base: 'photo2024' })} />);
+    rerender(<LeafletMap {...props({ base: 'photo2014' })} />);
     expect(() =>
       act(() => {
-        rerender(<LeafletMap {...props({ base: 'photo2018', focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
+        rerender(<LeafletMap {...props({ base: 'photo2014', focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
       }),
     ).not.toThrow();
     // 標準地図へ、年へ戻しても同じ
     rerender(<LeafletMap {...props({ base: 'std', focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
-    rerender(<LeafletMap {...props({ base: 'photo2023', focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
+    rerender(<LeafletMap {...props({ base: 'photo2024', focus: focusFit([130.7, 32.8, 130.701, 32.801]) })} />);
     expect(() =>
       act(() => {
-        rerender(<LeafletMap {...props({ base: 'photo2023', focus: focusFit([130.71, 32.81, 130.711, 32.811]) })} />);
+        rerender(<LeafletMap {...props({ base: 'photo2024', focus: focusFit([130.71, 32.81, 130.711, 32.811]) })} />);
       }),
     ).not.toThrow();
   });
 
   it('外した写真の層の処理が、地図に残らない（残っているのは、いま地図に載っている層のものだけ）', () => {
     const mapOf = vi.spyOn(L, 'map');
-    const { rerender } = render(<LeafletMap {...props({ base: 'photo2023' })} />);
+    const { rerender } = render(<LeafletMap {...props({ base: 'photo2024' })} />);
     const map = mapOf.mock.results[0]!.value as L.Map;
-    rerender(<LeafletMap {...props({ base: 'photo2018' })} />);
+    rerender(<LeafletMap {...props({ base: 'photo2014' })} />);
     rerender(<LeafletMap {...props({ base: 'std' })} />);
     // Leaflet の内部: map._events[種類] = [{ fn, ctx }]。層が外れると ctx._map は null になる
     const events = (map as unknown as { _events: Record<string, { ctx?: { _map?: unknown } }[]> })._events;
@@ -473,7 +473,7 @@ describe('下地（年・標準地図）の切り替え', () => {
 
   it('下地を替えても、写真の読み込みの通知（onTileStatus）は、いまの層のものだけを受ける', () => {
     const onTileStatus = vi.fn();
-    const { rerender } = render(<LeafletMap {...props({ base: 'photo2023', onTileStatus })} />);
+    const { rerender } = render(<LeafletMap {...props({ base: 'photo2024', onTileStatus })} />);
     rerender(<LeafletMap {...props({ base: 'std', onTileStatus })} />);
     expect(onTileStatus).toHaveBeenLastCalledWith('ok');
   });
@@ -567,7 +567,7 @@ describe('候補の印のキーボード操作（Enter・Space で選ぶ。Tab �
     const { marks } = setup();
     expect(marks).toHaveLength(3);
     for (const m of marks) expect(m).toHaveAttribute('role', 'button');
-    expect(marks[0]).toHaveAttribute('aria-label', expect.stringContaining('2018 年は未検出'));
+    expect(marks[0]).toHaveAttribute('aria-label', expect.stringContaining('2014 年は未検出'));
     expect(marks[1]).toHaveAttribute('aria-label', expect.stringContaining('未判定'));
     expect(marks[0]).toHaveAttribute('title', expect.stringContaining('Enter か Space で選ぶ'));
   });
@@ -678,8 +678,8 @@ describe('候補の形（拡大したとき）のキーボード操作も、印�
     const { shapes } = setup();
     expect(shapes()).toHaveLength(3);
     expect(shapes().map((e) => e.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
-    expect(shapes()[0]).toHaveAttribute('aria-label', expect.stringContaining('2018 年は未検出'));
-    expect(shapes()[1]).toHaveAttribute('aria-label', expect.stringContaining('2018 年も検出'));
+    expect(shapes()[0]).toHaveAttribute('aria-label', expect.stringContaining('2014 年は未検出'));
+    expect(shapes()[1]).toHaveAttribute('aria-label', expect.stringContaining('2014 年も検出'));
   });
 
   it('Enter・Space で選ぶ', () => {

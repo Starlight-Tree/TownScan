@@ -71,11 +71,41 @@ function AccuracyContent() {
           </button>
         </div>
       )}
-      {state.status === 'ready' && <MetricsSummary m={state.data} />}
+      {state.status === 'ready' && (state.data.holdout ? <MetricsSummary m={state.data} /> : <Unmeasured m={state.data} />)}
       <Limits m={state.status === 'ready' ? state.data : undefined} />
       <Sources />
       {state.status === 'ready' && <MetricsDetails m={state.data} />}
     </div>
+  );
+}
+
+/** 精度をまだ測っていない解析結果（eval.json に数字が無い）。数字を作らず、未測定とだけ言う */
+function Unmeasured({ m }: { m: MetricsResponse }) {
+  const prov = m.provenance as Partial<Provenance> | undefined;
+  return (
+    <>
+      <p className="page__lead" data-testid="unmeasured">
+        このアプリの精度は、<b>まだ測っていません</b>。候補は機械の判定で、写真で確かめる前提です。
+      </p>
+      {prov?.run_kind === 'synthetic' && (
+        <p className="banner banner--synthetic" role="note">
+          <strong>合成データ（テスト用）</strong>
+          <span>この画面は、動作確認のための合成データです。</span>
+        </p>
+      )}
+      <ul className="metric-grid metric-grid--big">
+        {['建物の抽出（物体単位 F1）', '新築の再現率'].map((label) => (
+          <li key={label} className="metric-tile metric-tile--none">
+            <span className="metric-tile__label">{label}</span>
+            <span className="metric-tile__value metric-tile__value--none">未測定</span>
+          </li>
+        ))}
+      </ul>
+      <section className="panel" aria-labelledby="h-thresholds">
+        <h2 id="h-thresholds" className="panel__title">分類の閾値は、未検証の初期値です</h2>
+        <p className="page__p">「2014 年は未検出」と「未判定」を分ける閾値は、正解データで確かめていません。分類の当たり率は、まだ出せません。</p>
+      </section>
+    </>
   );
 }
 
@@ -91,7 +121,7 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
   return (
     <>
       <p className="page__lead">
-        実測した数字です。ただし <b>熊本の 12 地区・初期値の閾値</b> という限定つきで、ほかの地域や条件には当てはまりません。
+        実測した数字です。ただし <b>限られた地区・初期値の閾値</b> という限定つきで、ほかの地域や条件には当てはまりません。
       </p>
       {prov?.run_kind === 'synthetic' && (
         <p className="banner banner--synthetic" role="note">
@@ -104,7 +134,7 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
         建物の抽出の 2 つの数字（物体単位 F1 と画素 IoU）は、<b>{year} 年の写真</b>から建物を抽出して測った値です。
         {yc && (
           <>
-            「2018 年は未検出」の候補は {yc.compareYear} 年の写真の抽出にも依るので、<b>{yc.compareYear} 年の写真での値</b>も並べています（同じ参照・同じ設定）。
+            「2014 年は未検出」の候補は {yc.compareYear} 年の写真の抽出にも依るので、<b>{yc.compareYear} 年の写真での値</b>も並べています（同じ参照・同じ設定）。
           </>
         )}
       </p>
@@ -114,7 +144,7 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
           <span className="metric-tile__label">建物の抽出（評価用の地区・物体単位 F1）</span>
           <span className="metric-tile__value">{cell(holdoutObj?.f1)}</span>
           <YearLine year={year} yc={yc} value={metricValue(yc?.other.holdout, 'object', 'f1')} />
-          <span className="metric-tile__note">基盤地図情報（2018 年 10 月版）を正解にした、評価用の地区での値。</span>
+          <span className="metric-tile__note">正解の建物データに対する、評価用の地区での値。</span>
           {basis && (
             <span className="metric-tile__note" data-testid="f1-basis">
               根拠の件数: 評価用の参照 {formatNumber(basis.nRef)} 棟（縁を除く）のうち、一致は {formatNumber(basis.tp)} 棟。
@@ -136,18 +166,18 @@ function MetricsSummary({ m }: { m: MetricsResponse }) {
             <span className="metric-tile__value">{formatNumber(recall)}</span>
           )}
           <span className="metric-tile__note">
-            手でラベルした「本当の新築」がまだ無いため、測れていません。「2018 年は未検出」の候補が実際に新築かどうかは、確かめていません。
+            正解になる新築のデータで測るまで、分かりません。「2014 年は未検出」の候補が実際に新築かどうかは、確かめていません。
           </span>
           <span className="metric-tile__note">
-            「詳しい測定」の表の「建物の抽出の再現率」（基盤地図情報に対する値）とは別の値です。
+            「詳しい測定」の表の「建物の抽出の再現率」とは別の値です。
           </span>
         </li>
       </ul>
 
       <section className="panel" aria-labelledby="h-thresholds">
-        <h2 id="h-thresholds" className="panel__title">3 分類の閾値は、未検証の初期値です</h2>
+        <h2 id="h-thresholds" className="panel__title">分類の閾値は、未検証の初期値です</h2>
         <p className="page__p">
-          「2018 年は未検出」「2018 年も検出」「未判定」を分ける閾値（旧写真の抽出が覆う割合 0.5・0.10 など）は、手でラベルした正解が無いため、検証できていません。分類の当たり率は、まだ出せません。
+          「2014 年は未検出」と「未判定」を分ける閾値（旧写真の抽出が覆う割合 0.5・0.10 など）は、正解データで確かめていません。分類の当たり率は、まだ出せません。
         </p>
       </section>
     </>
@@ -228,7 +258,9 @@ function MetricsDetails({ m }: { m: MetricsResponse }) {
               {m.chosen && (
                 <p className="page__p">
                   推論の倍率 <b>{cell(m.chosen.scale)}</b>・建物とみなす確率の閾値 <b>{cell(m.chosen.threshold)}</b>
-                  （調整用の地区の物体単位 F1 がいちばん高かった組）。
+                  {m.chosen.selected_by === 'fixed'
+                    ? '（固定の値。写真に重ねた図を目で見て選んだもので、検証していません）。'
+                    : '（調整用の地区の物体単位 F1 がいちばん高かった組）。'}
                 </p>
               )}
               {(stability || tuneBasis) && (
@@ -337,14 +369,14 @@ function YearComparePanel({ yc }: { yc: YearCompare }) {
     <section className="panel" aria-labelledby="h-year-compare">
       <h2 id="h-year-compare" className="panel__title">写真の年で比べる（{yc.baseYear} 年と {yc.compareYear} 年）</h2>
       <p className="page__small">
-        {yc.baseYear} 年の調整用の地区で選んだ設定{isNum(scale) && isNum(threshold) ? `（倍率 ${formatNumber(scale)}・閾値 ${formatNumber(threshold)}）` : ''}のまま、{yc.compareYear} 年の写真でも建物を抽出し、同じ基盤地図情報（{yc.baseYear} 年 10 月版）と比べた値です。設定の選択には使っていません。
+        {yc.baseYear} 年の調整用の地区で選んだ設定{isNum(scale) && isNum(threshold) ? `（倍率 ${formatNumber(scale)}・閾値 ${formatNumber(threshold)}）` : ''}のまま、{yc.compareYear} 年の写真でも建物を抽出し、同じ参照と比べた値です。設定の選択には使っていません。
       </p>
       <p className="page__small">
-        「2018 年は未検出」の候補は {yc.compareYear} 年の抽出にも依るので、こちらも見てください。参照は古いままなので、{yc.compareYear} 年の写真にだけ写る新しい建物は「余分（FP）」に数えられ、値が低く出る一因になりえます。写真の撮影条件・季節・モデルの得意不得意も混ざり、原因は分けられません。
+        「2014 年は未検出」の候補は {yc.compareYear} 年の抽出にも依るので、こちらも見てください。参照は古いままなので、{yc.compareYear} 年の写真にだけ写る新しい建物は「余分（FP）」に数えられ、値が低く出る一因になりえます。写真の撮影条件・季節・モデルの得意不得意も混ざり、原因は分けられません。
       </p>
       <div className="table-scroll" role="region" aria-label="写真の年ごとの指標（横にスクロールできます）" tabIndex={0}>
         <table className="data-table data-table--dense">
-          <caption>写真の年ごとの、建物の抽出の指標（基盤地図情報に対して）</caption>
+          <caption>写真の年ごとの、建物の抽出の指標（正解の建物データに対して）</caption>
           <thead>
             <tr>
               <th scope="col">指標</th>
@@ -465,12 +497,14 @@ function Sources() {
     <section className="panel" aria-labelledby="h-sources">
       <h2 id="h-sources" className="panel__title">出典と規約</h2>
       <ul className="plain-list">
-        <li><b>地図・写真</b>: 国土地理院「地理院タイル」（標準地図、年度別の写真 <code>nendophoto2018</code>・<code>nendophoto2023</code>）。出典を地図に表示しています。</li>
-        <li><b>建物データ（評価の正解）</b>: 国土地理院「基盤地図情報」の建築物の外周（2018 年 10 月版）。</li>
+        <li><b>地図・写真</b>: IGN（フランス国土地理院）の公開タイル配信（地図 Plan IGN、航空写真 BD ORTHO の 2014 年・2024 年）。ライセンスは Licence Ouverte 2.0。出典を地図に表示しています。</li>
         <li>
           <b>建物抽出モデル</b>: <code>giswqs/whu-building-unetplusplus-efficientnet-b4</code>（Apache-2.0）。学習に使われたデータセット（WHU）の利用条件は、確認できていません。
         </li>
-        <li>地理院タイルを機械学習などに大量に使うことの扱いは未確認です。公開する前に、規約を確かめます。</li>
+        <li>
+          <b>地区の選び方</b>: 公開データ <a href="https://huggingface.co/datasets/abdevd/FOTBCD" target="_blank" rel="noopener noreferrer">FOTBCD</a>（作者: Abdelrrahman Moubane。<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>。IGN の BD ORTHO・BD TOPO が元）の検証用データを使い、新築の多い場所を選びました。FOTBCD の画像と建物の枠は、このアプリに入れていません。
+        </li>
+        <li>写真を機械学習に使うことは、利用規約に記載がありません。公開する前に、規約を確かめます。</li>
       </ul>
     </section>
   );
@@ -484,17 +518,17 @@ function Limits({ m }: { m?: MetricsResponse }) {
         <div>
           <b>写真が無い期間</b>
           <br />
-          使える年は 2018 年と 2023 年です。2024 年以降に建った建物は、写真が無いので確かめられません。
+          使える年は 2014 年と 2024 年です。2024 年の撮影より後に建った建物は、写真が無いので確かめられません。
         </div>
         <div>
-          <b>撮影月が不明</b>
+          <b>写真は 2 時点</b>
           <br />
-          写真は年度単位。「いつ建ったか」は年の幅でしか言えません。
+          撮影は 2014 年 5〜6 月と 2024 年 8 月です。その間のいつ建ったかは分かりません。
         </div>
         <div>
-          <b>2018 年は帯状の範囲だけ</b>
+          <b>地区は新築の多い場所</b>
           <br />
-          2018 年の写真は斜めの帯状の断片で、範囲の外では比べられません。
+          12 地区は、データ上の新築が多い場所を選んでいます。件数は、地域全体の様子ではありません。
         </div>
         <div>
           <b>タイルの縁</b>
@@ -504,44 +538,46 @@ function Limits({ m }: { m?: MetricsResponse }) {
         <div>
           <b>誤検出の可能性</b>
           <br />
-          モデルが 2 つの年で同じ誤検出をすると、「2018 年も検出」に入ります。駐車場の屋根や仮設の建物も混ざります。
+          今のモデルは、大きな建物を見落としたり、影を建物と判定したりします。駐車場の屋根や仮設の建物も混ざります。
         </div>
-        <div>
-          <b>正解が無い</b>
-          <br />
-          新築の再現率は、正解になる新築のデータが無いので未測定です。
-        </div>
+        {m && !m.holdout && (
+          <div>
+            <b>正解が無い</b>
+            <br />
+            建物の抽出と新築の精度は、まだ測っていません。
+          </div>
+        )}
         <div>
           <b>対象範囲</b>
           <br />
-          熊本市中心部の 12 地区と、2018・2023 年の写真だけです。
+          パリ南西の近郊の 12 地区と、2014・2024 年の写真だけです。
         </div>
         <div>
           <b>未実装のもの</b>
           <br />
           衛星の「変化の当たり」（Google Earth Engine）、屋根の太陽光パネル、人による確認・確定、公開は、まだありません。
         </div>
-        <AbsentLimit m={m} />
-        <ReferenceLimit />
+        {m?.holdout && <AbsentLimit m={m} />}
+        {m?.reference && <ReferenceLimit />}
         <HazeLimit m={m} />
       </div>
     </section>
   );
 }
 
-/** (a) 2018 年の抽出の見落としは、既存の建物が「2018 年は未検出」に入る向きの誤り。実測の割合はデータから描く */
+/** (a) 2014 年の抽出の見落としは、既存の建物が「2014 年は未検出」に入る向きの誤り。実測の割合はデータから描く */
 function AbsentLimit({ m }: { m?: MetricsResponse }) {
   const year = m ? evalYearOf(m) : DEFAULT_EVAL_YEAR;
   const all = m ? getAbsentStats(m, 'overall') : null;
   const holdout = m ? getAbsentStats(m, 'holdout') : null;
   return (
     <div data-testid="limit-absent">
-      <b>{year} 年の写真での見落とし（既存の建物が「2018 年は未検出」に入る）</b>
+      <b>{year} 年の写真での見落とし（既存の建物が「2014 年は未検出」に入る）</b>
       <br />
-      {year} 年の抽出が既存の建物を見落とすと、その建物は旧写真に無いものとして「2018 年は未検出」に入ります。
+      {year} 年の抽出が既存の建物を見落とすと、その建物は旧写真に無いものとして「2014 年は未検出」に入ります。
       {all ? (
         <>
-          実測では、基盤地図情報にある既存の建物{all.minAreaM2 !== undefined ? `（${formatNumber(all.minAreaM2)} m² 以上・縁に接しない）` : ' '}{formatNumber(all.n)} 棟のうち、
+          実測では、正解の建物データにある既存の建物{all.minAreaM2 !== undefined ? `（${formatNumber(all.minAreaM2)} m² 以上・縁に接しない）` : ' '}{formatNumber(all.n)} 棟のうち、
           <b>{formatTenths(all.absent / all.n)}（{formatNumber(all.absent)} 棟）</b>で、{year} 年の抽出が何も見ていません。
           {all.present !== undefined && <>半分以上を覆っているのは {formatTenths(all.present / all.n)}（{formatNumber(all.present)} 棟）です。</>}
           {holdout && <>評価用の地区だけでは {formatNumber(holdout.n)} 棟のうち {formatNumber(holdout.absent)} 棟（{formatTenths(holdout.absent / holdout.n)}）です。</>}
@@ -560,9 +596,9 @@ function AbsentLimit({ m }: { m?: MetricsResponse }) {
 function ReferenceLimit() {
   return (
     <div data-testid="limit-reference">
-      <b>参照（基盤地図情報）が写真より古い可能性</b>
+      <b>参照の建物データと、写真の時期のずれ</b>
       <br />
-      参照は、写真より古い可能性があります（推定）。配布の版の日付は 2018-10 ですが、建物ごとの測量の時期は分かりません。この地域のデータは 2017 年 10 月の更新のあと実質止まっていた、と開発時の調査記録にありますが、独立の確認はしていません。写真にあって参照に無い建物は「余分（FP）」に、参照に残る取り壊し済みの建物は「見逃し（FN）」に数えられます。このため、<b>物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値</b>です。
+      参照の建物データは、写真と時期が一致しないことがあります。写真にあって参照に無い建物は「余分（FP）」に、参照に残る取り壊し済みの建物は「見逃し（FN）」に数えられます。このため、<b>物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値</b>です。
     </div>
   );
 }
@@ -578,8 +614,8 @@ function HazeLimit({ m }: { m?: MetricsResponse }) {
     <div data-testid="limit-haze">
       <b>写真の年で、建物の抽出の出来が違う</b>
       <br />
-      建物の抽出の画素の再現率（基盤地図情報に対して。{split === 'overall' ? '12 地区全体' : '評価用の地区'}・同じ設定）は、{yc.baseYear} 年の写真で {formatNumber(base)}、{yc.compareYear} 年の写真で {formatNumber(other)} です。
-      年によって抽出の出来が違うので、2 つの年の差分には、モデルの見落としが「2018 年は未検出」として混ざります。違いの原因（写真の暗さ・撮影条件など）は確かめていません。
+      建物の抽出の画素の再現率（{split === 'overall' ? '12 地区全体' : '評価用の地区'}・同じ設定）は、{yc.baseYear} 年の写真で {formatNumber(base)}、{yc.compareYear} 年の写真で {formatNumber(other)} です。
+      年によって抽出の出来が違うので、2 つの年の差分には、モデルの見落としが「2014 年は未検出」として混ざります。違いの原因（写真の暗さ・撮影条件など）は確かめていません。
     </div>
   );
 }

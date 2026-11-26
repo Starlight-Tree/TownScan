@@ -40,8 +40,8 @@ def test_fixture_is_valid_and_counts():
 
 
 def test_missing_file_is_reported_in_japanese(fixture_run):
-    (fixture_run / "buildings_2018.geojson").unlink()
-    with pytest.raises(LoadError, match=r"必要なファイルがありません.*buildings_2018\.geojson"):
+    (fixture_run / "buildings_2014.geojson").unlink()
+    with pytest.raises(LoadError, match=r"必要なファイルがありません.*buildings_2014\.geojson"):
         read_run_dir(fixture_run)
 
 
@@ -84,8 +84,8 @@ def test_unknown_area_in_candidates(fixture_run):
 
 
 def test_unknown_area_in_buildings(fixture_run):
-    edit_json(fixture_run / "buildings_2023.geojson", lambda d: d["features"][0]["properties"].update({"area_id": "z18-1-1"}))
-    with pytest.raises(LoadError, match=r"(?s)buildings_2023\.geojson.*areas.json に無い地区"):
+    edit_json(fixture_run / "buildings_2024.geojson", lambda d: d["features"][0]["properties"].update({"area_id": "z18-1-1"}))
+    with pytest.raises(LoadError, match=r"(?s)buildings_2024\.geojson.*areas.json に無い地区"):
         read_run_dir(fixture_run)
 
 
@@ -105,7 +105,7 @@ def test_non_string_area_id_is_a_clear_error_not_a_crash(fixture_run):
     edit_json(fixture_run / "candidates.geojson", lambda d: d["features"][0]["properties"].update({"area_id": ["x"]}))
     with pytest.raises(LoadError, match="areas.json に無い地区"):
         read_run_dir(fixture_run)
-    edit_json(fixture_run / "buildings_2018.geojson", lambda d: d["features"][0]["properties"].update({"area_id": {"a": 1}}))
+    edit_json(fixture_run / "buildings_2014.geojson", lambda d: d["features"][0]["properties"].update({"area_id": {"a": 1}}))
     with pytest.raises(LoadError, match="areas.json に無い地区"):
         read_run_dir(fixture_run)
 

@@ -7,7 +7,7 @@ from pipeline.diff import CLASS_NEW, CLASS_OMISSION, CLASS_UNCERTAIN, Decision, 
 
 from .helpers import TILE, prob_with_rects, rect_lonlat
 
-BASE = dict(area_m2=100.0, ov_kiban=0.0, ov_2018=0.0, prob_2018_p90=0.0, edge_touch=False)
+BASE = dict(area_m2=100.0, ov_kiban=0.0, ov_2014=0.0, prob_2014_p90=0.0, edge_touch=False)
 
 
 def c(**kw):
@@ -16,27 +16,27 @@ def c(**kw):
 
 # ---- 3 分類の境界値（仕様 §5） ----
 
-def test_new_when_absent_in_2018():
-    assert c() == Decision(CLASS_NEW, "new_absent_2018")
+def test_new_when_absent_in_2014():
+    assert c() == Decision(CLASS_NEW, "new_absent_2014")
 
 
 @pytest.mark.parametrize(
-    "ov_2018, p90, expected",
+    "ov_2014, p90, expected",
     [
-        (0.10, 0.19, (CLASS_NEW, "new_absent_2018")),  # ov_2018 <= 0.10 は confirmed_new（境界を含む）
-        (0.10, 0.20, (CLASS_UNCERTAIN, "ambiguous")),  # prob_2018_p90 < 0.20（境界は含まない）
-        (0.10, 0.1999, (CLASS_NEW, "new_absent_2018")),
+        (0.10, 0.19, (CLASS_NEW, "new_absent_2014")),  # ov_2014 <= 0.10 は confirmed_new（境界を含む）
+        (0.10, 0.20, (CLASS_UNCERTAIN, "ambiguous")),  # prob_2014_p90 < 0.20（境界は含まない）
+        (0.10, 0.1999, (CLASS_NEW, "new_absent_2014")),
         (0.1001, 0.0, (CLASS_UNCERTAIN, "ambiguous")),  # 0.10 をわずかに超える
-        (0.0, 0.50, (CLASS_UNCERTAIN, "ambiguous")),  # 2018 のモデルが何か見ている
+        (0.0, 0.50, (CLASS_UNCERTAIN, "ambiguous")),  # 2014 のモデルが何か見ている
         (0.30, 0.10, (CLASS_UNCERTAIN, "ambiguous")),
         (0.4999, 0.99, (CLASS_UNCERTAIN, "ambiguous")),  # 0.50 未満
-        (0.50, 0.0, (CLASS_OMISSION, "present_2018")),  # ov_2018 >= 0.50 は existing_omission（境界を含む）
-        (0.5001, 0.0, (CLASS_OMISSION, "present_2018")),
-        (1.0, 1.0, (CLASS_OMISSION, "present_2018")),
+        (0.50, 0.0, (CLASS_OMISSION, "present_2014")),  # ov_2014 >= 0.50 は existing_omission（境界を含む）
+        (0.5001, 0.0, (CLASS_OMISSION, "present_2014")),
+        (1.0, 1.0, (CLASS_OMISSION, "present_2014")),
     ],
 )
-def test_classification_by_2018_evidence(ov_2018, p90, expected):
-    assert c(ov_2018=ov_2018, prob_2018_p90=p90) == expected
+def test_classification_by_2014_evidence(ov_2014, p90, expected):
+    assert c(ov_2014=ov_2014, prob_2014_p90=p90) == expected
 
 
 @pytest.mark.parametrize(
@@ -63,7 +63,7 @@ def test_minimum_area(area, kept):
 
 def test_edge_touch_is_uncertain_even_when_other_rules_would_apply():
     assert c(edge_touch=True) == Decision(CLASS_UNCERTAIN, "edge")  # 新規の条件を満たしていても
-    assert c(edge_touch=True, ov_2018=0.9, prob_2018_p90=0.9) == Decision(CLASS_UNCERTAIN, "edge")  # 描き漏れの条件でも
+    assert c(edge_touch=True, ov_2014=0.9, prob_2014_p90=0.9) == Decision(CLASS_UNCERTAIN, "edge")  # 描き漏れの条件でも
     assert c(edge_touch=True, area_m2=19.0) == Decision(None, diff.DROP_SMALL)  # 小さいものは捨てる（縁でも）
     assert c(edge_touch=True, ov_kiban=0.25) == Decision(None, diff.DROP_IN_KIBAN)  # 建物データにあるものは対象外
 
@@ -73,22 +73,23 @@ def test_in_kiban_takes_precedence_over_small():
 
 
 def test_params_are_adjustable_and_serializable():
-    p = DiffParams(kiban_ov_max=0.5, min_area_m2=50.0, omission_ov_2018_min=0.8, new_ov_2018_max=0.0, new_p90_max=0.1)
+    p = DiffParams(kiban_ov_max=0.5, min_area_m2=50.0, omission_ov_2014_min=0.8, new_ov_2014_max=0.0, new_p90_max=0.1)
     assert c(ov_kiban=0.4, params=p).cls is not None
     assert c(area_m2=49.0, params=p).cls is None
-    assert c(ov_2018=0.6, prob_2018_p90=0.9, params=p) == Decision(CLASS_UNCERTAIN, "ambiguous")
-    assert c(ov_2018=0.8, params=p).cls == CLASS_OMISSION
+    assert c(ov_2014=0.6, prob_2014_p90=0.9, params=p) == Decision(CLASS_UNCERTAIN, "ambiguous")
+    assert c(ov_2014=0.8, params=p).cls == CLASS_OMISSION
     assert DiffParams().to_dict() == {
         "kiban_ov_max": 0.25,
         "min_area_m2": 20.0,
-        "omission_ov_2018_min": 0.5,
-        "new_ov_2018_max": 0.10,
+        "omission_ov_2014_min": 0.5,
+        "new_ov_2014_max": 0.10,
         "new_p90_max": 0.20,
+        "drop_present_before": False,
     }
 
 
 def test_reasons_are_in_the_spec_vocabulary():
-    seen = {c().reason, c(ov_2018=0.6).reason, c(ov_2018=0.3).reason, c(edge_touch=True).reason}
+    seen = {c().reason, c(ov_2014=0.6).reason, c(ov_2014=0.3).reason, c(edge_touch=True).reason}
     assert seen <= set(diff.REASONS)
 
 
@@ -104,7 +105,7 @@ def test_overlap_fraction():
 
 
 def test_cover_of_repairs_and_unions():
-    bow = geo.lonlat_to_6670_geom(rect_lonlat(0, 0, 10, 10))
+    bow = geo.lonlat_to_metric_geom(rect_lonlat(0, 0, 10, 10))
     assert diff.cover_of([]) is None
     assert diff.cover_of([bow, bow]).area == pytest.approx(bow.area)
 
@@ -112,12 +113,12 @@ def test_cover_of_repairs_and_unions():
 # ---- ポリゴンから候補まで（確率の配列 → 建物 → 差分） ----
 
 def _scenario():
-    """2023: N（新規）・P（2018 にもある）・K（建物データにある）・S（小さい）・E（縁）・U（2018 に一部）。2018: P と、U の左 30%。"""
+    """2024: N（新規）・P（2014 にもある）・K（建物データにある）・S（小さい）・E（縁）・U（2014 に一部）。2014: P と、U の左 30%。"""
     N, P, K = (20, 20, 40, 40), (60, 20, 80, 40), (100, 20, 120, 40)
     S, E, U = (140, 20, 147, 27), (236, 100, 256, 120), (20, 100, 60, 130)
-    U_2018 = (20, 100, 32, 130)  # 幅 40 のうち左 12（30%）
+    U_2014 = (20, 100, 32, 130)  # 幅 40 のうち左 12（30%）
     b23 = vectorize.vectorize_tile(prob_with_rects([N, P, K, S, E, U]), *TILE)
-    p18 = prob_with_rects([P, U_2018])
+    p18 = prob_with_rects([P, U_2014])
     b18 = vectorize.vectorize_tile(p18, *TILE)
     kiban = [rect_lonlat(*K)]
     return b23, b18, p18, kiban, dict(N=N, P=P, K=K, S=S, E=E, U=U)
@@ -137,24 +138,24 @@ def test_build_candidates_from_polygons():
     cands, stats = diff.build_candidates(*TILE, b23, b18, p18, kiban)
     by = {name: _find(cands, rect) for name, rect in r.items()}
 
-    assert by["N"]["properties"]["class"] == CLASS_NEW and by["N"]["properties"]["reason"] == "new_absent_2018"
-    assert by["P"]["properties"]["class"] == CLASS_OMISSION and by["P"]["properties"]["reason"] == "present_2018"
+    assert by["N"]["properties"]["class"] == CLASS_NEW and by["N"]["properties"]["reason"] == "new_absent_2014"
+    assert by["P"]["properties"]["class"] == CLASS_OMISSION and by["P"]["properties"]["reason"] == "present_2014"
     assert by["U"]["properties"]["class"] == CLASS_UNCERTAIN and by["U"]["properties"]["reason"] == "ambiguous"
     assert by["E"]["properties"]["class"] == CLASS_UNCERTAIN and by["E"]["properties"]["reason"] == "edge"
     assert by["K"] is None  # 建物データにある → 対象外
     assert by["S"] is None  # 20 m² 未満 → 捨てる
     assert stats["in_kiban"] == 1 and stats["dropped_small"] == 1 and stats["candidates"] == 4
     assert stats[CLASS_NEW] == 1 and stats[CLASS_OMISSION] == 1 and stats[CLASS_UNCERTAIN] == 2
-    assert stats["buildings_2023"] == 6
+    assert stats["buildings_2024"] == 6
 
     # 根拠の数字
     ev = {k: v["properties"]["evidence"] for k, v in by.items() if v}
-    assert ev["N"]["ov_2018"] == 0.0 and ev["N"]["prob_2018_p90"] == 0.0 and ev["N"]["ov_kiban"] == 0.0
-    assert ev["P"]["ov_2018"] == pytest.approx(1.0, abs=1e-3) and ev["P"]["prob_2018_p90"] == pytest.approx(0.9)
-    assert ev["U"]["ov_2018"] == pytest.approx(0.3, abs=0.01)
-    assert ev["U"]["prob_2018_p90"] == pytest.approx(0.9)  # 左 30% に 0.9。p90 は高い側
+    assert ev["N"]["ov_2014"] == 0.0 and ev["N"]["prob_2014_p90"] == 0.0 and ev["N"]["ov_kiban"] == 0.0
+    assert ev["P"]["ov_2014"] == pytest.approx(1.0, abs=1e-3) and ev["P"]["prob_2014_p90"] == pytest.approx(0.9)
+    assert ev["U"]["ov_2014"] == pytest.approx(0.3, abs=0.01)
+    assert ev["U"]["prob_2014_p90"] == pytest.approx(0.9)  # 左 30% に 0.9。p90 は高い側
     assert ev["E"]["edge_touch"] is True and ev["N"]["edge_touch"] is False
-    assert ev["N"]["prob_2023_mean"] == pytest.approx(0.9)
+    assert ev["N"]["prob_2024_mean"] == pytest.approx(0.9)
     # 面積は m²（EPSG:6670）。N は 20×20 画素
     _, lat = tilemath.tile_center_lonlat(*TILE)
     assert by["N"]["properties"]["area_m2"] == pytest.approx(400 * tilemath.ground_resolution_m(18, lat) ** 2, rel=0.01)
@@ -166,7 +167,7 @@ def test_candidate_properties_shape():
     for cand in cands:
         p = cand["properties"]
         assert set(p) == {"area_id", "class", "area_m2", "bbox", "centroid", "evidence", "reason"}
-        assert set(p["evidence"]) == {"prob_2023_mean", "ov_2018", "prob_2018_p90", "ov_kiban", "edge_touch"}
+        assert set(p["evidence"]) == {"prob_2024_mean", "ov_2014", "prob_2014_p90", "ov_kiban", "edge_touch"}
         assert p["area_id"] == tilemath.area_id(*TILE)
         w, s, e, n = p["bbox"]
         lon, lat = p["centroid"]
@@ -186,8 +187,8 @@ def test_empty_inputs():
     assert cands == [] and stats["candidates"] == 0
 
 
-def test_p90_uses_2018_probability_even_when_below_building_threshold():
-    """2018 の確率が弱く出ている（閾値未満）→ 2018 の建物には入らない（ov_2018=0）が、p90 は 0.2 以上で、保留になる。"""
+def test_p90_uses_2014_probability_even_when_below_building_threshold():
+    """2014 の確率が弱く出ている（閾値未満）→ 2014 の建物には入らない（ov_2014=0）が、p90 は 0.2 以上で、保留になる。"""
     r = (100, 100, 140, 140)
     b23 = vectorize.vectorize_tile(prob_with_rects([r]), *TILE)
     weak = prob_with_rects([r], value=0.25)
@@ -195,8 +196,8 @@ def test_p90_uses_2018_probability_even_when_below_building_threshold():
     assert b18 == []
     cands, _ = diff.build_candidates(*TILE, b23, b18, weak, [])
     assert [(x["properties"]["class"], x["properties"]["reason"]) for x in cands] == [(CLASS_UNCERTAIN, "ambiguous")]
-    assert cands[0]["properties"]["evidence"]["prob_2018_p90"] == pytest.approx(0.25)
-    assert cands[0]["properties"]["evidence"]["ov_2018"] == 0.0
+    assert cands[0]["properties"]["evidence"]["prob_2014_p90"] == pytest.approx(0.25)
+    assert cands[0]["properties"]["evidence"]["ov_2014"] == 0.0
 
 
 def test_number_candidates_by_area_desc_with_stable_ties():

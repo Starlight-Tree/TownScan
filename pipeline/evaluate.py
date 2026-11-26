@@ -1,4 +1,4 @@
-"""建物抽出の評価（仕様 §6）。参照は基盤地図情報（2018-10 版）、予測は 2018 年の写真の確率。
+"""建物抽出の評価（仕様 §6）。参照は基盤地図情報（2018-10 版）、予測は 2014 年の写真の確率。
 
 - 指標: 画素の IoU・適合率・再現率・F1、物体単位の F1（IoU >= 0.5 の 1 対 1 対応。IoU の大きい順に貪欲に結ぶ）。
 - タイルの縁に接する物体は、参照・予測の両方から外す（切れた建物の不利を避ける）。さらに、外した物体と自分の面積の半分以上が
@@ -8,7 +8,7 @@
 - 並び順の前半（調整用）で倍率・閾値を選び、後半（評価用）と全体は、選んだ値のままの結果を別に報告する。
 - 画素の数え方: 予測の配列と同じ格子（256×倍率）に参照を塗って数える。
 - 追加の診断（eval.json の任意項目。選択には使わない）: year_compare（同じ参照・同じ設定で別の年の写真を測る）・
-  existing_absent_in_2018（既存の建物のうち、2018 年の抽出が何も見ていないものの割合）。
+  existing_absent_in_2014（既存の建物のうち、2014 年の抽出が何も見ていないものの割合）。
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ IOU_MATCH = 0.5
 EDGE_OVERLAP_MIN = 0.5  # 外した物体と、自分の面積のこの割合以上が重なる反対側の物体も外す
 DEFAULT_SCALES = (1.0, 1.5, 2.0)
 DEFAULT_THRESHOLDS = (0.3, 0.4, 0.5, 0.6, 0.7)
-EVAL_YEAR = 2018
+EVAL_YEAR = 2014
 
 TileKey = tuple[int, int, int]
 
@@ -182,7 +182,7 @@ def evaluate_tile(
     )
 
 
-def reference_vs_2018(
+def reference_vs_2014(
     prob,
     z: int,
     x: int,
@@ -196,18 +196,18 @@ def reference_vs_2018(
 ) -> dict[str, int]:
     """基盤地図情報にある既存の建物（面積 params.min_area_m2 以上・縁に接しない）を、差分の判定にそのままかける。
 
-    2018 年の抽出が何も見ていない（confirmed_new の 2018 側の条件）棟数 absent と、半分以上覆う（existing_omission の条件）棟数 present。
+    2014 年の抽出が何も見ていない（confirmed_new の 2014 側の条件）棟数 absent と、半分以上覆う（existing_omission の条件）棟数 present。
     diff.classify に ov_kiban=0（建物データに載っていない塊とみなす）を渡すので、判定の式は差分と同じ。
     """
     p = vectorize.as_prob_array(prob)
     b18 = vectorize.vectorize_tile(p, z, x, y, threshold=threshold, min_blob_m2=min_blob_m2, simplify_m=simplify_m)
-    cover_2018 = diff.cover_of([b.geom_6670 for b in b18])
+    cover_2014 = diff.cover_of([b.geom_m for b in b18])
     n = absent = present = 0
     for g_merc in reference.polys:
-        g_6670 = geo.lonlat_to_6670_geom(geo.merc_to_lonlat_geom(g_merc))
-        ov_2018, p90 = diff.evidence_vs_2018(g_6670, g_merc, cover_2018, p, z, x, y)
+        g_m = geo.lonlat_to_metric_geom(geo.merc_to_lonlat_geom(g_merc))
+        ov_2014, p90 = diff.evidence_vs_2014(g_m, g_merc, cover_2014, p, z, x, y)
         d = diff.classify(
-            area_m2=round(g_6670.area, 2), ov_kiban=0.0, ov_2018=ov_2018, prob_2018_p90=p90, edge_touch=False, params=params
+            area_m2=round(g_m.area, 2), ov_kiban=0.0, ov_2014=ov_2014, prob_2014_p90=p90, edge_touch=False, params=params
         )
         if d.cls is None:  # 面積が小さい
             continue
@@ -284,10 +284,10 @@ def run_evaluation(
     compare_year: int | None = None,
     diff_params: diff.DiffParams | None = None,
 ) -> dict:
-    """評価の全体（eval.json の本体）。load_prob(タイル, 倍率) は 2018 年の確率の配列を返す。
+    """評価の全体（eval.json の本体）。load_prob(タイル, 倍率) は 2014 年の確率の配列を返す。
 
-    load_prob_compare と compare_year を渡すと、同じ参照・同じ設定（2018 年の調整用で選んだ倍率・閾値）で、その年の写真の抽出も測る
-    （year_compare。選択には使わない）。diff_params は existing_absent_in_2018 の判定に使う（既定は DiffParams の既定値）。
+    load_prob_compare と compare_year を渡すと、同じ参照・同じ設定（2014 年の調整用で選んだ倍率・閾値）で、その年の写真の抽出も測る
+    （year_compare。選択には使わない）。diff_params は existing_absent_in_2014 の判定に使う（既定は DiffParams の既定値）。
     reference_notes は、参照の素性についての注記（呼び出し側が、読み込んだデータから作る）。
     """
     tiles = list(tiles)
@@ -333,7 +333,7 @@ def run_evaluation(
     for k in tiles:
         p = load_prob(k, chosen["scale"])
         per_tile[k] = run_one([k], chosen["scale"], chosen["threshold"], {k: p})
-        absence[k] = reference_vs_2018(
+        absence[k] = reference_vs_2014(
             p, *k, references[k], threshold=chosen["threshold"], params=diff_params, min_blob_m2=min_blob_m2, simplify_m=simplify_m
         )
         if load_prob_compare is not None:
@@ -391,7 +391,7 @@ def run_evaluation(
         )
 
     notes = [
-        "参照の時期（推定）: 参照の建物データは、写真（2018 年）より古い可能性がある。写真にあって参照に無い建物（参照より後にできた建物）は予測の誤検出（FP）に、"
+        "参照の時期（推定）: 参照の建物データは、写真（2014 年）より古い可能性がある。写真にあって参照に無い建物（参照より後にできた建物）は予測の誤検出（FP）に、"
         "参照に残っていて写真では取り壊されている建物は見逃し（FN）に数えられる。このため、物体単位の適合率は、モデルの適合率ではなく、"
         "モデルの精度と参照の完全性が混ざった値である（この 2 つを分けて測れる正解データが無い）。",
         *reference_notes,
@@ -411,10 +411,10 @@ def run_evaluation(
             "（写真の撮影条件・解像度・季節・モデルの得意不得意も混ざる）。選択には使っていない。"
         )
     notes.append(
-        f"existing_absent_in_2018: 基盤地図情報にある既存の建物（面積 {diff_params.min_area_m2:g} m² 以上・縁に接しない）のうち、"
-        f"{EVAL_YEAR} 年の抽出が何も見ていない（差分の confirmed_new の {EVAL_YEAR} 年側の条件: ov_2018 <= {diff_params.new_ov_2018_max:g} かつ "
-        f"prob_2018_p90 < {diff_params.new_p90_max:g}。diff の関数をそのまま使って判定）棟の数と割合（absent）、"
-        f"ov_2018 >= {diff_params.omission_ov_2018_min:g}（{EVAL_YEAR} 年の抽出が半分以上を覆う）の棟の数と割合（present）。"
+        f"existing_absent_in_2014: 基盤地図情報にある既存の建物（面積 {diff_params.min_area_m2:g} m² 以上・縁に接しない）のうち、"
+        f"{EVAL_YEAR} 年の抽出が何も見ていない（差分の confirmed_new の {EVAL_YEAR} 年側の条件: ov_2014 <= {diff_params.new_ov_2014_max:g} かつ "
+        f"prob_2014_p90 < {diff_params.new_p90_max:g}。diff の関数をそのまま使って判定）棟の数と割合（absent）、"
+        f"ov_2014 >= {diff_params.omission_ov_2014_min:g}（{EVAL_YEAR} 年の抽出が半分以上を覆う）の棟の数と割合（present）。"
         "既存の建物が差分の「新規出現」の条件を満たしてしまう割合の目安で、正解データの代わりにはならない"
         "（absent には、モデルの見逃しと、写真の時点で取り壊し済みの参照の建物の両方が入り、分けられない。写真で既存の建物が見えるかは確かめていない）。"
     )
@@ -447,7 +447,7 @@ def run_evaluation(
         "excluded_edge_objects": excluded(tiles),  # 外した数（参照・予測）。平らな辞書（画面がそのまま表示する）
         "excluded_edge_by_split": {"tune": excluded(tune), "holdout": excluded(holdout)},
         "excluded_edge_detail": {"overall": excluded_detail(tiles), "tune": excluded_detail(tune), "holdout": excluded_detail(holdout)},
-        "existing_absent_in_2018": {
+        "existing_absent_in_2014": {
             "setting": {"scale": chosen["scale"], "threshold": chosen["threshold"]},
             "params": diff_params.to_dict(),
             "overall": absence_of(tiles),

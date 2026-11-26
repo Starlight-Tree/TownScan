@@ -12,8 +12,8 @@ describe('classOfCell（表の分類の列の値から分類を引く）', () =>
   });
 
   it('backend の一覧が返す表示名（CLASS_LABELS）と、画面の表示名が食い違わない', () => {
-    expect(classOfCell('2018 年は未検出')).toBe('confirmed_new');
-    expect(classOfCell('2018 年も検出')).toBe('existing_omission');
+    expect(classOfCell('2014 年は未検出')).toBe('confirmed_new');
+    expect(classOfCell('2014 年も検出')).toBe('existing_omission');
     expect(classOfCell('未判定')).toBe('uncertain');
   });
 
@@ -23,7 +23,7 @@ describe('classOfCell（表の分類の列の値から分類を引く）', () =>
       expect(reasonOfCell(label)).toBe(reason);
     }
     expect(reasonOfCell('未判定')).toBeUndefined();
-    expect(reasonOfCell('2018 年は未検出')).toBeUndefined();
+    expect(reasonOfCell('2014 年は未検出')).toBeUndefined();
   });
 
   it('知らない値・文字列でない値・空は null（呼び出し側が、そのまま出す）', () => {

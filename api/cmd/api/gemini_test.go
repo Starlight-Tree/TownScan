@@ -130,7 +130,7 @@ func TestGeminiChatEndToEnd(t *testing.T) {
 		saying("新規出現の候補の件数は、下のカードのとおりです。"))
 	status, body := s.chat(t, "新規出現の候補は何件ありますか？")
 	// 件数だけの回答の本文は、LLM の文でなく、結果から組み立てた文
-	if status != 200 || !strings.HasPrefix(body, `{"message":{"role":"assistant","content":"モデルが 2023 年の写真だけで見つけた候補は 1 件です（候補は全部で 2 件）。`) || strings.Contains(body, "新規出現の候補の件数は") ||
+	if status != 200 || !strings.HasPrefix(body, `{"message":{"role":"assistant","content":"モデルが 2024 年の写真だけで見つけた候補は 1 件です（候補は全部で 2 件）。`) || strings.Contains(body, "新規出現の候補の件数は") ||
 		!strings.Contains(body, `"results":[{"type":"count",`) ||
 		!strings.Contains(body, `"total":1,`) || !strings.HasSuffix(body, `"tool_calls":[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]}}`) {
 		t.Errorf("%d %s", status, body)

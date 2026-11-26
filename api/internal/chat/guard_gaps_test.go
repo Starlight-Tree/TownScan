@@ -10,8 +10,8 @@ import (
 // 実モデル（Gemini）の返答は、数字の検査だけが頼りなので、結果に無い数を通さない。正当な返答は、誤って落とさない。
 // 数字の連なりと漢数字+助数詞の、Python と同じ部分は、guard_test.go と golden_test.go が見る。
 
-// guardRes は、結果に 3・4・7（と 2018・2023 の年）がある場合。
-const guardRes = `[{"type":"count","total":3,"breakdown":[{"value":4},{"value":7}],"provenance":{"photo_years":[2018,2023]}}]`
+// guardRes は、結果に 3・4・7（と 2014・2024 の年）がある場合。
+const guardRes = `[{"type":"count","total":3,"breakdown":[{"value":4},{"value":7}],"provenance":{"photo_years":[2014,2024]}}]`
 
 func bad(t *testing.T, content string, known ...string) []string {
 	t.Helper()
@@ -62,7 +62,7 @@ func TestGuardNonNumericWordsAreAllowed(t *testing.T) {
 	}
 	for _, ok := range []string{
 		"結果は一覧のとおりです。", "一番大きい候補です。", "一部の地区に集中しています。", "十分な数ではありません。", "万が一の場合は、もう一度お試しください。",
-		"このアプリでは、天気については、お答えできません。", "写真は 2018 年と 2023 年です。", "新規出現の候補は 3 件、描き漏れは 4 件です。",
+		"このアプリでは、天気については、お答えできません。", "写真は 2014 年と 2024 年です。", "新規出現の候補は 3 件、描き漏れは 4 件です。",
 		"件数・一覧・写真の見比べ・精度です。", "唯一の候補です。", "九州の外です。", "統一されていません。", "一時的に応答できません。",
 	} {
 		if got := bad(t, ok); len(got) != 0 {
@@ -132,7 +132,7 @@ func TestGuardNumbersSplitBySpacesOrInvisibleCharactersAreCaught(t *testing.T) {
 		}
 	}
 	// つなげない: 数のあいだに文字がある・コンマで区切る・年
-	for _, ok := range []string{"3 件、4 件", "3 と 4", "3、4", "3-4", "4 件と 3 件", "2018 年と 2023 年", "新規出現 3 件 / 描き漏れ 4 件"} {
+	for _, ok := range []string{"3 件、4 件", "3 と 4", "3、4", "3-4", "4 件と 3 件", "2014 年と 2024 年", "新規出現 3 件 / 描き漏れ 4 件"} {
 		if got := bad(t, ok); len(got) != 0 {
 			t.Errorf("%q が落ちた: %q", ok, got)
 		}
@@ -182,14 +182,14 @@ func TestVisibleText(t *testing.T) {
 	}
 }
 
-const guardResWide = `[{"type":"count","total":4,"title":"件数","breakdown":[{"value":3},{"value":1234}],"area_m2":302.3,"f1":0.7634,"candidate_id":"c-226249-105759-2","provenance":{"photo_years":[2018,2023]}}]`
+const guardResWide = `[{"type":"count","total":4,"title":"件数","breakdown":[{"value":3},{"value":1234}],"area_m2":302.3,"f1":0.7634,"candidate_id":"c-226249-105759-2","provenance":{"photo_years":[2014,2024]}}]`
 
 // 正当な返答（結果にある数・年・「3 件」など）を、誤って落とさない。
 func TestGuardLegitimateRepliesStillPass(t *testing.T) {
 	res := generic(t, guardResWide)
 	for _, ok := range []string{
 		"全地区の新規出現の候補は 4 件です。機械が写真から見つけた候補で、確定ではありません。",
-		"2018 年と 2023 年の写真を比べました。",
+		"2014 年と 2024 年の写真を比べました。",
 		"面積は約 302 m² です。",
 		"F1 は 0.76（76 %）です。",
 		"候補 c-226249-105759-2 の写真です。",

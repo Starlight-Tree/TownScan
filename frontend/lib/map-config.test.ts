@@ -17,16 +17,20 @@ import {
 import { areas } from '../tests/fixtures';
 
 describe('地図の設定', () => {
-  it('地理院タイルを直接読む（標準地図・2018・2023 年の写真）', () => {
-    expect(BASE_LAYERS.std.url).toBe('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png');
-    expect(BASE_LAYERS.photo2018.url).toContain('/nendophoto2018/');
-    expect(BASE_LAYERS.photo2023.url).toContain('/nendophoto2023/');
-    expect([...BASE_LAYER_ORDER].sort()).toEqual(['photo2018', 'photo2023', 'std']);
+  it('IGN の公開タイル配信を直接読む（標準地図・2014・2024 年の写真）', () => {
+    for (const layer of Object.values(BASE_LAYERS)) {
+      expect(layer.url.startsWith('https://data.geopf.fr/wmts?')).toBe(true);
+      expect(layer.url).toContain('TILEMATRIX={z}&TILEROW={y}&TILECOL={x}');
+    }
+    expect(BASE_LAYERS.std.url).toContain('LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&');
+    expect(BASE_LAYERS.photo2014.url).toContain('LAYER=ORTHOIMAGERY.ORTHOPHOTOS2014&');
+    expect(BASE_LAYERS.photo2024.url).toContain('LAYER=ORTHOIMAGERY.ORTHOPHOTOS2024&');
+    expect([...BASE_LAYER_ORDER].sort()).toEqual(['photo2014', 'photo2024', 'std']);
   });
 
-  it('出典（国土地理院）を必ず表示する文言を持つ', () => {
-    expect(ATTRIBUTION).toContain('国土地理院');
-    expect(ATTRIBUTION).toContain('地理院タイル');
+  it('出典（IGN）を必ず表示する文言を持つ', () => {
+    expect(ATTRIBUTION).toContain('IGN（フランス国土地理院）');
+    expect(ATTRIBUTION).toContain('https://cartes.gouv.fr/cgu/');
   });
 
   it('タイルが 404 のとき用の空の PNG', () => {
@@ -95,17 +99,17 @@ describe('areasBBox（全地区の枠の和。初回の表示範囲）', () => {
 
 describe('displayStatusText（地図の下の「現在表示」）', () => {
   it('写真がそろっているとき: 選んだ種類と候補の件数', () => {
-    expect(displayStatusText('photo2023', 'ok', 18)).toBe('表示中: 2023 年の写真・候補 18 件');
-    expect(displayStatusText('photo2018', 'ok', 0)).toBe('表示中: 2018 年の写真・候補 0 件');
+    expect(displayStatusText('photo2024', 'ok', 18)).toBe('表示中: 2024 年の写真・候補 18 件');
+    expect(displayStatusText('photo2014', 'ok', 0)).toBe('表示中: 2014 年の写真・候補 0 件');
   });
 
   it('写真が一部しか無いとき: 見えているのは一部が標準地図', () => {
-    expect(displayStatusText('photo2023', 'partial', 18)).toBe('表示中: 2023 年の写真（一部は標準地図）・候補 18 件');
+    expect(displayStatusText('photo2024', 'partial', 18)).toBe('表示中: 2024 年の写真（一部は標準地図）・候補 18 件');
   });
 
   it('写真がまったく無いとき: 選んだ種類ではなく、実際に見えている標準地図を言い、理由を添える', () => {
-    expect(displayStatusText('photo2023', 'none', 18)).toBe('表示中: 標準地図（この範囲には 2023 年の写真がありません）・候補 18 件');
-    expect(displayStatusText('photo2018', 'none', 1)).toBe('表示中: 標準地図（この範囲には 2018 年の写真がありません）・候補 1 件');
+    expect(displayStatusText('photo2024', 'none', 18)).toBe('表示中: 標準地図（この範囲には 2024 年の写真がありません）・候補 18 件');
+    expect(displayStatusText('photo2014', 'none', 1)).toBe('表示中: 標準地図（この範囲には 2014 年の写真がありません）・候補 1 件');
   });
 
   it('標準地図を選んでいるとき: タイルの状態は関係ない', () => {
@@ -116,7 +120,7 @@ describe('displayStatusText（地図の下の「現在表示」）', () => {
 
   it('件数は千の区切り。候補が届いていない（null）ときは、0 件と言わない', () => {
     expect(displayStatusText('std', 'ok', 1234)).toBe('表示中: 標準地図・候補 1,234 件');
-    expect(displayStatusText('photo2023', 'ok', null)).toBe('表示中: 2023 年の写真・候補はまだ表示できていません');
+    expect(displayStatusText('photo2024', 'ok', null)).toBe('表示中: 2024 年の写真・候補はまだ表示できていません');
   });
 });
 

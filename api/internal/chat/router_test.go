@@ -110,9 +110,9 @@ func TestPlanRefusalsComeInPriorityOrder(t *testing.T) {
 		"太陽光パネルは？":                         "not_implemented/" + msgPanel,
 		"取り壊された建物は？":                       "not_implemented/" + msgDisappear,
 		"建物が減った":                           "not_implemented/" + msgDisappear,
-		"2024年の新築は？":                       "no_photo_period/" + msgYear,
-		"令和6年の新築は？":                        "no_photo_period/" + msgYear,
-		"二〇二四年の新築は？":                       "no_photo_period/" + msgYear,
+		"2025年の新築は？":                       "no_photo_period/" + msgYear,
+		"令和7年の新築は？":                        "no_photo_period/" + msgYear,
+		"二〇二五年の新築は？":                       "no_photo_period/" + msgYear,
 		"最近の新築は？":                          "no_photo_period/" + msgYear,
 		"天気と衛星":                            chat, // 雑談が先
 		"衛星とパネル":                           "not_implemented/" + msgSatellite,
@@ -124,8 +124,8 @@ func TestPlanRefusalsComeInPriorityOrder(t *testing.T) {
 	}
 	// 写真がある年・ID の中の数字・地区の名前・範囲を表す語は、断らない
 	for _, q := range []string{
-		"2018年と2023年の写真を比べた新規出現は何件？", "2018 年の新築は？", "c-2024-1-1 の写真", "z18-2025-1 の件数", "合成町の新規出現は？",
-		"熊本市の新築は？", "熊本の新築は？", "中心部の候補は？", "全地区の候補は何件？", "この地区の候補は？",
+		"2014年と2024年の写真を比べた新規出現は何件？", "2014 年の新築は？", "c-2024-1-1 の写真", "z18-2025-1 の件数", "合成町の新規出現は？",
+		"フランスの新築は？", "パリ近郊の新築は？", "中心部の候補は？", "全地区の候補は何件？", "この地区の候補は？",
 	} {
 		if r := reason(q); strings.HasPrefix(r, "no_photo_period") || strings.HasPrefix(r, "out_of_scope") {
 			t.Errorf("%q を断った: %s", q, r)
@@ -133,7 +133,7 @@ func TestPlanRefusalsComeInPriorityOrder(t *testing.T) {
 	}
 	// 対象外の場所: 解析した地区の名前を挙げる（12 件まで）
 	calls := NewMockModel(areas).Plan([]Message{user("福岡の新築は何件？")})
-	if m := calls[0].Args.Message; !strings.HasPrefix(m, "「福岡」は、解析した地区に含まれていません。対象は熊本市中心部の、解析した地区だけです。解析した地区は、合成町、試験町、仮想町 です。") {
+	if m := calls[0].Args.Message; !strings.HasPrefix(m, "「福岡」は、解析した地区に含まれていません。対象はパリ南西の近郊の、解析した地区だけです。解析した地区は、合成町、試験町、仮想町 です。") {
 		t.Errorf("福岡 = %s", m)
 	}
 	if got := calls[0].Args.Suggestions; len(got) != 1 || got[0] != "合成町の候補は何件ですか？" {

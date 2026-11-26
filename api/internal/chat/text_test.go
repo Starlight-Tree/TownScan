@@ -37,10 +37,10 @@ func TestRenderCount(t *testing.T) {
 		args Args
 		want string
 	}{
-		{"全分類", Args{}, "建物データに載っていない建物の候補は 9 件です。解析した 3 区画（各約 130 m 四方）のすべてにあり、どの区画も 3 件です。"},
-		{"1 地区・1 分類", Args{AreaIDs: []string{a1}, Cls: "confirmed_new"}, "合成町で、モデルが 2023 年の写真だけで見つけた候補は 1 件です（候補は全部で 3 件）。対象は、約 130 m 四方の区画です。"},
-		{"未判定だけ", Args{Cls: "uncertain"}, "判定できていない候補は 2 件です（候補は全部で 9 件）。解析した 3 区画（各約 130 m 四方）のうち 2 区画にあり、どの区画も 1 件です。"},
-		{"0 件", Args{AreaIDs: []string{a3}, Cls: "uncertain"}, "仮想町で、判定できていない候補はありません。対象は、約 130 m 四方の区画です。"},
+		{"全分類", Args{}, "2014 年の写真で確認できていない建物の候補は 9 件です。解析した 3 区画（各約 100 m 四方）のすべてにあり、どの区画も 3 件です。"},
+		{"1 地区・1 分類", Args{AreaIDs: []string{a1}, Cls: "confirmed_new"}, "合成町で、モデルが 2024 年の写真だけで見つけた候補は 1 件です（候補は全部で 3 件）。対象は、約 100 m 四方の区画です。"},
+		{"未判定だけ", Args{Cls: "uncertain"}, "判定できていない候補は 2 件です（候補は全部で 9 件）。解析した 3 区画（各約 100 m 四方）のうち 2 区画にあり、どの区画も 1 件です。"},
+		{"0 件", Args{AreaIDs: []string{a3}, Cls: "uncertain"}, "仮想町で、判定できていない候補はありません。対象は、約 100 m 四方の区画です。"},
 	} {
 		got := Render(callTool(t, f, "count_candidates", c.args))
 		if got != c.want {
@@ -58,24 +58,24 @@ func TestRenderCount(t *testing.T) {
 		t.Errorf("3 桁区切り = %s", got)
 	}
 	// scope が空・0 件。複数の地区の 0 件は、丁目や区の全体の話に読めないよう、数えた範囲を言う
-	if got := Render(CountResult{Total: 0}); got != "建物データに載っていない建物の候補はありません。解析したのは、各約 130 m 四方の区画だけです。" {
+	if got := Render(CountResult{Total: 0}); got != "2014 年の写真で確認できていない建物の候補はありません。解析したのは、各約 100 m 四方の区画だけです。" {
 		t.Errorf("scope が空 = %s", got)
 	}
 }
 
 func TestRankingText(t *testing.T) {
 	area := func(name string, n int64) AreaCount { return AreaCount{Name: name, Count: n} }
-	const side = "約 130 m 四方"
+	const side = "約 100 m 四方"
 	for _, c := range []struct {
 		name string
 		in   AreaRanking
 		want string
 	}{
-		{"1 位と 2 位", AreaRanking{12, 6, []AreaCount{area("甲町", 6), area("乙町", 4)}}, "解析した 12 区画（各約 130 m 四方）のうち 6 区画にあり、最も多いのは甲町の 6 件、次が乙町の 4 件です。"},
-		{"1 位が同数", AreaRanking{12, 5, []AreaCount{area("甲町", 3), area("乙町", 3), area("丙町", 1)}}, "解析した 12 区画（各約 130 m 四方）のうち 5 区画にあり、最も多いのは甲町・乙町の各 3 件、次が丙町の 1 件です。"},
-		{"1 位が 4 区画以上は名前を並べない", AreaRanking{12, 6, []AreaCount{area("甲", 2), area("乙", 2), area("丙", 2), area("丁", 2), area("戊", 1)}}, "解析した 12 区画（各約 130 m 四方）のうち 6 区画にあり、最も多い区画は 2 件です。"},
-		{"2 位が 4 区画以上は 2 位を言わない", AreaRanking{12, 6, []AreaCount{area("甲町", 3), area("乙", 1), area("丙", 1), area("丁", 1), area("戊", 1)}}, "解析した 12 区画（各約 130 m 四方）のうち 6 区画にあり、最も多いのは甲町の 3 件です。"},
-		{"1 区画だけ", AreaRanking{12, 1, []AreaCount{area("甲町", 2)}}, "解析した 12 区画（各約 130 m 四方）のうち、甲町の区画だけにあります。"},
+		{"1 位と 2 位", AreaRanking{12, 6, []AreaCount{area("甲町", 6), area("乙町", 4)}}, "解析した 12 区画（各約 100 m 四方）のうち 6 区画にあり、最も多いのは甲町の 6 件、次が乙町の 4 件です。"},
+		{"1 位が同数", AreaRanking{12, 5, []AreaCount{area("甲町", 3), area("乙町", 3), area("丙町", 1)}}, "解析した 12 区画（各約 100 m 四方）のうち 5 区画にあり、最も多いのは甲町・乙町の各 3 件、次が丙町の 1 件です。"},
+		{"1 位が 4 区画以上は名前を並べない", AreaRanking{12, 6, []AreaCount{area("甲", 2), area("乙", 2), area("丙", 2), area("丁", 2), area("戊", 1)}}, "解析した 12 区画（各約 100 m 四方）のうち 6 区画にあり、最も多い区画は 2 件です。"},
+		{"2 位が 4 区画以上は 2 位を言わない", AreaRanking{12, 6, []AreaCount{area("甲町", 3), area("乙", 1), area("丙", 1), area("丁", 1), area("戊", 1)}}, "解析した 12 区画（各約 100 m 四方）のうち 6 区画にあり、最も多いのは甲町の 3 件です。"},
+		{"1 区画だけ", AreaRanking{12, 1, []AreaCount{area("甲町", 2)}}, "解析した 12 区画（各約 100 m 四方）のうち、甲町の区画だけにあります。"},
 	} {
 		if got := rankingText(c.in, side); got != c.want {
 			t.Errorf("%s\n got  %s\n want %s", c.name, got, c.want)
@@ -113,7 +113,7 @@ func TestRenderTable(t *testing.T) {
 		t.Errorf("0 件の一覧 = %s", got)
 	}
 	help := callTool(t, f, "show_help", Args{})
-	if got := Render(help); got != "このアプリは、熊本市中心部の空中写真から、新築の候補を棟ごとに見つけて答えます。次のように聞けます。" {
+	if got := Render(help); got != "このアプリは、パリ南西の近郊の空中写真から、新築の候補を棟ごとに見つけて答えます。次のように聞けます。" {
 		t.Errorf("使い方 = %s", got)
 	}
 }
@@ -123,7 +123,7 @@ func TestRenderCompare(t *testing.T) {
 	if got, want := Render(callTool(t, f, "compare_areas", Args{})), "全地区の地区ごとの件数を比べました。候補の合計が最も多いのは 仮想町 で、3 件です。"; got != want {
 		t.Errorf("合計 = %s", got)
 	}
-	if got, want := Render(callTool(t, f, "compare_areas", Args{Cls: "confirmed_new"})), "全地区の地区ごとの件数を比べました。「2018 年は未検出」が最も多いのは 試験町 で、2 件です。"; got != want {
+	if got, want := Render(callTool(t, f, "compare_areas", Args{Cls: "confirmed_new"})), "全地区の地区ごとの件数を比べました。「2014 年は未検出」が最も多いのは 試験町 で、2 件です。"; got != want {
 		t.Errorf("新規出現 = %s", got)
 	}
 	if got := Render(CompareResult{Filter: FilterInfo{Scope: "東区"}}); got != "東区には、比べる地区がありません。" {
@@ -140,9 +140,9 @@ func TestRenderCompare(t *testing.T) {
 func TestRenderAccuracyBrief(t *testing.T) {
 	num := func(v float64) *pyjson.Float { f := pyjson.Float(v); return &f }
 	r := AccuracyResult{Metrics: []Metric{{Key: "holdout_object_f1", Value: num(0.16)}, {Key: "new_building_recall"}}}
-	r.Provenance.PhotoYears = []int{2018}
-	const unmeasured = "新築の再現率（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定です。"
-	const head = "建物抽出の物体単位 F1 は、評価用の地区で 0.16 です（基盤地図情報を参照にして、2018 年の写真で測った値）。"
+	r.Provenance.PhotoYears = []int{2014}
+	const unmeasured = "新築の再現率（本当の新築のうち候補に出せた割合）は、まだ測っていません。"
+	const head = "建物抽出の物体単位 F1 は、評価用の地区で 0.16 です（2014 年の写真で測った値）。"
 	if got, want := renderAccuracyBrief(r), head+unmeasured; got != want {
 		t.Errorf("%q（期待 %q）", got, want)
 	}
@@ -152,7 +152,7 @@ func TestRenderAccuracyBrief(t *testing.T) {
 	if got := renderAccuracyBrief(r); got != want {
 		t.Errorf("%q（期待 %q）", got, want)
 	}
-	if got, want := renderAccuracyBrief(AccuracyResult{}), "建物抽出の精度の値が、評価ファイルにありません。"+unmeasured; got != want {
+	if got, want := renderAccuracyBrief(AccuracyResult{}), "建物抽出の精度は、まだ測っていません。新築の再現率（本当の新築のうち候補に出せた割合）も、まだ測っていません。"; got != want {
 		t.Errorf("%q（期待 %q）", got, want)
 	}
 }
@@ -160,7 +160,7 @@ func TestRenderAccuracyBrief(t *testing.T) {
 func TestRenderDetectionImageAndMap(t *testing.T) {
 	f := newFakeData()
 	got := Render(callTool(t, f, "show_candidate", Args{CandidateID: "c-226249-105759-2"}))
-	if want := "候補 c-226249-105759-2 の写真を、2018 年と 2023 年で並べます。合成町・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。"; got != want {
+	if want := "候補 c-226249-105759-2 の写真を、2014 年と 2024 年で並べます。合成町・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。"; got != want {
 		t.Errorf("写真 = %s", got)
 	}
 	got = Render(callTool(t, f, "focus_map", Args{AreaIDs: []string{a1}}))
@@ -172,10 +172,10 @@ func TestRenderDetectionImageAndMap(t *testing.T) {
 func TestRenderAccuracy(t *testing.T) {
 	f := newFakeData()
 	got := Render(callTool(t, f, "get_accuracy", Args{}))
-	want := "建物抽出の精度を、基盤地図情報を参照にして、2018 年の写真で実測しました。評価用の地区での物体単位 F1 は 0.58 です。" +
-		"建物の抽出の適合率は 0.62、建物の抽出の再現率（基盤地図情報に対する値）は 0.55 です。" +
+	want := "建物抽出の精度を、2014 年の写真で実測しました。評価用の地区での物体単位 F1 は 0.58 です。" +
+		"建物の抽出の適合率は 0.62、建物の抽出の再現率は 0.55 です。" +
 		"調整用の地区の F1 は 0.60（倍率と閾値を選ぶのに使ったので、参考値）です。" +
-		"「新築の再現率」（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定で、上の建物の抽出の再現率とは別の値です。分類の閾値は未検証の初期値です。" +
+		"「新築の再現率」（本当の新築のうち候補に出せた割合）は、まだ測っていません。分類の閾値は未検証の初期値です。" +
 		"なお、これは合成データ（テスト用）の値です。"
 	if got != want {
 		t.Errorf("精度\n got  %s\n want %s", got, want)
@@ -185,11 +185,11 @@ func TestRenderAccuracy(t *testing.T) {
 	if strings.Contains(stripped, "再現率") {
 		t.Errorf("修飾の無い「再現率」がある: %s", stripped)
 	}
-	// 値が無い: 「ありません」と書き、適合率・再現率は書かない。実データ（合成でない）なら、合成データの注記は付かない
+	// 値が無い: 「まだ測っていません」と書き、適合率・再現率は書かない。実データ（合成でない）なら、合成データの注記は付かない
 	f.metrics = []byte(`{}`)
 	f.run.Kind = "real"
 	got = Render(callTool(t, f, "get_accuracy", Args{}))
-	if !strings.HasPrefix(got, "建物抽出の精度の値が、評価ファイルにありません。「新築の再現率」") || strings.Contains(got, "合成データ") || strings.Contains(got, "適合率") {
+	if !strings.HasPrefix(got, "建物抽出の精度は、まだ測っていません。「新築の再現率」") || strings.Contains(got, "合成データ") || strings.Contains(got, "適合率") {
 		t.Errorf("値が無い = %s", got)
 	}
 	// F1 だけがある: 適合率・再現率は、2 つそろったときだけ書く
@@ -200,7 +200,7 @@ func TestRenderAccuracy(t *testing.T) {
 	}
 	// 写真の年が分からなければ「…年の写真で」を書かない
 	r := AccuracyResult{Metrics: []Metric{{Key: "holdout_object_f1", Value: ptr(pyjson.Float(0.5))}}}
-	if got := Render(r); !strings.Contains(got, "基盤地図情報を参照にして、実測しました。") {
+	if got := Render(r); !strings.Contains(got, "建物抽出の精度を、実測しました。") {
 		t.Errorf("年が無い = %s", got)
 	}
 }
@@ -220,7 +220,7 @@ func TestRenderRefusalIsTheMessageAndComposeJoinsInOrder(t *testing.T) {
 		results = append(results, r)
 	}
 	want := Render(results[0]) + Render(results[1])
-	if got := Compose(results); got != want || !strings.HasPrefix(got, "モデルが 2023 年の写真だけで見つけた候補は 4 件です") || !strings.HasSuffix(got, "と聞けます。") {
+	if got := Compose(results); got != want || !strings.HasPrefix(got, "モデルが 2024 年の写真だけで見つけた候補は 4 件です") || !strings.HasSuffix(got, "と聞けます。") {
 		t.Errorf("Compose = %s", got)
 	}
 	if got := Compose(nil); got != "" {

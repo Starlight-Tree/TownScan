@@ -1,8 +1,8 @@
 """合成データ（テスト用。kind="synthetic"）の入力と、期待どおりの out/ を作る。実データではない。
 
-2 地区（名前は「合成地区A」「合成地区B」）に、建物らしい矩形を人工的に置く。矩形ごとに、2018・2023 年の確率・写真・基盤地図情報への
+2 地区（名前は「合成地区A」「合成地区B」）に、建物らしい矩形を人工的に置く。矩形ごとに、2014・2024 年の確率・写真・基盤地図情報への
 載り方を決め、3 分類の期待（truth.json）を残す。出力は仕様の契約どおりの形で、backend のローダー・画像切り出しのテストにも使える。
-  <out>/tiles/{2018,2023}/{x}_{y}.png        合成の写真（256×256）
+  <out>/tiles/{2014,2024}/{x}_{y}.png        合成の写真（256×256）
   <out>/kiban/FG-GML-…-BldA-….xml           基盤地図情報の BldA 相当（実データと同じ書式。座標は「緯度 経度」）
   <out>/<run>/colab/                          meta.json・prob_{year}_{x}_{y}_s{100|150|200}.npy
   <out>/<run>/geocode.json                    逆ジオコーダの応答の形（名前は合成と分かるもの）
@@ -54,17 +54,17 @@ OBJS: dict[str, list[Obj]] = {
     "合成地区A": [
         Obj("A_b1", (30, 30, 60, 55), 0.9, 0.9, True, True, (0, 0), role="両年にあり、建物データにもある（候補にならない）"),
         Obj("A_b2", (100, 40, 130, 70), 0.9, 0.9, True, True, (0, 0), hole=(110, 50, 116, 56), role="中庭つき（穴の読み込みを通す）"),
-        Obj("A_new", (160, 100, 190, 125), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2018"), role="2023 年だけにある新築"),
-        Obj("A_omit", (40, 150, 70, 180), 0.9, 0.9, True, True, None, expect=("existing_omission", "present_2018"), role="両年にあるが建物データに無い（描き漏れ）"),
-        Obj("A_unc", (120, 170, 150, 200), 0.25, 0.9, False, True, None, expect=("uncertain", "ambiguous"), role="2018 年の確率が弱く出ている（判定保留）"),
+        Obj("A_new", (160, 100, 190, 125), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2014"), role="2024 年だけにある新築"),
+        Obj("A_omit", (40, 150, 70, 180), 0.9, 0.9, True, True, None, expect=("existing_omission", "present_2014"), role="両年にあるが建物データに無い（描き漏れ）"),
+        Obj("A_unc", (120, 170, 150, 200), 0.25, 0.9, False, True, None, expect=("uncertain", "ambiguous"), role="2014 年の確率が弱く出ている（判定保留）"),
         Obj("A_small", (200, 30, 206, 36), None, 0.9, False, True, None, expect=None, role="面積が 20 m² 未満（捨てる）"),
         Obj("A_edge", (228, 200, 256, 225), None, 0.9, False, True, None, expect=("uncertain", "edge"), role="タイルの縁に接する（右）"),
         Obj("A_gone", (200, 100, 225, 125), None, None, False, False, (0, 0), role="建物データにだけある（評価で取りこぼしになる）"),
     ],
     "合成地区B": [
         Obj("B_b1", (20, 20, 50, 60), 0.9, 0.9, True, True, (2, 1), role="建物データと少しずれている（それでも載っている）"),
-        Obj("B_new1", (80, 100, 115, 140), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2018"), role="2023 年だけにある（大きい）"),
-        Obj("B_new2", (150, 150, 170, 170), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2018"), role="2023 年だけにある（小さい）"),
+        Obj("B_new1", (80, 100, 115, 140), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2014"), role="2024 年だけにある（大きい）"),
+        Obj("B_new2", (150, 150, 170, 170), None, 0.9, False, True, None, expect=("confirmed_new", "new_absent_2014"), role="2024 年だけにある（小さい）"),
         Obj("B_miss", (200, 200, 225, 225), 0.2, 0.2, True, True, (0, 0), role="モデルが見逃す建物（評価で取りこぼしになる）"),
         Obj("B_edge", (100, 0, 120, 18), 0.9, 0.9, True, True, None, expect=("uncertain", "edge"), role="両年にあり建物データに無いが、縁に接する"),
     ],
@@ -94,7 +94,7 @@ def make_prob(objs: list[Obj], year: int, scale: float, rng: np.random.Generator
     n = int(round(tilemath.TILE_SIZE_PX * scale))
     field = np.zeros((n, n))
     for o in objs:
-        v = o.p18 if year == 2018 else o.p23
+        v = o.p18 if year == 2014 else o.p23
         if v is None:
             continue
         m = _rect_mask(o.rect, n, scale)
@@ -112,7 +112,7 @@ def make_photo(objs: list[Obj], year: int, rng: np.random.Generator) -> Image.Im
     img[:] = (112, 128, 96)
     img += rng.normal(0, 4, size=img.shape)
     for o in objs:
-        if not (o.photo18 if year == 2018 else o.photo23):
+        if not (o.photo18 if year == 2014 else o.photo23):
             continue
         m = _rect_mask(o.rect, n, 1.0)
         img[m] = (176, 98, 78)
@@ -261,8 +261,8 @@ def make_synthetic_run(root, run: str = "run1", *, postprocess: bool = True, cre
                     "rect_px": list(o.rect),
                     "center": [lon, lat],
                     "in_kiban": o.kiban_shift is not None,
-                    "photo_2018": o.photo18,
-                    "photo_2023": o.photo23,
+                    "photo_2014": o.photo18,
+                    "photo_2024": o.photo23,
                     "expected_class": o.expect[0] if o.expect else None,
                     "expected_reason": o.expect[1] if o.expect else None,
                 }

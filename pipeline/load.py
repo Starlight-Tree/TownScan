@@ -27,16 +27,16 @@ from .db import apply_schema
 REQUIRED_FILES = (
     "run.json",
     "areas.json",
-    "buildings_2018.geojson",
-    "buildings_2023.geojson",
+    "buildings_2014.geojson",
+    "buildings_2024.geojson",
     "candidates.geojson",
     "eval.json",
 )
-BUILDING_YEARS = (2018, 2023)
+BUILDING_YEARS = (2014, 2024)
 CLASSES = ("confirmed_new", "existing_omission", "uncertain")
-REASONS = ("new_absent_2018", "present_2018", "ambiguous", "edge", "small")
+REASONS = ("new_absent_2014", "present_2014", "ambiguous", "edge", "small")
 RUN_KINDS = ("real", "synthetic")
-EVIDENCE_NUMBERS = ("prob_2023_mean", "ov_2018", "prob_2018_p90", "ov_kiban")  # 仕様 §4.2。edge_touch は真偽値
+EVIDENCE_NUMBERS = ("prob_2024_mean", "ov_2014", "prob_2014_p90", "ov_kiban")  # 仕様 §4.2。edge_touch は真偽値
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _AREA_ID_RE = re.compile(r"^z(\d+)-(\d+)-(\d+)$")

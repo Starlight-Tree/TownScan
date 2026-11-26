@@ -41,11 +41,11 @@ func syntheticRun() *store.Run {
 func fakeReason(class string) string {
 	switch class {
 	case "existing_omission":
-		return "present_2018"
+		return "present_2014"
 	case "uncertain":
 		return "edge"
 	}
-	return "new_absent_2018"
+	return "new_absent_2014"
 }
 
 func candidate(id, areaID, areaName, class string, area float64) store.Candidate {

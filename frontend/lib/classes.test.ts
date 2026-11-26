@@ -4,8 +4,11 @@ import { CLASS_INFO, CLASS_ORDER, REASON_TEXT, isCandidateClass, reasonText, ref
 import { formatArea, formatNumber, formatProb, formatRatio } from './format';
 
 describe('3 分類の見た目', () => {
+  it('画面に出すのは 2 分類（「2014 年も検出」は、この解析では候補にしないので出さない）', () => {
+    expect(CLASS_ORDER).toEqual(['confirmed_new', 'uncertain']);
+  });
+
   it('全分類に定義があり、色・線種・形が互いに異なる（色だけに頼らない）', () => {
-    expect([...CLASS_ORDER].sort()).toEqual([...CANDIDATE_CLASSES].sort());
     const infos = CANDIDATE_CLASSES.map((c) => CLASS_INFO[c]);
     expect(new Set(infos.map((i) => i.color)).size).toBe(3);
     expect(new Set(infos.map((i) => i.shape)).size).toBe(3);

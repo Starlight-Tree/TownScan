@@ -1,6 +1,6 @@
 """ジオメトリの座標変換と整形（shapely 2・pyproj）。
 
-lon/lat（EPSG:4326）・Web メルカトル（EPSG:3857。画素との対応に使う）・EPSG:6670（面積を m² で出す）の間を変える。
+lon/lat（EPSG:4326）・Web メルカトル（EPSG:3857。画素との対応に使う）・面積を m² で出す座標系（metric_crs）の間を変える。
 """
 
 from __future__ import annotations
@@ -16,9 +16,14 @@ from shapely.geometry import MultiPolygon, Polygon
 from . import tilemath
 
 
-@lru_cache(maxsize=1)
-def _to_6670() -> Transformer:
-    return Transformer.from_crs("EPSG:4326", "EPSG:6670", always_xy=True)
+@lru_cache(maxsize=2)
+def _to_metric(crs: str) -> Transformer:
+    return Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+
+
+def metric_crs(lon: float, lat: float) -> str:
+    """面積を m² で出す座標系。フランス本土は Lambert-93（EPSG:2154）。それ以外は、合成データ（テスト用）の平面直角座標系（EPSG:6670）。"""
+    return "EPSG:2154" if -6.0 <= lon <= 10.0 and 41.0 <= lat <= 52.0 else "EPSG:6670"
 
 
 def merc_to_lonlat_geom(geom):
@@ -29,15 +34,16 @@ def lonlat_to_merc_geom(geom):
     return shapely.transform(geom, lambda c: np.column_stack(tilemath.lonlat_to_merc(c[:, 0], c[:, 1])))
 
 
-def lonlat_to_6670_geom(geom):
-    """lon/lat → JGD2011 平面直角座標系 II 系（EPSG:6670。x が東、y が北。m）。"""
-    t = _to_6670()
+def lonlat_to_metric_geom(geom):
+    """lon/lat → 面積を測る座標系（metric_crs。x が東、y が北。m）。"""
+    c = geom.centroid
+    t = _to_metric(metric_crs(c.x, c.y))
     return shapely.transform(geom, lambda c: np.column_stack(t.transform(c[:, 0], c[:, 1])))
 
 
 def area_m2(geom_lonlat) -> float:
-    """lon/lat のジオメトリの面積（m²。EPSG:6670 で計算）。"""
-    return float(lonlat_to_6670_geom(geom_lonlat).area)
+    """lon/lat のジオメトリの面積（m²。metric_crs で計算）。"""
+    return float(lonlat_to_metric_geom(geom_lonlat).area)
 
 
 def affine_geom(geom, transform):

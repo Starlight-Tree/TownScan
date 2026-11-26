@@ -19,11 +19,11 @@ function area(id: string, name: string, ward: string, counts: [number, number, n
   };
 }
 
-// 合計: アサヒ 10・イースト 10（同数→地区名の順）・ノース 9・ゼロ 0
+// 合計: アサヒ 10・イースト 10（同数→地区名の順）・ノース 9・ゼロ 0。中央（「2014 年も検出」）は、実際のデータと同じく 0
 const areas = [
-  area('a', 'イースト地区', '東区', [2, 6, 2]),
-  area('b', 'アサヒ地区', '中央区', [4, 4, 2]),
-  area('c', 'ノース地区', '北区', [5, 3, 1]),
+  area('a', 'イースト地区', '東区', [8, 0, 2]),
+  area('b', 'アサヒ地区', '中央区', [4, 0, 6]),
+  area('c', 'ノース地区', '北区', [5, 0, 4]),
   area('d', 'ゼロ地区', '南区', [0, 0, 0]),
 ];
 
@@ -77,9 +77,8 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     const [asahi] = rowButtons() as [HTMLElement];
     const labels = Array.from(asahi.querySelectorAll('.area-chart__seg')).map((seg) => [seg.getAttribute('title'), seg.querySelector('.area-chart__seg-n')?.textContent]);
     expect(labels).toEqual([
-      ['2018 年は未検出 4 件', '4'],
-      ['2018 年も検出 4 件', '4'],
-      ['未判定 2 件', '2'],
+      ['2014 年は未検出 4 件', '4'],
+      ['未判定 6 件', '6'],
     ]);
     // 書くかどうかは、棒に対する割合（1 桁は 10% 以上、2 桁は 18% 以上）
     expect(showSegmentCount(1, 10)).toBe(true);
@@ -89,41 +88,37 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     expect(showSegmentCount(0, 10)).toBe(false);
   });
 
-  it('3 分類を積み上げる。幅は、最大の合計（10）に対する割合。0 件の分類は描かない', () => {
+  it('2 分類を積み上げる。幅は、最大の合計（10）に対する割合。0 件の分類は描かない', () => {
     setup();
     const [asahi, , north] = rowButtons() as [HTMLElement, HTMLElement, HTMLElement];
     expect(widths(asahi)).toEqual([
       ['confirmed_new', 40],
-      ['existing_omission', 40],
-      ['uncertain', 20],
+      ['uncertain', 60],
     ]);
     expect(widths(north)).toEqual([
       ['confirmed_new', 50],
-      ['existing_omission', 30],
-      ['uncertain', 10],
+      ['uncertain', 40],
     ]);
     // 棒は装飾（読み上げは行の aria-label が担う）
     expect(asahi.querySelector('.area-chart__bar')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('filter.classes に含まれない分類は、描かない。合計も、描いた分類の和になる', () => {
-    setup(only('existing_omission', 'uncertain'));
+    setup(only('uncertain'));
     const rows = rowButtons();
-    // 並びも、表示する分類の和（イースト 8、アサヒ 6、ノース 4）の順
-    expect(rows.map((r) => r.querySelector('.area-chart__name')?.textContent)).toEqual(['イースト地区（東区）', 'アサヒ地区（中央区）', 'ノース地区（北区）']);
-    expect(rows.map((r) => r.querySelector('.area-chart__total strong')?.textContent)).toEqual(['8', '6', '4']);
+    // 並びも、表示する分類の和（アサヒ 6、ノース 4、イースト 2）の順
+    expect(rows.map((r) => r.querySelector('.area-chart__name')?.textContent)).toEqual(['アサヒ地区（中央区）', 'ノース地区（北区）', 'イースト地区（東区）']);
+    expect(rows.map((r) => r.querySelector('.area-chart__total strong')?.textContent)).toEqual(['6', '4', '2']);
     for (const r of rows) expect(r.querySelector('[data-class="confirmed_new"]')).toBeNull();
-    // 最大の合計（8）が、棒の幅の基準になる
-    expect(widths(rows[0]!)).toEqual([
-      ['existing_omission', 75],
-      ['uncertain', 25],
-    ]);
+    // 最大の合計（6）が、棒の幅の基準になる
+    expect(widths(rows[0]!)).toEqual([['uncertain', 100]]);
+    expect(widths(rows[2]!)[0]![1]).toBeCloseTo(100 / 3, 2);
   });
 
-  it('各行の aria-label に、地区名と 3 分類の件数・合計を書く。選んだ行は aria-pressed', () => {
+  it('各行の aria-label に、地区名と 2 分類の件数・合計を書く。選んだ行は aria-pressed', () => {
     setup({ ...ALL_FILTER, areaId: 'c' });
     const north = screen.getByRole('button', { name: /ノース地区/ });
-    expect(north).toHaveAccessibleName('ノース地区（北区）、2018 年は未検出 5 件、2018 年も検出 3 件、未判定 1 件、合計 9 件');
+    expect(north).toHaveAccessibleName('ノース地区（北区）、2014 年は未検出 5 件、未判定 4 件、合計 9 件');
     expect(north).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /アサヒ地区/ })).toHaveAttribute('aria-pressed', 'false');
   });
@@ -131,7 +126,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
   it('グラフに出していない分類は、行の aria-label でもそう言う', () => {
     setup(only('confirmed_new'));
     expect(screen.getByRole('button', { name: /ノース地区/ })).toHaveAccessibleName(
-      'ノース地区（北区）、2018 年は未検出 5 件、2018 年も検出 3 件（グラフには出していません）、未判定 1 件（グラフには出していません）、合計 5 件',
+      'ノース地区（北区）、2014 年は未検出 5 件、未判定 4 件（グラフには出していません）、合計 5 件',
     );
   });
 
@@ -158,25 +153,25 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     const { onFilterChange, rerender } = setup({ ...ALL_FILTER, areaId: 'c' });
     const legend = screen.getByRole('group', { name: /分類/ });
     const buttons = within(legend).getAllByRole('button');
-    expect(buttons.map((b) => b.textContent)).toEqual(['2018 年は未検出', '2018 年も検出', '未判定']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['2014 年は未検出', '未判定']);
     for (const b of buttons) expect(b).toHaveAttribute('aria-pressed', 'true');
 
     await userEvent.click(within(legend).getByRole('button', { name: '未判定' }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaId).toBe('c');
-    expect([...next.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
+    expect([...next.classes]).toEqual(['confirmed_new']);
 
     // 外した状態から押すと、戻る
     rerender(<AreaChartView areas={areas} filter={next} onFilterChange={onFilterChange} />);
     expect(within(legend).getByRole('button', { name: '未判定' })).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(within(legend).getByRole('button', { name: '未判定' }));
-    expect([...(onFilterChange.mock.calls.at(-1)![0] as MapFilter).classes].sort()).toEqual(['confirmed_new', 'existing_omission', 'uncertain']);
+    expect([...(onFilterChange.mock.calls.at(-1)![0] as MapFilter).classes].sort()).toEqual(['confirmed_new', 'uncertain']);
   });
 
   it('凡例のボタンに、分類の印（色・線・形）を付ける', () => {
     setup();
     const legend = screen.getByRole('group', { name: /分類/ });
-    expect(legend.querySelectorAll('svg.class-swatch')).toHaveLength(3);
+    expect(legend.querySelectorAll('svg.class-swatch')).toHaveLength(2);
   });
 
   it('分類をすべて外すと、「表示する分類がありません」を知らせ、棒と表は出さない（凡例は残る）', () => {
@@ -184,7 +179,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     expect(screen.getByRole('status')).toHaveTextContent('表示する分類がありません');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
     expect(screen.queryByText('表で見る')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(screen.getAllByRole('button')).toHaveLength(2);
   });
 
   it('「表で見る」に、同じ数字の表を出す（caption つき・行見出し・列見出し）', async () => {
@@ -196,14 +191,14 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
 
     const table = screen.getByRole('table', { name: '地区ごとの件数（合計の多い順）' });
     expect(table.querySelector('caption')).toHaveTextContent('地区ごとの件数');
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '2018 年は未検出', '2018 年も検出', '未判定', '合計']);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '2014 年は未検出', '未判定', '合計']);
     const body = within(table).getAllByRole('row').slice(1);
     const cells = body.map((tr) => Array.from(tr.querySelectorAll('th, td')).map((c) => c.textContent));
     expect(cells).toEqual([
-      ['アサヒ地区', '中央区', '4', '4', '2', '10'],
-      ['イースト地区', '東区', '2', '6', '2', '10'],
-      ['ノース地区', '北区', '5', '3', '1', '9'],
-      ['ゼロ地区', '南区', '0', '0', '0', '0'],
+      ['アサヒ地区', '中央区', '4', '6', '10'],
+      ['イースト地区', '東区', '8', '2', '10'],
+      ['ノース地区', '北区', '5', '4', '9'],
+      ['ゼロ地区', '南区', '0', '0', '0'],
     ]);
   });
 
@@ -212,7 +207,7 @@ describe('グラフ（地区ごとの件数の積み上げ横棒）', () => {
     await userEvent.click(screen.getByText('表で見る'));
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['地区', '区', '未判定', '合計']);
-    expect(Array.from(within(table).getAllByRole('row')[1]!.querySelectorAll('th, td')).map((c) => c.textContent)).toEqual(['アサヒ地区', '中央区', '2', '2']);
+    expect(Array.from(within(table).getAllByRole('row')[1]!.querySelectorAll('th, td')).map((c) => c.textContent)).toEqual(['アサヒ地区', '中央区', '6', '6']);
   });
 
   it('地区が 0 件なら、「表示できる地区がありません」だけを出す', () => {
@@ -234,7 +229,7 @@ describe('複数の地区（区など。areaIds）の条件', () => {
     expect(screen.queryByRole('button', { name: /ゼロ地区/ })).not.toBeInTheDocument();
     const head = document.querySelector('.area-chart__head')!;
     expect(head).toHaveTextContent('対象: 中央区・北区');
-    // 最大の合計は 10（アサヒ）。ノースの2018 年は未検出 5 は 50%
+    // 最大の合計は 10（アサヒ）。ノースの2014 年は未検出 5 は 50%
     expect(widths(rowButtons()[1]!)[0]).toEqual(['confirmed_new', 50]);
   });
 
@@ -269,7 +264,7 @@ describe('複数の地区（区など。areaIds）の条件', () => {
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaIds).toEqual(['b', 'c']);
     expect(next.scope).toBe('中央区・北区');
-    expect([...next.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
+    expect([...next.classes]).toEqual(['confirmed_new']);
   });
 
   it('単一の地区を選んでいるときは、これまでどおり件数のある全行を出して、選んだ行に印を付ける（対象の行は出さない）', () => {

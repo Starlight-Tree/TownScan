@@ -36,19 +36,19 @@ describe('formatTenths（約 ◯ 割）', () => {
 });
 
 describe('evalYearOf', () => {
-  it('year_compare.selected_on_year → protocol.year → 既定の 2018', () => {
+  it('year_compare.selected_on_year → protocol.year → 既定の 2014', () => {
     expect(evalYearOf({ ...base, year_compare: { selected_on_year: 2020 }, protocol: { year: 2019 } })).toBe(2020);
     expect(evalYearOf({ ...base, protocol: { year: 2019 } })).toBe(2019);
-    expect(evalYearOf(base)).toBe(2018);
-    expect(evalYearOf({ ...base, protocol: { year: 'x' }, year_compare: 7 })).toBe(2018);
+    expect(evalYearOf(base)).toBe(2014);
+    expect(evalYearOf({ ...base, protocol: { year: 'x' }, year_compare: 7 })).toBe(2014);
   });
 });
 
 describe('getYearCompare', () => {
-  it('実データの形から、2018 年（トップレベル）と 2023 年（by_year）を読む', () => {
+  it('実データの形から、2014 年（トップレベル）と 2024 年（by_year）を読む', () => {
     const yc = getYearCompare(metricsReal)!;
-    expect(yc.baseYear).toBe(2018);
-    expect(yc.compareYear).toBe(2023);
+    expect(yc.baseYear).toBe(2014);
+    expect(yc.compareYear).toBe(2024);
     expect(yc.setting).toEqual({ scale: 2, threshold: 0.4 });
     expect((yc.base.holdout?.object as { f1: number }).f1).toBe(0.16);
     expect((yc.other.holdout?.object as { f1: number }).f1).toBe(0.1);
@@ -67,11 +67,11 @@ describe('getYearCompare', () => {
     ['文字列', 'x'],
     ['配列', []],
     ['compare_year が無い', { by_year: {} }],
-    ['by_year が無い', { compare_year: 2023 }],
-    ['比べる年の値が無い', { compare_year: 2023, by_year: { '2018': {} } }],
-    ['比べる年が空', { compare_year: 2023, by_year: { '2023': {} } }],
-    ['同じ年', { compare_year: 2018, by_year: { '2018': { holdout: { object: { f1: 1 } } } } }],
-    ['compare_year が数でない', { compare_year: '2023', by_year: { '2023': { holdout: {} } } }],
+    ['by_year が無い', { compare_year: 2024 }],
+    ['比べる年の値が無い', { compare_year: 2024, by_year: { '2014': {} } }],
+    ['比べる年が空', { compare_year: 2024, by_year: { '2024': {} } }],
+    ['同じ年', { compare_year: 2014, by_year: { '2014': { holdout: { object: { f1: 1 } } } } }],
+    ['compare_year が数でない', { compare_year: '2024', by_year: { '2024': { holdout: {} } } }],
   ])('形が違えば null（%s）', (_name, yc) => {
     expect(getYearCompare({ ...base, year_compare: yc })).toBeNull();
   });
@@ -83,7 +83,7 @@ describe('getAbsentStats', () => {
     expect(getAbsentStats(metricsReal, 'holdout')).toEqual({ n: 110, absent: 34, present: 61, minAreaM2: 20 });
   });
   it('棟数が 0・absent が棟数より多い・数でないときは null、present が壊れていれば present だけ捨てる', () => {
-    const mk = (s: unknown) => ({ ...base, existing_absent_in_2018: { overall: s } });
+    const mk = (s: unknown) => ({ ...base, existing_absent_in_2014: { overall: s } });
     expect(getAbsentStats(mk({ n_buildings: 0, absent: 0 }))).toBeNull();
     expect(getAbsentStats(mk({ n_buildings: 10, absent: 11 }))).toBeNull();
     expect(getAbsentStats(mk({ n_buildings: 10, absent: -1 }))).toBeNull();
@@ -150,15 +150,15 @@ describe('見出しの対応表', () => {
 });
 
 describe('gridNote（画素単位の升目）', () => {
-  it('倍率 2 → 一辺 約 0.25 m・写真 1 画素の 4 分の 1', () => {
+  it('倍率 2 → 一辺 約 0.2 m・写真 1 画素の 4 分の 1', () => {
     const t = gridNote(2, formatNumber);
     expect(t).toContain('倍率 2 の格子の升目');
-    expect(t).toContain('一辺が約 0.25 m');
+    expect(t).toContain('一辺が約 0.2 m');
     expect(t).toContain('4 分の 1');
   });
   it('倍率 1.5 → 約 0.333 m・2.25 分の 1。倍率が無ければ数を書かない', () => {
     const t = gridNote(1.5, formatNumber);
-    expect(t).toContain('約 0.333 m');
+    expect(t).toContain('約 0.267 m');
     expect(t).toContain('2.25 分の 1');
     expect(gridNote(undefined, formatNumber)).not.toMatch(/\d/);
     expect(gridNote(0, formatNumber)).not.toMatch(/\d/);

@@ -24,7 +24,7 @@ def fake_real(tmp_path, monkeypatch):
     colab.mkdir(parents=True)
     (colab / "meta_setup.json").write_text(json.dumps({"model": "real-model", "device": "T4"}), encoding="utf-8")
     (colab / "meta_infer.json").write_text(
-        json.dumps({"normalization": "0-1", "tiles": [{"year": 2018, "x": 226274, "y": 105752}, {"year": 2023, "x": 226266, "y": 105755}]}),
+        json.dumps({"normalization": "0-1", "tiles": [{"year": 2014, "x": 226274, "y": 105752}, {"year": 2024, "x": 226266, "y": 105755}]}),
         encoding="utf-8",
     )
     for year in colabio.YEARS:
@@ -89,11 +89,11 @@ def test_real_data_in_the_default_synthetic_folder_is_not_touched_either(fake_re
             ),
             id="synthetic_meta_mixed_with_real_meta_files",
         ),
-        pytest.param(lambda c, r: np.save(c / "prob_2018_1_2_s100.npy", np.zeros((256, 256), dtype=np.float16)), id="prob_only"),
+        pytest.param(lambda c, r: np.save(c / "prob_2014_1_2_s100.npy", np.zeros((256, 256), dtype=np.float16)), id="prob_only"),
         pytest.param(lambda c, r: (r / "geocode.json").write_text("{}", encoding="utf-8"), id="geocode_only"),
         pytest.param(lambda c, r: (r / "truth.json").write_text("[]", encoding="utf-8"), id="truth_only"),
         pytest.param(
-            lambda c, r: ((r.parent / "tiles" / "2018").mkdir(parents=True), (r.parent / "tiles" / "2018" / "1_2.png").write_bytes(b"png")),
+            lambda c, r: ((r.parent / "tiles" / "2014").mkdir(parents=True), (r.parent / "tiles" / "2014" / "1_2.png").write_bytes(b"png")),
             id="tiles_only",
         ),
         pytest.param(

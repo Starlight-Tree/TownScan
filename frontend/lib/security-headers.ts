@@ -4,7 +4,7 @@
 export type SecurityHeader = { key: string; value: string };
 
 // Content-Security-Policy は frame-ancestors だけにする（クリックジャッキング対策）。
-// script-src・img-src・connect-src などは付けない: 地図（Leaflet）が国土地理院のタイル画像を別のホストから読み、
+// script-src・img-src・connect-src などは付けない: 地図（Leaflet）がIGN のタイル画像を別のホストから読み、
 // Next.js が RSC の転送とテーマの描画前のスクリプト（app/layout.tsx）を inline で埋め込むため、制限すると画面が壊れる。
 // 開発（next dev）にも付けてよい: フレームへの埋め込みの可否だけを決め、React の refresh（eval）には効かない。
 export const CONTENT_SECURITY_POLICY = "frame-ancestors 'none'";
@@ -20,7 +20,7 @@ export function securityHeaders(): SecurityHeader[] {
     // CSP の frame-ancestors を解さない古いブラウザー向けの備えも兼ねる
     { key: 'X-Frame-Options', value: 'DENY' },
     { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
-    // 使わない機能は、閉じておく（位置情報も使わない: 地図は、利用者の現在地ではなく、熊本市中心部の固定の範囲を出す）
+    // 使わない機能は、閉じておく（位置情報も使わない: 地図は、利用者の現在地ではなく、パリ南西の近郊の固定の範囲を出す）
     { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   ];
 }

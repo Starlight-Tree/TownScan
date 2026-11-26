@@ -40,8 +40,8 @@ def test_detail_lists_both_photo_years_with_image_urls(api):
     cid = expected.BIGGEST_NEW
     d = assert_json(api.get(f"/api/candidates/{cid}"))
     assert d["images"] == [
-        {"year": 2018, "url": f"/api/candidates/{cid}/image?year=2018&size=512"},
-        {"year": 2023, "url": f"/api/candidates/{cid}/image?year=2023&size=512"},
+        {"year": 2014, "url": f"/api/candidates/{cid}/image?year=2014&size=512"},
+        {"year": 2024, "url": f"/api/candidates/{cid}/image?year=2024&size=512"},
     ]
 
 
@@ -49,7 +49,7 @@ def test_detail_provenance_names_the_run_and_flags_synthetic_data(api):
     p = assert_json(api.get(f"/api/candidates/{expected.BIGGEST_NEW}"))["provenance"]
     assert p == {
         "source": expected.SOURCE_CANDIDATES,
-        "photo_years": [2018, 2023],
+        "photo_years": [2014, 2024],
         "model": expected.RUN_MODEL,
         "run_id": expected.RUN_ID,
         "run_kind": "synthetic",
@@ -80,7 +80,7 @@ def test_metrics_is_the_eval_file_plus_provenance(api):
     assert body["new_building_recall"] is None
     assert provenance == {
         "source": expected.SOURCE_ACCURACY,
-        "photo_years": [2018],  # 精度は 2018 年の写真で測った値
+        "photo_years": [2014],  # 精度は 2014 年の写真で測った値
         "model": expected.RUN_MODEL,
         "run_id": expected.RUN_ID,
         "run_kind": "synthetic",

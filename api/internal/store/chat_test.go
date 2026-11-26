@@ -195,7 +195,7 @@ func TestChatProvenance(t *testing.T) {
 	real := Run{RunID: "run-1", Kind: "real", Model: ""}
 
 	p := CandidateProvenanceWithNote(synthetic, "結果はすべて、写真から機械が見つけた候補です。")
-	if p.Source != sourceCandidates || !slices.Equal(p.PhotoYears, []int{2018, 2023}) || p.Model != "m" || p.RunID != "synthetic-test" || p.RunKind != "synthetic" || p.Metric != "" ||
+	if p.Source != sourceCandidates || !slices.Equal(p.PhotoYears, []int{2014, 2024}) || p.Model != "m" || p.RunID != "synthetic-test" || p.RunKind != "synthetic" || p.Metric != "" ||
 		p.Note != "合成データ（テスト用）です。実データではありません。 結果はすべて、写真から機械が見つけた候補です。" {
 		t.Errorf("候補（合成）= %+v", p)
 	}
@@ -204,19 +204,27 @@ func TestChatProvenance(t *testing.T) {
 	if p.Note != "メモ" || p.Model != "不明" || p.RunKind != "real" {
 		t.Errorf("候補（実）= %+v", p)
 	}
-	// 年は、評価ファイルにある年（2018 以外もありうる）。書き換えても、元の表（photoYears）は変わらない
-	p = AccuracyProvenanceForYear(real, 2023)
-	if p.Source != sourceAccuracy || !slices.Equal(p.PhotoYears, []int{2023}) || p.Metric != "物体単位 F1・画素 IoU" ||
-		p.Note != "数字は 2023 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。" {
+	// 年は、評価ファイルにある年（2014 以外もありうる）。書き換えても、元の表（photoYears）は変わらない
+	p = AccuracyProvenanceForYear(real, 2024, true)
+	if p.Source != "2024 年の写真での建物抽出の評価" || !slices.Equal(p.PhotoYears, []int{2024}) || p.Metric != "物体単位 F1・画素 IoU" ||
+		p.Note != "数字は 2024 年の写真で測った値。分類の閾値は未検証の初期値。" {
 		t.Errorf("精度 = %+v", p)
 	}
-	// 2018 年なら、/api/metrics の出どころ（AccuracyProvenance）と同じ
-	if a, b := AccuracyProvenanceForYear(synthetic, 2018), AccuracyProvenance(synthetic); a.Note != b.Note || !slices.Equal(a.PhotoYears, b.PhotoYears) || a.Source != b.Source || a.Metric != b.Metric {
-		t.Errorf("2018 年: %+v / %+v", a, b)
+	// 測っていなければ、測った年や数字があるとは言わない
+	p = AccuracyProvenanceForYear(real, 2024, false)
+	if p.Source != sourceUnmeasured || !slices.Equal(p.PhotoYears, []int{2024}) || p.Note != noteUnmeasured || strings.Contains(p.Note, "測った値") {
+		t.Errorf("精度（未測定）= %+v", p)
+	}
+	// 2014 年なら、/api/metrics の出どころ（AccuracyProvenance）と同じ
+	for _, measured := range []bool{true, false} {
+		a, b := AccuracyProvenanceForYear(synthetic, 2014, measured), AccuracyProvenance(synthetic, measured)
+		if a.Note != b.Note || !slices.Equal(a.PhotoYears, b.PhotoYears) || a.Source != b.Source || a.Metric != b.Metric {
+			t.Errorf("2014 年（measured=%v）: %+v / %+v", measured, a, b)
+		}
 	}
 	p = CandidateProvenanceWithNote(synthetic, "")
 	p.PhotoYears[0] = 1
-	if !slices.Equal(photoYears, []int{2018, 2023}) {
+	if !slices.Equal(photoYears, []int{2014, 2024}) {
 		t.Errorf("共有の年の表が書き換わった: %v", photoYears)
 	}
 }

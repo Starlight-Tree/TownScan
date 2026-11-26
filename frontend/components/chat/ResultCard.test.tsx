@@ -15,7 +15,7 @@ describe('結果カード: 型ごとの描画', () => {
   it('count: 写真を出せないときは、見出しに聞かれた数と地区、下に全体の数。根拠の箱・未判定の説明の行・大きな数字・内訳の棒は無い', () => {
     render(<ResultCard result={count} actions={makeActions()} />);
     const card = screen.getByRole('region', { name: count.title });
-    expect(within(card).getByRole('heading')).toHaveTextContent('2018 年は未検出 33 件（全地区）');
+    expect(within(card).getByRole('heading')).toHaveTextContent('2014 年は未検出 33 件（全地区）');
     expect(within(card).getByText('候補は全部で 102 件')).toBeInTheDocument();
     expect(card.querySelector('.uncertain-note')).toBeNull();
     expect(card).not.toHaveClass('result-card--plain');
@@ -47,7 +47,7 @@ describe('結果カード: 型ごとの描画', () => {
       geometry: { type: 'Polygon', coordinates: [] },
       properties: { id: `c-9-9-${n}`, class: cls, area_m2, area_id, reason },
     });
-    /** 2018 年は未検出 7 件（面積は番号の順ではない）と、ほかの分類 2 件 */
+    /** 2014 年は未検出 7 件（面積は番号の順ではない）と、ほかの分類 2 件 */
     const features = [
       ...[30, 70, 10, 60, 20, 50, 40].map((a, i) => feature(i + 1, 'confirmed_new', a)),
       feature(8, 'uncertain', 999),
@@ -81,12 +81,12 @@ describe('結果カード: 型ごとの描画', () => {
       expect(ids()).toHaveLength(4);
     });
 
-    it('カードは 2018 年と 2023 年の写真・地区・面積を出す。候補 ID は、読み上げの名前と写真の説明にだけある', () => {
+    it('カードは 2014 年と 2024 年の写真・地区・面積を出す。候補 ID は、読み上げの名前と写真の説明にだけある', () => {
       show(seven);
       const card = photoCards()[0]!;
       expect(within(card).getAllByRole('img').map((i) => i.getAttribute('src'))).toEqual([
-        expect.stringContaining('/candidates/c-9-9-2/image?year=2018'),
-        expect.stringContaining('/candidates/c-9-9-2/image?year=2023'),
+        expect.stringContaining('/candidates/c-9-9-2/image?year=2014'),
+        expect.stringContaining('/candidates/c-9-9-2/image?year=2024'),
       ]);
       expect(card).toHaveTextContent('70 m²');
       const visible = card.cloneNode(true) as HTMLElement;
@@ -99,18 +99,18 @@ describe('結果カード: 型ごとの描画', () => {
       const card = document.querySelector('.photo-card')!.closest('section') as HTMLElement;
       expect(card).toHaveClass('result-card--plain');
       expect(within(card).getByRole('heading', { level: 3 })).toHaveClass('visually-hidden');
-      expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent('2018 年は未検出 7 件（全地区）');
+      expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent('2014 年は未検出 7 件（全地区）');
       expect(card.querySelector('.count-context')).toBeNull();
       expect(screen.queryByText(/候補は全部で/)).not.toBeInTheDocument();
     });
 
-    it('分類を絞らないときは、2018 年は未検出 → 要確認 → 端のため未判定 → 2018 年も検出の順（同じ中は面積の大きい順）。分類の見出しも、カードの分類の札も出さない', async () => {
+    it('分類を絞らないときは、2014 年は未検出 → 要確認 → 端のため未判定 → 2014 年も検出の順（同じ中は面積の大きい順）。分類の見出しも、カードの分類の札も出さない', async () => {
       const mixed = [
-        feature(1, 'existing_omission', 900, 'z18-1-2', 'present_2018'),
+        feature(1, 'existing_omission', 900, 'z18-1-2', 'present_2014'),
         feature(2, 'uncertain', 800, 'z18-1-2', 'edge'),
         feature(3, 'uncertain', 100, 'z18-1-2', 'ambiguous'),
-        feature(4, 'confirmed_new', 10, 'z18-1-2', 'new_absent_2018'),
-        feature(5, 'confirmed_new', 20, 'z18-1-2', 'new_absent_2018'),
+        feature(4, 'confirmed_new', 10, 'z18-1-2', 'new_absent_2014'),
+        feature(5, 'confirmed_new', 20, 'z18-1-2', 'new_absent_2014'),
       ];
       show({ ...count, total: 5, overall: undefined, filter: {} }, { data: mixed });
       expect(headings()).toEqual([]);
@@ -122,7 +122,7 @@ describe('結果カード: 型ごとの描画', () => {
 
     it('写真の下に出典の 1 行（根拠の箱と「詳細」の文字のリンクは無い）。写真を含むカードを押すと、その候補を開く', async () => {
       const { actions } = show(seven);
-      expect(document.querySelector('.photo-grid')!.compareDocumentPosition(screen.getByText('出典：国土地理院')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(document.querySelector('.photo-grid')!.compareDocumentPosition(screen.getByText('出典：IGN')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.queryByText('根拠を見る')).not.toBeInTheDocument();
       expect(screen.queryByText('詳細', { exact: true })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: /詳細.*c-9-9-2/ }));
@@ -219,13 +219,13 @@ describe('結果カード: 型ごとの描画', () => {
       render(<ResultCard result={compare} actions={makeActions()} />);
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
       const card = screen.getByRole('region', { name: compare.title });
-      // テスト地区 02 が合計 10 で最多。2 地区の合計は 19 件
-      expect(card).toHaveTextContent('全 2 地区の合計は 19 件。');
+      // テスト地区 01 が合計 6 で最多。2 地区の合計は 10 件
+      expect(card).toHaveTextContent('全 2 地区の合計は 10 件。');
       expect(card).not.toHaveTextContent('最も多い');
       expect(card.textContent).not.toMatch(/未検出|も検出|未判定/);
       cleanup();
       render(<ResultCard result={compare} actions={makeActions()} staleRun />);
-      expect(screen.getByRole('region', { name: compare.title })).toHaveTextContent('候補が最も多いのはテスト地区 02で、10 件です。全 2 地区の合計は 19 件。');
+      expect(screen.getByRole('region', { name: compare.title })).toHaveTextContent('候補が最も多いのはテスト地区 01で、6 件です。全 2 地区の合計は 10 件。');
     });
 
     it('地区の数が多くても、カードの大きさは同じ（地区の行を並べない。「N 地区中 5 地区を表示」とは言わない）', () => {
@@ -265,15 +265,15 @@ describe('結果カード: 型ごとの描画', () => {
     expect(screen.getByRole('region', { name: mapFocus.title })).toHaveTextContent('地図で、この範囲を表示します。');
   });
 
-  it('detection_image: 2018・2023 の 2 枚と出典。写真を押すと詳細を開く。分類の印は無い', async () => {
+  it('detection_image: 2014・2024 の 2 枚と出典。写真を押すと詳細を開く。分類の印は無い', async () => {
     const actions = makeActions();
     render(<ResultCard result={detectionImage} actions={actions} />);
     const imgs = screen.getAllByRole('img');
     expect(imgs).toHaveLength(2);
-    expect(imgs[0]).toHaveAttribute('src', '/api/candidates/c-1-2-1/image?year=2018&size=512');
-    expect(imgs[1]).toHaveAccessibleName(/2023 年の写真/);
+    expect(imgs[0]).toHaveAttribute('src', '/api/candidates/c-1-2-1/image?year=2014&size=512');
+    expect(imgs[1]).toHaveAccessibleName(/2024 年の写真/);
     expect(screen.getByText('輪郭が候補の位置です。')).toBeInTheDocument();
-    expect(screen.getByText('出典：国土地理院')).toBeInTheDocument();
+    expect(screen.getByText('出典：IGN')).toBeInTheDocument();
     expect(document.querySelector('.class-badge')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: '詳細を開く（c-1-2-1）' }));
     expect(actions.openCandidate).toHaveBeenCalledWith('c-1-2-1');
@@ -282,14 +282,14 @@ describe('結果カード: 型ごとの描画', () => {
     render(<ResultCard result={detectionImage} actions={makeActions()} staleRun />);
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByText('出典：国土地理院')).not.toBeInTheDocument();
+    expect(screen.queryByText('出典：IGN')).not.toBeInTheDocument();
   });
 
   it('detection_image: 画像の取得に失敗しても、理由を文字で出す', () => {
     render(<ResultCard result={detectionImage} actions={makeActions()} />);
     const [first] = screen.getAllByRole('img');
     fireEvent.error(first!);
-    expect(screen.getByRole('status')).toHaveTextContent('2018 年の写真を取得できませんでした');
+    expect(screen.getByRole('status')).toHaveTextContent('2014 年の写真を取得できませんでした');
   });
 
   it('accuracy: 値が null の指標は「未測定」', () => {
@@ -374,7 +374,7 @@ describe('結果カード: 想定外の入力', () => {
 /** backend の list_candidates が返す形そのまま（分類は表示名。候補 ID・地区・分類・面積の 4 列） */
 const realTable: TableResult = {
   ...table,
-  title: '2018 年は未検出候補の一覧（全地区・面積の大きい順）',
+  title: '2014 年は未検出候補の一覧（全地区・面積の大きい順）',
   columns: [
     { key: 'id', label: '候補 ID' },
     { key: 'area', label: '地区' },
@@ -382,9 +382,9 @@ const realTable: TableResult = {
     { key: 'area_m2', label: '面積（m²）' },
   ],
   rows: [
-    { id: 'c-226274-105752-9', area: '薄場一丁目', class: '2018 年は未検出', area_m2: 232.4 },
+    { id: 'c-226274-105752-9', area: '薄場一丁目', class: '2014 年は未検出', area_m2: 232.4 },
     { id: 'c-226266-105755-3', area: '本荘五丁目', class: '未判定', area_m2: 180 },
-    { id: 'c-226258-105756-1', area: '本荘五丁目', class: '2018 年も検出', area_m2: 96.5 },
+    { id: 'c-226258-105756-1', area: '本荘五丁目', class: '2014 年も検出', area_m2: 96.5 },
   ],
 };
 
@@ -415,7 +415,7 @@ describe('結果カード: 候補の一覧と、使い方の表', () => {
     const buttons = screen.getAllByRole('button', { name: /詳細を開く（c-/ });
     expect(buttons).toHaveLength(3);
     for (const button of buttons) expect(button).toBeDisabled();
-    expect(screen.queryByText('出典：国土地理院')).not.toBeInTheDocument();
+    expect(screen.queryByText('出典：IGN')).not.toBeInTheDocument();
   });
 
   it('一覧: 「詳細」のボタンが無い表（候補 ID の無い行）は、列をそのまま出す', () => {
@@ -481,7 +481,7 @@ describe('結果カード: 精度（平易な一言）', () => {
   const withRates: AccuracyResult = {
     ...accuracy,
     metrics: [
-      { key: 'holdout_object_f1', label: '物体単位 F1（評価用・2018 年の写真）', value: 0.123, note: '評価用 6 地区' },
+      { key: 'holdout_object_f1', label: '物体単位 F1（評価用・2014 年の写真）', value: 0.123, note: '評価用 6 地区' },
       { key: 'holdout_object_precision', label: '建物の抽出の適合率・物体単位', value: 0.163, note: '評価用 6 地区' },
       { key: 'holdout_object_recall', label: '建物の抽出の再現率・物体単位', value: 0.098, note: '評価用 6 地区' },
       { key: 'new_building_recall', label: '新築の再現率', value: null, note: '未測定（正解になる新築のデータが無いため）' },
@@ -491,7 +491,7 @@ describe('結果カード: 精度（平易な一言）', () => {
   it('適合率と再現率が届いたら、専門の数字の前に、% に直した 1 文を出す。専門の指標は、折りたたみの中', () => {
     render(<ResultCard result={withRates} actions={makeActions()} />);
     const plain = document.querySelector('.accuracy-plain') as HTMLElement;
-    expect(plain).toHaveTextContent('機械が見つけた建物のうち、既存の建物データ（基盤地図情報）と一致したのは約 16 %');
+    expect(plain).toHaveTextContent('機械が見つけた建物のうち、正解の建物データと一致したのは約 16 %');
     expect(plain).toHaveTextContent('機械が見つけられたのは約 10 %');
     expect(plain).toHaveTextContent('結果は目で確かめる前提の「候補」です');
     const details = screen.getByText('くわしい指標（専門の数字）を見る').closest('details') as HTMLElement;
@@ -548,7 +548,7 @@ describe('結果カード: 回答の本文と同じ文は、カードで繰り�
   });
 
   it('検出画像: 写真の説明が本文にすでにあれば、カードには出さない（写真と、写真を押して詳細を開く操作は残す）', () => {
-    render(<ResultCard result={detectionImage} actions={makeActions()} answerText={`候補 c-1-2-1 の写真を、2018 年と 2023 年で並べます。${detectionImage.caption}`} />);
+    render(<ResultCard result={detectionImage} actions={makeActions()} answerText={`候補 c-1-2-1 の写真を、2014 年と 2024 年で並べます。${detectionImage.caption}`} />);
     expect(screen.queryByText(detectionImage.caption)).not.toBeInTheDocument();
     expect(screen.getAllByRole('img')).toHaveLength(2);
     expect(screen.getByRole('button', { name: '詳細を開く（c-1-2-1）' })).toBeInTheDocument();

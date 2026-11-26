@@ -118,7 +118,7 @@ def check_result(r: dict) -> None:
         # 2 地区以上を数えて 1 件以上あれば、地区の順位（area_ranking）が付く。1 区画の一辺（tile_side_m）は、いつも付く
         optional |= {"area_ranking"} if "area_ranking" in r else set()
         assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance", "tile_side_m"} | optional, r
-        assert r["tile_side_m"] == 130, r
+        assert r["tile_side_m"] == 100, r
         if "area_ranking" in r:
             ranking = r["area_ranking"]
             assert set(ranking) == {"areas_searched", "areas_with_candidates", "top"}, r
@@ -158,7 +158,7 @@ def check_result(r: dict) -> None:
         assert set(r) == {"type", "title", "candidate_id", "class", "images", "caption", "provenance"}, r
         assert re.fullmatch(r"c-\d+-\d+-\d+", r["candidate_id"])
         assert r["class"] in ("confirmed_new", "existing_omission", "uncertain")
-        assert [i["year"] for i in r["images"]] == [2018, 2023]
+        assert [i["year"] for i in r["images"]] == [2014, 2024]
         assert all(set(i) == {"year", "url"} and i["url"].startswith("/api/candidates/") for i in r["images"])
         assert isinstance(r["caption"], str) and r["caption"]
     elif t == "accuracy":

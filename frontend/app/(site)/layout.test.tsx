@@ -144,7 +144,7 @@ describe('(site) の枠', () => {
 });
 
 describe('会話の履歴（ログイン中だけ）: サーバーの layout が決めた真偽値を、コンテキストで渡す（仕様 §2.3.6）', () => {
-  const LIST = [{ id: 'c1', title: '2018 年は未検出の候補は何件ありますか？', created_at: '2026-11-25T01:00:00+00:00', updated_at: '2026-11-25T01:05:00+00:00' }];
+  const LIST = [{ id: 'c1', title: '2014 年は未検出の候補は何件ありますか？', created_at: '2026-11-25T01:00:00+00:00', updated_at: '2026-11-25T01:05:00+00:00' }];
   const showChat = async () => render(await SiteLayout({ children: <ChatPanel actions={{ expand: vi.fn() }} /> }));
   const routes = () => {
     clearAccessToken();
@@ -204,7 +204,7 @@ describe('会話の履歴（ログイン中だけ）: サーバーの layout が
     const router = routes();
     await showChat();
     const side = screen.getByRole('complementary');
-    expect(await within(side).findByTitle('2018 年は未検出の候補は何件ありますか？')).toBeInTheDocument();
+    expect(await within(side).findByTitle('2014 年は未検出の候補は何件ありますか？')).toBeInTheDocument();
     expect(within(side).getByRole('heading', { name: '会話の履歴' })).toBeInTheDocument();
     expect(router.to('GET /api/conversations')[0]?.headers.get('authorization')).toMatch(/^Bearer /);
     // 一覧は、「新しい会話」の下・アカウントの上

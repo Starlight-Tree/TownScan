@@ -4,18 +4,16 @@
 
 [English](README.md) | 日本語
 
-熊本市の中心部で、2018 年と 2023 年の空中写真から新築の候補を見つけ、質問に、短い文と 1 つの表示（写真・グラフ・地図）で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、Go の API（[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。
+フランスのパリ南西の近郊で、2014 年と 2024 年の空中写真から新築の候補を見つけ、質問に、短い文と 1 つの表示（写真・グラフ・地図）で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、Go の API（[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。熊本市で始め、フランスに移しました（[ADR 0015](docs/decisions/0015-move-to-france.md)）。
 
-| 地図の上の候補 | 1 件の 2018 年と 2023 年の写真 |
-|---|---|
-| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="地図のタブ。解析した地区の候補と、分類ごとの件数が出る。国土地理院の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="写真の比較。チャットの回答の中に、1 件の候補の 2018 年・2023 年の写真（輪郭つき）と出典が出る" src="docs/images/compare.png"></picture></a> |
+**今の検出の出来は悪いです。** 目で見ると、大きな新しい建物を見落とし、影を建物と判定します。フランスの写真での精度は測っていません。候補の件数は、建築の統計として読めません。
 
 ## 機能
 
 - **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけ・写真 1 件だけの回答の本文は、コードが決めます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
-- **新築候補の 3 分類。** 2023 年の建物の外形のうち 2018 年の建物データに無いものを、2018 年の写真で確かめます: `confirmed_new`・`existing_omission`・`uncertain`。
-- **地図と写真の見比べ。** 候補を地理院タイルの上に描き、1 棟の 2018 年と 2023 年の写真を並べます。
-- **限界を隠さない精度ページ。** 評価用の物体単位 F1 は約 0.16 です。新築の再現率は「未測定」と明示しています。
+- **新築候補の 2 分類。** 2024 年の写真から取り出した建物の外形を、2014 年の写真と比べます。2014 年でも検出した建物は外し、残りを「2014 年は未検出」（`confirmed_new`）と「未判定」（`uncertain`）に分けます。
+- **地図と写真の見比べ。** 候補を IGN の地図と写真の上に描き、1 棟の 2014 年と 2024 年の写真を並べます。
+- **限界を隠さない精度ページ。** いまは「未測定」とだけ出し、数字を作りません。抽出の倍率と閾値は、目で見て選んだ固定の値で、検証していません。
 - **任意の Google ログイン。** ログインしなくても使えます。ログインが要るのは、会話の履歴の保存だけです。
 
 ## 構成
@@ -29,7 +27,7 @@ flowchart LR
     A -.->|"JWKS（任意のログイン）"| W
     A --> DB[("Postgres 17")]
     A -.->|"読み取り専用: 写真タイル"| D[("data/townscan")]
-    B -->|"地図タイル"| G["地理院タイル"]
+    B -->|"地図タイル"| G["IGN の公開タイル配信"]
 ```
 
 質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、カードはツールの結果から作ります。返答の本文は、その結果をもとに Gemini が書きます（件数だけ・写真 1 件だけの回答はコードが決めます）。数字の検査が、結果に無い数字を含む返答を、安全な文に差し替えます。
@@ -40,9 +38,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    P["地理院の写真<br/>2018 / 2023"] --> C["Google Colab（T4）<br/>建物の抽出"]
-    C --> PP["pipeline/<br/>ベクトル化・2018 年の建物データとの差分・3 分類・評価"]
-    K[("基盤地図情報<br/>建物の外形 2018-10 版")] --> PP
+    P["IGN の写真（BD ORTHO）<br/>2014 / 2024"] --> C["Google Colab（T4）<br/>建物の抽出"]
+    C --> PP["pipeline/<br/>ベクトル化・2 時点の比較・2 分類"]
     PP --> O["out/<br/>run.json・candidates.geojson・eval.json"]
     O -->|"python -m pipeline.load"| DB[("Postgres 17")]
 ```
@@ -51,7 +48,7 @@ flowchart LR
 
 | 環境 | 構成 | 備考 |
 |---|---|---|
-| ローカル | `scripts/dev-up.sh`: Docker Compose（db・api・web） | アプリを動かす唯一の環境。写真タイルと建物データは、Git に入れていない `data/` から読みます。 |
+| ローカル | `scripts/dev-up.sh`: Docker Compose（db・api・web） | アプリを動かす唯一の環境。写真タイルと解析結果は、Git に入れていない `data/` から読みます。 |
 | 解析 | Google Colab（T4）と `pipeline/` | 建物の抽出を必要なときに流し、結果は `python -m pipeline.load` で Postgres へ入れます。 |
 | 公開 | なし | 公開していません。公開先（計画の P7）は未決です。 |
 
@@ -64,7 +61,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 ```
 
 - 画面: <http://127.0.0.1:3500>
-- `data/` は Git に入れていない（写真と建物データは再配布しない）ので、クローンしただけでは候補は空です。実行に必要なファイルは [docs/spec-prototype.md](docs/spec-prototype.md) §4.1 にあります。
+- `data/` は Git に入れていない（写真は再配布しない）ので、クローンしただけでは候補は空です。実行に必要なファイルは [docs/spec-prototype.md](docs/spec-prototype.md) §4.1 にあります。
 - 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`。実 Gemini のツール選択の評価は [evals/](evals/README.md) です。
 - Gemini の API キー（`GEMINI_API_KEY`）は必須です（既定の設定では、無いと API が起動しません）。Google ログインは任意です。どちらも Infisical（`dev-up.sh` には `TOWNSCAN_INFISICAL_PROJECT_ID` を設定）か `.env` に置きます（[ADR 0004](docs/decisions/0004-secrets-infisical.md)）。ログインは <http://localhost:3500> で試します（`127.0.0.1` では戻れません）。`BETTER_AUTH_SECRET` は、一度決めたら変えないでください。
 
@@ -76,7 +73,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 |---|---|
 | [docs/plan.md](docs/plan.md) | 計画・段階・出口条件・決定待ち |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | 契約: データのファイル・DB・API・3 分類・評価・画面 |
-| [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005）、会話の履歴・画面・呼び名（0006〜0013） |
+| [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005）、会話の履歴・画面・呼び名（0006〜0013）、新築の再現率（0014）、フランスへの移行（0015） |
 | [frontend/README.md](frontend/README.md) ・ [api/README.md](api/README.md) | 各部分の動かし方・検査・詳細 |
 | [CLAUDE.md](CLAUDE.md) | 開発の規約（AI エージェント向け） |
 
@@ -84,7 +81,13 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 
 ポートフォリオとして公開している個人のプロジェクトです。限界を隠さずに評価する画像認識、返答の数字をツールの結果と照合するチャット、検出を写真で確かめる地図の画面を試すために作りました。秘密は含みません（`.env` は Git の管理外）。
 
-データ: 写真は国土地理院のタイル（出典は画面に表示）、参照の建物は国土地理院の基盤地図情報、モデルは `giswqs/whu-building-unetplusplus-efficientnet-b4`（Apache-2.0。学習データ WHU の利用条件は未確認）です。どれも、このリポジトリでは再配布しません。詳細は [ADR 0001](docs/decisions/0001-data-candidates.md) です。
+データと出典:
+
+- 写真と地図: [IGN](https://cartes.gouv.fr/cgu/)（フランス国土地理院。BD ORTHO 2014・2024 年と Plan IGN）。Licence Ouverte 2.0。出典は画面に表示します。
+- 地区の選び方: [FOTBCD](https://huggingface.co/datasets/abdevd/FOTBCD)（作者: Abdelrrahman Moubane。[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。IGN の BD ORTHO・BD TOPO が元）の検証用データで、新築が多い場所を 12 地区選びました。新築の多い場所に偏った標本です。FOTBCD の画像と建物の枠は、アプリに入れていません。
+- モデル: `giswqs/whu-building-unetplusplus-efficientnet-b4`（Apache-2.0。学習データ WHU の利用条件は未確認）。
+
+どれも、このリポジトリでは再配布しません。詳細は [ADR 0015](docs/decisions/0015-move-to-france.md) です。
 
 ## ライセンス
 

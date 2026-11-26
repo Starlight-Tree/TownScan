@@ -13,18 +13,18 @@ def save(colab, year, x, y, scale, fill=0.1):
 
 def test_scale_key_and_path(tmp_path):
     assert [colabio.scale_key(s) for s in (1.0, 1.5, 2.0)] == ["s100", "s150", "s200"]
-    assert colabio.prob_path(tmp_path, 2018, 1, 2, 1.5).name == "prob_2018_1_2_s150.npy"
+    assert colabio.prob_path(tmp_path, 2014, 1, 2, 1.5).name == "prob_2014_1_2_s150.npy"
 
 
 def test_load_prob_returns_float32_and_checks_shape(tmp_path):
-    save(tmp_path, 2018, 1, 2, 1.5, fill=0.25)
-    a = colabio.load_prob(tmp_path, 2018, 1, 2, 1.5)
+    save(tmp_path, 2014, 1, 2, 1.5, fill=0.25)
+    a = colabio.load_prob(tmp_path, 2014, 1, 2, 1.5)
     assert a.dtype == np.float32 and a.shape == (384, 384) and a[0, 0] == 0.25
-    np.save(colabio.prob_path(tmp_path, 2018, 1, 2, 2.0), np.zeros((256, 256), dtype=np.float16))  # 倍率と大きさが合わない
+    np.save(colabio.prob_path(tmp_path, 2014, 1, 2, 2.0), np.zeros((256, 256), dtype=np.float16))  # 倍率と大きさが合わない
     with pytest.raises(ValueError):
-        colabio.load_prob(tmp_path, 2018, 1, 2, 2.0)
+        colabio.load_prob(tmp_path, 2014, 1, 2, 2.0)
     with pytest.raises(FileNotFoundError):
-        colabio.load_prob(tmp_path, 2023, 1, 2, 1.0)
+        colabio.load_prob(tmp_path, 2024, 1, 2, 1.0)
 
 
 def test_has_all_probs(tmp_path):
@@ -32,7 +32,7 @@ def test_has_all_probs(tmp_path):
         for s in colabio.SCALES:
             save(tmp_path, yr, 5, 6, s)
     assert colabio.has_all_probs(tmp_path, colabio.YEARS, 5, 6, colabio.SCALES)
-    colabio.prob_path(tmp_path, 2023, 5, 6, 1.5).unlink()
+    colabio.prob_path(tmp_path, 2024, 5, 6, 1.5).unlink()
     assert not colabio.has_all_probs(tmp_path, colabio.YEARS, 5, 6, colabio.SCALES)
 
 
@@ -40,7 +40,7 @@ def test_tiles_from_inference_meta_year_records_keep_first_seen_order(tmp_path):
     """推論スクリプトの meta_infer.json は、タイル × 年の記録。タイルの並びは初出順（年で重複しない）。"""
     colab = tmp_path / "colab"
     colab.mkdir()
-    recs = [{"year": yr, "x": x, "y": y, "fetched": True} for (x, y) in [(30, 4), (10, 9), (20, 1)] for yr in (2018, 2023)]
+    recs = [{"year": yr, "x": x, "y": y, "fetched": True} for (x, y) in [(30, 4), (10, 9), (20, 1)] for yr in (2014, 2024)]
     (colab / "meta_infer.json").write_text(json.dumps({"tiles": recs}), encoding="utf-8")
     assert colabio.read_tiles(colab) == [(18, 30, 4), (18, 10, 9), (18, 20, 1)]
 
@@ -64,8 +64,8 @@ def test_tiles_fallback_to_run_tiles_json_then_file_scan(tmp_path):
     run = tmp_path / "run1"
     colab = run / "colab"
     colab.mkdir(parents=True)
-    save(colab, 2018, 7, 1, 1.0)
-    save(colab, 2018, 3, 2, 1.0)
+    save(colab, 2014, 7, 1, 1.0)
+    save(colab, 2014, 3, 2, 1.0)
     # meta も tiles.json も無い → ファイル名から。並びは (y, x) の順
     assert colabio.read_tiles(colab, run) == [(18, 7, 1), (18, 3, 2)]
     (run / "tiles.json").write_text(json.dumps([{"z": 18, "x": 3, "y": 2}, {"z": 18, "x": 7, "y": 1}]), encoding="utf-8")

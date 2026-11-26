@@ -38,7 +38,7 @@ func BenchmarkRender(b *testing.B) {
 	r := benchRenderer(b)
 	for _, size := range []int{256, 512, 1024} {
 		b.Run(itoa(size), func(b *testing.B) {
-			q := request(2018, boxNew, "confirmed_new", size)
+			q := request(2014, boxNew, "confirmed_new", size)
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				if _, err := r.Render(context.Background(), q); err != nil {

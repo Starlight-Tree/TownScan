@@ -65,7 +65,7 @@ const (
 	imageSize = 512
 )
 
-var imageYears = []int{2018, 2023}
+var imageYears = []int{2014, 2024}
 
 // New は、読み取りのルートを持つルーターを返す。
 func New(d Deps) *httpx.Router {
@@ -366,7 +366,7 @@ func (a *api) metrics(w http.ResponseWriter, r *http.Request, _ httpx.Params) {
 		a.fail(w, err)
 		return
 	}
-	prov, err := pyjson.Marshal(store.AccuracyProvenance(*run))
+	prov, err := pyjson.Marshal(store.AccuracyProvenance(*run, obj.Has("holdout")))
 	if err != nil {
 		a.fail(w, err)
 		return

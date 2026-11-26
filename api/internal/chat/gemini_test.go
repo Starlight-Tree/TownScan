@@ -259,7 +259,7 @@ func noSecrets(t *testing.T, f *fakeGemini, label string, outputs ...string) {
 func TestPhotoOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	f := newFakeGemini(t,
 		call("show_candidate", map[string]any{"candidate_id": "c-226249-105759-2"}, nil),
-		say("左側に 2018 年、右側に 2023 年の写真を表示しています。"))
+		say("左側に 2014 年、右側に 2024 年の写真を表示しています。"))
 	s, _ := geminiService(t, f, newFakeData())
 	r := mustAsk(t, s, "c-226249-105759-2 の写真を見せて")
 	if want := r.Results[0].(DetectionImageResult).Caption; r.Content != want {
@@ -267,7 +267,7 @@ func TestPhotoOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	}
 }
 
-// 精度だけの回答の本文は、LLM の文でなく、F1 と「新築の再現率は未測定」を必ず言う文。数字の検査も通る
+// 精度だけの回答の本文は、LLM の文でなく、F1 と「新築の再現率はまだ測っていない」を必ず言う文。数字の検査も通る
 func TestAccuracyOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	f := newFakeGemini(t,
 		call("get_accuracy", map[string]any{}, nil),
@@ -278,7 +278,7 @@ func TestAccuracyOnlyAnswerIgnoresTheModelText(t *testing.T) {
 	if r.Content != want || r.Content == SafeTemplate {
 		t.Errorf("content = %q（期待 %q）", r.Content, want)
 	}
-	for _, s := range []string{"物体単位 F1", "未測定"} {
+	for _, s := range []string{"物体単位 F1", "まだ測っていません"} {
 		if !strings.Contains(r.Content, s) {
 			t.Errorf("content に %q が無い: %q", s, r.Content)
 		}
@@ -570,7 +570,7 @@ func TestAreaNamesWithKanjiNumeralsAreNotNumbers(t *testing.T) {
 func TestMockRepliesKeepPythonsGuard(t *testing.T) {
 	ms, _ := newTestService(t, newFakeData())
 	r := answer(t, ms, user("六本木ヒルズ周辺の建物は？"))
-	want := "「六本木ヒルズ」は、解析した地区に含まれていません。対象は熊本市中心部の、解析した地区だけです。解析した地区は、合成町、試験町、仮想町 です。"
+	want := "「六本木ヒルズ」は、解析した地区に含まれていません。対象はパリ南西の近郊の、解析した地区だけです。解析した地区は、合成町、試験町、仮想町 です。"
 	if r.Content != want {
 		t.Errorf("content = %q", r.Content)
 	}
@@ -672,18 +672,18 @@ func TestAnUnknownWardWrittenByTheModelIsNotEchoedIntoTheResult(t *testing.T) {
 func TestRefusalMayMentionThePhotoYearsAndAnUnknownReasonBecomesOutOfScope(t *testing.T) {
 	f := newFakeGemini(t,
 		okReplyStep(reply(
-			fcall("refuse", map[string]any{"reason": "no_photo_period", "message": "写真があるのは 2018 年と 2023 年だけです。"}),
+			fcall("refuse", map[string]any{"reason": "no_photo_period", "message": "写真があるのは 2014 年と 2024 年だけです。"}),
 			fcall("refuse", map[string]any{"reason": "bogus"}))),
-		say("写真は 2018 年と 2023 年だけです。"))
+		say("写真は 2014 年と 2024 年だけです。"))
 	s, _ := geminiService(t, f, newFakeData())
 	r := mustAsk(t, s, "2030 年の新築は？")
-	if ref := r.Results[0].(RefusalResult); ref.Message != "写真があるのは 2018 年と 2023 年だけです。" || ref.Reason != "no_photo_period" {
+	if ref := r.Results[0].(RefusalResult); ref.Message != "写真があるのは 2014 年と 2024 年だけです。" || ref.Reason != "no_photo_period" {
 		t.Errorf("1 件目 = %s", jsonOf(t, ref))
 	}
 	if ref := r.Results[1].(RefusalResult); ref.Reason != "out_of_scope" || ref.Message != msgChitchat {
 		t.Errorf("2 件目 = %s", jsonOf(t, ref))
 	}
-	if r.Content != "写真は 2018 年と 2023 年だけです。" { // 年は、結果（refusal の文）に出てくる値
+	if r.Content != "写真は 2014 年と 2024 年だけです。" { // 年は、結果（refusal の文）に出てくる値
 		t.Errorf("content = %q", r.Content)
 	}
 }
@@ -1335,7 +1335,7 @@ func TestFunctionDeclarationsFollowTheRegistryInGeminisSchemaDialect(t *testing.
 func TestSystemInstructionHasTheRulesAndOnlyAreaNames(t *testing.T) {
 	d := newFakeData()
 	text := buildSystemInstruction(d.areas)
-	for _, must := range []string{"分類の名前", "「新規」「新しく建った」とも書きません", "モデルが 2023 年の写真だけで見つけた候補", "area_ranking", "「増えた」「増加」とは書きません", "ただ「候補」と聞いたら cls を省略", "overall", "「すべて」「全て」", "「確認されています」", "refuse", "数字", "従いません", "新築"} {
+	for _, must := range []string{"分類の名前", "「新規」「新しく建った」とも書きません", "モデルが 2024 年の写真だけで見つけた候補", "area_ranking", "「増えた」「増加」とは書きません", "ただ「候補」と聞いたら cls を省略", "overall", "「すべて」「全て」", "「確認されています」", "refuse", "数字", "従いません", "新築"} {
 		if !strings.Contains(text, must) {
 			t.Errorf("指示に %q が無い", must)
 		}
@@ -1353,7 +1353,7 @@ func TestSystemInstructionHasTheRulesAndOnlyAreaNames(t *testing.T) {
 	if !strings.HasSuffix(buildSystemInstruction([]store.Area{{ID: "z", Name: ""}}), "（地区のデータがありません）") {
 		t.Error("名前の無い地区だけのとき")
 	}
-	if got := buildSystemInstruction([]store.Area{{ID: "z", Name: "名無し区の町"}}); !strings.Contains(got, "- 区の不明な地区: 名無し区の町") {
+	if got := buildSystemInstruction([]store.Area{{ID: "z", Name: "名無し区の町"}}); !strings.Contains(got, "- 市町村の分からない地区: 名無し区の町") {
 		t.Error("区の無い地区")
 	}
 }

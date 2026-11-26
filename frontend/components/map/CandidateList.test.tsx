@@ -37,7 +37,7 @@ describe('候補の一覧', () => {
     expect(api.getCandidates).toHaveBeenCalledWith({ area_id: 'a', cls: 'uncertain', limit: 30 }, expect.anything());
     const rows = within(screen.getByRole('list')).getAllByRole('button');
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent('2018 年は未検出');
+    expect(rows[0]).toHaveTextContent('2014 年は未検出');
     expect(rows[0]).toHaveTextContent('120 m²');
   });
 

@@ -27,7 +27,8 @@ export interface MapFilter {
 export const ALL_FILTER: MapFilter = { areaId: '', classes: new Set(CLASS_ORDER) };
 
 export function isAllFilter(f: MapFilter): boolean {
-  return f.areaId === '' && !(f.areaIds && f.areaIds.length > 0) && f.classes.size === CLASS_ORDER.length;
+  // 数ではなく中身で見る（画面に出さない分類が混じっても、「すべて」と取り違えない）
+  return f.areaId === '' && !(f.areaIds && f.areaIds.length > 0) && CLASS_ORDER.every((c) => f.classes.has(c));
 }
 
 /** 絞り込みの対象の地区の id。全地区なら null（areaIds があればそれ、なければ areaId） */

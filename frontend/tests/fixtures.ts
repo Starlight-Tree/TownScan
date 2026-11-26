@@ -16,7 +16,7 @@ import type {
 
 export const provenance: Provenance = {
   source: '地理院の年度別写真と基盤地図情報（テスト用の値）',
-  photo_years: [2018, 2023],
+  photo_years: [2014, 2024],
   model: 'テスト用モデル',
   metric: '物体単位 F1',
   run_id: 'run-test',
@@ -26,11 +26,11 @@ export const provenance: Provenance = {
 
 export const count: CountResult = {
   type: 'count',
-  title: '12 地区の2018 年は未検出',
+  title: '12 地区の2014 年は未検出',
   total: 33,
   breakdown: [
-    { key: 'confirmed_new', label: '2018 年は未検出', value: 33 },
-    { key: 'existing_omission', label: '2018 年も検出', value: 51 },
+    { key: 'confirmed_new', label: '2014 年は未検出', value: 33 },
+    { key: 'existing_omission', label: '2014 年も検出', value: 51 },
     { key: 'uncertain', label: '未判定', value: 18 },
   ],
   overall: { total: 102, uncertain: 18 },
@@ -41,7 +41,7 @@ export const count: CountResult = {
 /** 複数の地区（区）にまたがる件数。backend の _filter_info は、地区が 2 つ以上なら area_id でなく area_ids と scope（表示用の名前）を返す */
 export const countWards: CountResult = {
   ...count,
-  title: '中央区の2018 年は未検出',
+  title: '中央区の2014 年は未検出',
   total: 14,
   overall: undefined, // 分類を絞らない件数には、全体の件数は付かない
   filter: { area_ids: ['z18-1-2', 'z18-2-2'], cls: null, scope: '中央区' },
@@ -68,15 +68,15 @@ export const compare: CompareResult = {
   type: 'compare',
   title: '地区ごとの候補数',
   items: [
-    { area_id: 'z18-1-2', name: 'テスト地区 01', counts: { confirmed_new: 5, existing_omission: 3, uncertain: 1, total: 9 } },
-    { area_id: 'z18-2-2', name: 'テスト地区 02', counts: { confirmed_new: 2, existing_omission: 6, uncertain: 2, total: 10 } },
+    { area_id: 'z18-1-2', name: 'テスト地区 01', counts: { confirmed_new: 5, existing_omission: 0, uncertain: 1, total: 6 } },
+    { area_id: 'z18-2-2', name: 'テスト地区 02', counts: { confirmed_new: 2, existing_omission: 0, uncertain: 2, total: 4 } },
   ],
   provenance,
 };
 
 export const mapFocus: MapFocusResult = {
   type: 'map_focus',
-  title: '2018 年は未検出の候補を地図に表示',
+  title: '2014 年は未検出の候補を地図に表示',
   bbox: [130.7, 32.8, 130.71, 32.81],
   candidate_ids: ['c-1-2-1', 'c-1-2-2', 'c-1-2-3'],
   provenance,
@@ -88,8 +88,8 @@ export const detectionImage: DetectionImageResult = {
   candidate_id: 'c-1-2-1',
   class: 'confirmed_new',
   images: [
-    { year: 2018, url: '/api/candidates/c-1-2-1/image?year=2018&size=512' },
-    { year: 2023, url: '/api/candidates/c-1-2-1/image?year=2023&size=512' },
+    { year: 2014, url: '/api/candidates/c-1-2-1/image?year=2014&size=512' },
+    { year: 2024, url: '/api/candidates/c-1-2-1/image?year=2024&size=512' },
   ],
   caption: '輪郭が候補の位置です。',
   provenance,
@@ -109,7 +109,7 @@ export const refusal: RefusalResult = {
   type: 'refusal',
   reason: 'out_of_scope',
   message: '熊本市中心部以外の質問には、お答えできません。',
-  suggestions: ['2018 年は未検出の候補は何件ありますか？', 'このアプリの精度は？'],
+  suggestions: ['2014 年は未検出の候補は何件ありますか？', 'このアプリの精度は？'],
 };
 
 export const ALL_RESULTS: ToolResult[] = [count, table, compare, mapFocus, detectionImage, accuracy, refusal];
@@ -121,7 +121,7 @@ export const areas: AreaSummary[] = [
     ward: '中央区',
     bbox: [130.7, 32.8, 130.701, 32.801],
     centroid: [130.7005, 32.8005],
-    counts: { confirmed_new: 5, existing_omission: 3, uncertain: 1, total: 9 },
+    counts: { confirmed_new: 5, existing_omission: 0, uncertain: 1, total: 6 },
   },
 ];
 
@@ -140,18 +140,18 @@ export const detail: CandidateDetail = {
   area_m2: 123.4,
   bbox: [130.7, 32.8, 130.7001, 32.8001],
   centroid: [130.70005, 32.80005],
-  reason: 'new_absent_2018',
-  evidence: { prob_2023_mean: 0.912, ov_2018: 0.031, prob_2018_p90: 0.08, ov_kiban: 0.02, edge_touch: false },
-  explanation_key: 'new_absent_2018',
+  reason: 'new_absent_2014',
+  evidence: { prob_2024_mean: 0.912, ov_2014: 0.031, prob_2014_p90: 0.08, ov_kiban: 0.02, edge_touch: false },
+  explanation_key: 'new_absent_2014',
   images: [
-    { year: 2018, url: '/api/candidates/c-1-2-1/image?year=2018&size=512' },
-    { year: 2023, url: '/api/candidates/c-1-2-1/image?year=2023&size=512' },
+    { year: 2014, url: '/api/candidates/c-1-2-1/image?year=2014&size=512' },
+    { year: 2024, url: '/api/candidates/c-1-2-1/image?year=2024&size=512' },
   ],
   provenance,
 };
 
 export const metrics: MetricsResponse = {
-  reference: '基盤地図情報 2018 年 10 月版',
+  reference: '基盤地図情報 2014 年 10 月版',
   split: { tune: ['z18-1-2'], holdout: ['z18-2-2'] },
   sweep: [
     { scale: 1, threshold: 0.5, tune_object_f1: 0.5 },
@@ -168,12 +168,12 @@ export const metrics: MetricsResponse = {
 };
 
 /**
- * 実データ（熊本 12 地区・2018-10 版の参照・2018 年の写真で選んだ設定）の eval.json の形と数字。
- * pipeline が足した任意項目（year_compare・existing_absent_in_2018・excluded_edge_by_split・excluded_edge_detail・protocol）を含む。
+ * 測定済みの eval.json の形と数字（以前の実データの形を写し、写真の年を置き換えたテスト用の値。フランスの実測ではない）。
+ * pipeline が足した任意項目（year_compare・existing_absent_in_2014・excluded_edge_by_split・excluded_edge_detail・protocol）を含む。
  * 値は eval.json（data/townscan/run1/out）から写した（notes と provenance だけテスト用）。
  */
 export const metricsReal: MetricsResponse = {
-  "reference": "基盤地図情報 BldA 2018-10 版（2018 年の写真と比べる）",
+  "reference": "テスト用の参照の建物データ（2014 年の写真と比べる）",
   "split": {
     "tune": [
       "z18-226274-105752",
@@ -193,7 +193,7 @@ export const metricsReal: MetricsResponse = {
     ]
   },
   "protocol": {
-    "year": 2018,
+    "year": 2014,
     "iou_match": 0.5,
     "matching": "greedy one-to-one by IoU",
     "min_blob_m2": 4.0,
@@ -211,7 +211,7 @@ export const metricsReal: MetricsResponse = {
       0.7
     ],
     "edge_overlap_min": 0.5,
-    "compare_year": 2023
+    "compare_year": 2024
   },
   "sweep": [
     {
@@ -622,7 +622,7 @@ export const metricsReal: MetricsResponse = {
       }
     }
   },
-  "existing_absent_in_2018": {
+  "existing_absent_in_2014": {
     "setting": {
       "scale": 2.0,
       "threshold": 0.4
@@ -630,8 +630,8 @@ export const metricsReal: MetricsResponse = {
     "params": {
       "kiban_ov_max": 0.25,
       "min_area_m2": 20.0,
-      "omission_ov_2018_min": 0.5,
-      "new_ov_2018_max": 0.1,
+      "omission_ov_2014_min": 0.5,
+      "new_ov_2014_max": 0.1,
       "new_p90_max": 0.2
     },
     "overall": {
@@ -658,14 +658,14 @@ export const metricsReal: MetricsResponse = {
   },
   "new_building_recall": null,
   "year_compare": {
-    "selected_on_year": 2018,
-    "compare_year": 2023,
+    "selected_on_year": 2014,
+    "compare_year": 2024,
     "setting": {
       "scale": 2.0,
       "threshold": 0.4
     },
     "by_year": {
-      "2018": {
+      "2014": {
         "tune": {
           "pixel": {
             "iou": 0.3301,
@@ -730,7 +730,7 @@ export const metricsReal: MetricsResponse = {
           }
         }
       },
-      "2023": {
+      "2024": {
         "tune": {
           "pixel": {
             "iou": 0.2815,

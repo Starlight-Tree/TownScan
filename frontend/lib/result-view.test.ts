@@ -34,10 +34,13 @@ describe('filterFromResults', () => {
     expect(f && isAllFilter(f)).toBe(true);
     expect(isAllFilter(ALL_FILTER)).toBe(true);
   });
+  it('画面に出さない分類が混じって数が同じでも、表示する分類が欠けていれば「すべて」にしない', () => {
+    expect(isAllFilter({ areaId: '', classes: new Set(['uncertain', 'existing_omission']) })).toBe(false);
+  });
 });
 
 describe('filterFromResults: 地区（1 つ・複数・全地区）と分類', () => {
-  const ALL_CLASSES = ['confirmed_new', 'existing_omission', 'uncertain'];
+  const ALL_CLASSES = ['confirmed_new', 'uncertain'];
   const classesOf = (f: MapFilter | null) => [...(f?.classes ?? [])].sort();
 
   it('複数の地区（area_ids）は、areaIds と scope を持つ。areaId は空（「すべて」に見せない）', () => {

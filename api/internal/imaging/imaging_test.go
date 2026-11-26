@@ -45,7 +45,7 @@ func render(t testing.TB, r *Renderer, q Request) *image.RGBA {
 func TestRenderIsAnRGBPNGOfTheRequestedSquareSize(t *testing.T) {
 	r, _ := a1(t)
 	for _, size := range []int{MinSize, 100, 128, DefaultSize, MaxSize} {
-		data, err := r.Render(context.Background(), request(2018, boxNew, "confirmed_new", size))
+		data, err := r.Render(context.Background(), request(2014, boxNew, "confirmed_new", size))
 		if err != nil {
 			t.Fatalf("size=%d: %v", size, err)
 		}
@@ -76,7 +76,7 @@ func TestEachYearShowsItsOwnPhoto(t *testing.T) {
 
 func TestCropIsCenteredOnTheCandidateAndNorthUp(t *testing.T) {
 	r, _ := a1(t)
-	img := render(t, r, request(2018, boxNew, "confirmed_new", 512))
+	img := render(t, r, request(2014, boxNew, "confirmed_new", 512))
 	// 箱 (100,100,140,130) の中心は、タイルの画素 (120, 115)。真ん中の画素が、そこ（R=列・G=行）になる
 	c := pixel(img, 256, 256)
 	if absDiff(int(c.R), 120) > 3 || absDiff(int(c.G), 115) > 3 {
@@ -96,7 +96,7 @@ func TestCropIsCenteredOnTheCandidateAndNorthUp(t *testing.T) {
 
 func TestCropSlidesInsideTheTileAtTheEdgeWithoutFillingOutside(t *testing.T) {
 	r, _ := a1(t)
-	img := render(t, r, request(2018, boxEdge, "uncertain", 512))
+	img := render(t, r, request(2014, boxEdge, "uncertain", 512))
 	rLeft, rRight := int(pixel(img, 16, 100).R), int(pixel(img, 496, 100).R)
 	gTop, gBottom := int(pixel(img, 100, 16).G), int(pixel(img, 100, 496).G)
 	if rLeft < 128 || rLeft > 148 || gTop < 128 || gTop > 148 {
@@ -105,9 +105,9 @@ func TestCropSlidesInsideTheTileAtTheEdgeWithoutFillingOutside(t *testing.T) {
 	if rRight < 240 || gBottom < 240 {
 		t.Errorf("右・下の端 R=%d G=%d, 期待 240 以上（タイルの縁まで）", rRight, gBottom)
 	}
-	// 外側を埋めた画素（黒・透明など）が無い: 輪郭・縁取り以外の画素は、すべて 2018 年の写真（B=50）
+	// 外側を埋めた画素（黒・透明など）が無い: 輪郭・縁取り以外の画素は、すべて 2014 年の写真（B=50）
 	for c, n := range countColors(img) {
-		if c != casing && c != outlineByType["uncertain"] && absDiff(int(c.B), blue2018) > 3 {
+		if c != casing && c != outlineByType["uncertain"] && absDiff(int(c.B), blue2014) > 3 {
 			t.Errorf("写真でも輪郭でもない色 %v が %d 画素ある", c, n)
 		}
 		if c.A != 255 {
@@ -124,7 +124,7 @@ func TestOutlineUsesTheClassColorAndNoOtherClassColor(t *testing.T) {
 		box   rect
 		class string
 	}{{boxNew, "confirmed_new"}, {boxOmission, "existing_omission"}, {boxEdge, "uncertain"}} {
-		counts := countColors(render(t, r, request(2018, c.box, c.class, 512)))
+		counts := countColors(render(t, r, request(2014, c.box, c.class, 512)))
 		if counts[outlineByType[c.class]] <= 100 {
 			t.Errorf("%s: 輪郭の色が %d 画素しかない", c.class, counts[outlineByType[c.class]])
 		}
@@ -173,9 +173,9 @@ func dutyCycle(t testing.TB, img *image.RGBA, c color.RGBA) float64 {
 
 func TestLineStylesDifferSolidDashedDotted(t *testing.T) {
 	r, _ := a1(t)
-	solid := dutyCycle(t, render(t, r, request(2018, boxNew, "confirmed_new", 512)), outlineByType["confirmed_new"])
-	dashed := dutyCycle(t, render(t, r, request(2018, boxOmission, "existing_omission", 512)), outlineByType["existing_omission"])
-	dotted := dutyCycle(t, render(t, r, request(2018, boxEdge, "uncertain", 512)), outlineByType["uncertain"])
+	solid := dutyCycle(t, render(t, r, request(2014, boxNew, "confirmed_new", 512)), outlineByType["confirmed_new"])
+	dashed := dutyCycle(t, render(t, r, request(2014, boxOmission, "existing_omission", 512)), outlineByType["existing_omission"])
+	dotted := dutyCycle(t, render(t, r, request(2014, boxEdge, "uncertain", 512)), outlineByType["uncertain"])
 	if solid < 0.95 || dashed < 0.45 || dashed > 0.85 || dotted < 0.15 || dotted > 0.50 || !(solid > dashed && dashed > dotted) {
 		t.Errorf("実線 %.2f（0.95 以上）> 破線 %.2f（0.45〜0.85）> 点線 %.2f（0.15〜0.50）にならない", solid, dashed, dotted)
 	}
@@ -183,7 +183,7 @@ func TestLineStylesDifferSolidDashedDotted(t *testing.T) {
 
 func TestUnknownClassLooksLikeUncertain(t *testing.T) {
 	r, _ := a1(t)
-	counts := countColors(render(t, r, request(2018, boxNew, "something_else", 256)))
+	counts := countColors(render(t, r, request(2014, boxNew, "something_else", 256)))
 	if counts[outlineByType["uncertain"]] == 0 {
 		t.Error("知らない分類は uncertain の色になるはず")
 	}
@@ -197,7 +197,7 @@ func TestNoOutlineWhenTheRingHasLessThanTwoPoints(t *testing.T) {
 		"外周が空":           `{"type":"Polygon","coordinates":[[]]}`,
 		"形が未設定":          ``,
 	} {
-		q := request(2018, boxNew, "confirmed_new", 128)
+		q := request(2014, boxNew, "confirmed_new", 128)
 		q.Geometry = []byte(geom)
 		counts := countColors(render(t, r, q))
 		if counts[casing] != 0 || counts[outlineByType["confirmed_new"]] != 0 {
@@ -209,15 +209,15 @@ func TestNoOutlineWhenTheRingHasLessThanTwoPoints(t *testing.T) {
 // 写真の拡大が、一様な写真を一様のまま保ち（暗い縁・はみ出しが無い）、傾きのある写真の位置を正しく保つ
 func TestScalingKeepsAFlatPhotoFlatAndAGradientAccurate(t *testing.T) {
 	r, _ := a1(t)
-	q := request(2023, boxNew, "confirmed_new", 1024)
+	q := request(2024, boxNew, "confirmed_new", 1024)
 	q.Geometry = nil // 輪郭なしの写真だけ
 	img := render(t, r, q)
 	box, _ := cropBox(q.BBox, tileX0, tileY0, 256, MarginM)
 	for y := 0; y < 1024; y += 7 {
 		for x := 0; x < 1024; x += 7 {
 			p := pixel(img, x, y)
-			if p.B != blue2023 {
-				t.Fatalf("(%d,%d): B=%d, 期待 %d（一様な写真が一様でない）", x, y, p.B, blue2023)
+			if p.B != blue2024 {
+				t.Fatalf("(%d,%d): B=%d, 期待 %d（一様な写真が一様でない）", x, y, p.B, blue2024)
 			}
 			// 画素 (x,y) の中心が、タイルの (box.Min.X + (x+0.5)*dx/1024, …) に当たる。R=列（画素の左端の値）なので、中心は +0.5
 			wantR := float64(box.Min.X) + (float64(x)+0.5)*float64(box.Dx())/1024 - 0.5
@@ -235,7 +235,7 @@ func TestScalingKeepsAFlatPhotoFlatAndAGradientAccurate(t *testing.T) {
 // 同じ入力なら、同じ PNG（キャッシュ・差分の検査に使える）。同時に使っても同じ
 func TestRenderIsDeterministicAndSafeToUseConcurrently(t *testing.T) {
 	r, _ := a1(t)
-	q := request(2018, boxNew, "confirmed_new", 300)
+	q := request(2014, boxNew, "confirmed_new", 300)
 	want, err := r.Render(context.Background(), q)
 	if err != nil {
 		t.Fatal(err)
@@ -267,11 +267,11 @@ func TestRenderWaitsForASlotAndHonorsCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := r.Render(ctx, request(2018, boxNew, "confirmed_new", 128)); !errors.Is(err, context.Canceled) {
+	if _, err := r.Render(ctx, request(2014, boxNew, "confirmed_new", 128)); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, context.Canceled を期待", err)
 	}
 	<-r.sem // 1 つ空ける
-	if _, err := r.Render(context.Background(), request(2018, boxNew, "confirmed_new", 128)); err != nil {
+	if _, err := r.Render(context.Background(), request(2014, boxNew, "confirmed_new", 128)); err != nil {
 		t.Fatalf("空きができたら作れるはず: %v", err)
 	}
 	if len(r.sem) != cap(r.sem)-1 {
@@ -297,7 +297,7 @@ func TestRenderRejectsBadInput(t *testing.T) {
 		"経度が桁外れ（有限だが画素にして範囲外）": func(q *Request) { q.Geometry = []byte(`{"coordinates":[[[1e12,32.8],[130.8,32.8]]]}`) },
 	}
 	for name, mutate := range cases {
-		q := request(2018, boxNew, "confirmed_new", 128)
+		q := request(2014, boxNew, "confirmed_new", 128)
 		mutate(&q)
 		_, err := r.Render(context.Background(), q)
 		if !errors.Is(err, ErrInvalid) {
@@ -335,10 +335,10 @@ func tileErrReason(err error) (string, bool) {
 
 func TestTileErrors(t *testing.T) {
 	type setup func(t *testing.T, dir, outside string, r *Renderer)
-	// 2018 年の写真に仕込む故障
+	// 2014 年の写真に仕込む故障
 	fault := func(f func(t *testing.T, path, outside string)) setup {
 		return func(t *testing.T, dir, outside string, r *Renderer) {
-			path := tilePath(dir, 2018, tileX0, tileY0)
+			path := tilePath(dir, 2014, tileX0, tileY0)
 			if err := os.Remove(path); err != nil {
 				t.Fatal(err)
 			}
@@ -353,7 +353,7 @@ func TestTileErrors(t *testing.T) {
 	}{
 		{"年が許可リストに無い（2017）", func(q *Request) { q.Year = 2017 }, nil, reasonYear},
 		{"年が許可リストに無い（0）", func(q *Request) { q.Year = 0 }, nil, reasonYear},
-		{"年が許可リストに無い（負）", func(q *Request) { q.Year = -2018 }, nil, reasonYear},
+		{"年が許可リストに無い（負）", func(q *Request) { q.Year = -2014 }, nil, reasonYear},
 		{"タイル番号が負", func(q *Request) { q.TileX = -1 }, nil, reasonTileNumber},
 		{"タイル番号が 2^18 以上", func(q *Request) { q.TileY = 1 << 18 }, nil, reasonTileNumber},
 		{"ファイルが無い（別のタイル）", func(q *Request) { q.TileX++ }, nil, reasonMissing},
@@ -381,12 +381,12 @@ func TestTileErrors(t *testing.T) {
 			}
 		}), reasonOutside},
 		{"外のディレクトリ全体へのリンク（年のディレクトリ）", nil, func(t *testing.T, dir, outside string, r *Renderer) {
-			if err := os.RemoveAll(filepath.Join(dir, "2018")); err != nil {
+			if err := os.RemoveAll(filepath.Join(dir, "2014")); err != nil {
 				t.Fatal(err)
 			}
 			evil := filepath.Dir(outside)
 			writeFile(t, filepath.Join(evil, fmt.Sprintf("%d_%d.png", tileX0, tileY0)), encodePNG(t, gradientTile(256, 99)))
-			if err := os.Symlink(evil, filepath.Join(dir, "2018")); err != nil {
+			if err := os.Symlink(evil, filepath.Join(dir, "2014")); err != nil {
 				t.Fatal(err)
 			}
 		}, reasonOutside},
@@ -420,7 +420,7 @@ func TestTileErrors(t *testing.T) {
 			if c.setup != nil {
 				c.setup(t, dir, outside, r)
 			}
-			q := request(2018, boxNew, "confirmed_new", 128)
+			q := request(2014, boxNew, "confirmed_new", 128)
 			if c.req != nil {
 				c.req(&q)
 			}
@@ -447,14 +447,14 @@ func TestSymlinksInsideTilesDirAreAllowed(t *testing.T) {
 	// 写真を別の名前で置き、リンクで指す（TILES_DIR の中）。内側のリンクは読める
 	real := filepath.Join(dir, "stash", "real.png")
 	writeFile(t, real, encodePNG(t, gradientTile(256, 77)))
-	path := tilePath(dir, 2018, tileX0, tileY0)
+	path := tilePath(dir, 2014, tileX0, tileY0)
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join("..", "stash", "real.png"), path); err != nil {
 		t.Fatal(err)
 	}
-	img := render(t, r, request(2018, boxNew, "confirmed_new", 128))
+	img := render(t, r, request(2014, boxNew, "confirmed_new", 128))
 	if got := pixel(img, 2, 2).B; got != 77 {
 		t.Errorf("B = %d, 内側のリンク先の写真（77）を期待", got)
 	}
@@ -466,8 +466,8 @@ func TestTilesDirItselfMayBeASymlink(t *testing.T) {
 	if err := os.Symlink(dir, link); err != nil {
 		t.Fatal(err)
 	}
-	img := render(t, NewRenderer(link), request(2023, boxNew, "confirmed_new", 128))
-	if got := pixel(img, 2, 2).B; absDiff(int(got), blue2023) > 3 {
+	img := render(t, NewRenderer(link), request(2024, boxNew, "confirmed_new", 128))
+	if got := pixel(img, 2, 2).B; absDiff(int(got), blue2024) > 3 {
 		t.Errorf("B = %d", got)
 	}
 	// 相対パスの TILES_DIR も読める
@@ -476,20 +476,20 @@ func TestTilesDirItselfMayBeASymlink(t *testing.T) {
 	if err != nil {
 		t.Skip("相対パスにできない")
 	}
-	render(t, NewRenderer(rel), request(2023, boxNew, "confirmed_new", 128))
+	render(t, NewRenderer(rel), request(2024, boxNew, "confirmed_new", 128))
 }
 
 // JPEG の写真も、中身で判別して読む（拡張子は .png のまま）。一辺 512 の写真なら、切り出しも 2 倍の画素で行う
 func TestRenderReadsJPEGAndLargerTiles(t *testing.T) {
 	r, dir := a1(t)
-	path := tilePath(dir, 2018, tileX0, tileY0)
+	path := tilePath(dir, 2014, tileX0, tileY0)
 	writeFile(t, path, jpegBytes(t, gradientTile(256, 50)))
-	img := render(t, r, request(2018, boxNew, "confirmed_new", 256))
+	img := render(t, r, request(2014, boxNew, "confirmed_new", 256))
 	if c := pixel(img, 128, 128); absDiff(int(c.R), 120) > 4 || absDiff(int(c.G), 115) > 4 {
 		t.Errorf("JPEG: 真ん中の画素 R=%d G=%d, 期待 (120, 115)", c.R, c.G)
 	}
 	writeFile(t, path, encodePNG(t, gradientTile(512, 50)))
-	img = render(t, r, request(2018, boxNew, "confirmed_new", 256))
+	img = render(t, r, request(2014, boxNew, "confirmed_new", 256))
 	if c := pixel(img, 128, 128); absDiff(int(c.R), 120) > 3 || absDiff(int(c.G), 115) > 3 {
 		t.Errorf("512 画素の写真: 真ん中の画素 R=%d G=%d, 期待 (120, 115)", c.R, c.G)
 	}
@@ -502,8 +502,8 @@ func TestRenderIgnoresTheAlphaChannelOfThePhoto(t *testing.T) {
 	for i := 0; i < len(tile.Pix); i += 4 {
 		tile.Pix[i], tile.Pix[i+1], tile.Pix[i+2], tile.Pix[i+3] = 200, 100, 50, 64 // 透明度 25%
 	}
-	writeFile(t, tilePath(dir, 2018, tileX0, tileY0), encodePNG(t, tile))
-	q := request(2018, boxNew, "confirmed_new", 128)
+	writeFile(t, tilePath(dir, 2014, tileX0, tileY0), encodePNG(t, tile))
+	q := request(2014, boxNew, "confirmed_new", 128)
 	q.Geometry = nil
 	if c := pixel(render(t, r, q), 3, 3); c != (color.RGBA{200, 100, 50, 255}) {
 		t.Errorf("画素 = %v, 期待 (200,100,50,255)", c)

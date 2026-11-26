@@ -16,20 +16,21 @@ afterEach(() => {
 });
 
 describe('/accuracy', () => {
-  it('「このアプリについて」の中身だった限界と出典・規約は、この画面にある（写真が無い期間・未実装・地理院タイル・基盤地図情報・モデルの規約）', async () => {
+  it('「このアプリについて」の中身だった限界と出典・規約は、この画面にある（写真が無い期間・未実装・IGN の写真・地区の選び方・モデルの規約）', async () => {
     fetchMock.mockResolvedValue(jsonResponse(metrics));
     render(<AccuracyView />);
     const limits = await screen.findByRole('region', { name: '既知の限界' });
     expect(limits).toHaveTextContent('写真が無い期間');
-    expect(limits).toHaveTextContent('2024 年以降に建った建物は、写真が無いので確かめられません');
+    expect(limits).toHaveTextContent('2024 年の撮影より後に建った建物は、写真が無いので確かめられません');
     expect(limits).toHaveTextContent('未実装のもの');
     expect(limits).toHaveTextContent('Google Earth Engine');
     const sources = screen.getByRole('region', { name: '出典と規約' });
-    expect(sources).toHaveTextContent('地理院タイル');
-    expect(sources).toHaveTextContent('基盤地図情報');
+    expect(sources).toHaveTextContent('IGN（フランス国土地理院）の公開タイル配信');
+    expect(sources).toHaveTextContent('Licence Ouverte 2.0');
+    expect(sources).toHaveTextContent('FOTBCD（作者: Abdelrrahman Moubane。CC BY 4.0');
     expect(sources).toHaveTextContent('giswqs/whu-building-unetplusplus-efficientnet-b4');
     expect(sources).toHaveTextContent('Apache-2.0');
-    expect(sources).toHaveTextContent('機械学習などに大量に使うことの扱いは未確認');
+    expect(sources).toHaveTextContent('機械学習に使うことは、利用規約に記載がありません');
   });
 
 
@@ -40,7 +41,7 @@ describe('/accuracy', () => {
     const sources = screen.getByRole('region', { name: '出典と規約' });
     const more = screen.getByTestId('accuracy-more') as HTMLDetailsElement;
     const recall = screen.getByText('新築の再現率');
-    const thresholds = screen.getByRole('heading', { name: '3 分類の閾値は、未検証の初期値です' });
+    const thresholds = screen.getByRole('heading', { name: '分類の閾値は、未検証の初期値です' });
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(recall, thresholds)).toBe(true);
     expect(follows(thresholds, limits)).toBe(true);
@@ -72,7 +73,7 @@ describe('/accuracy', () => {
     // 選んだ設定の行を目立たせる
     expect(screen.getByRole('row', { name: /選択/ })).toHaveAttribute('aria-current', 'true');
     // 12 地区・限定つきの数字と明記
-    expect(screen.getByText(/12 地区・初期値の閾値/)).toBeInTheDocument();
+    expect(screen.getByText(/限られた地区・初期値の閾値/)).toBeInTheDocument();
   });
 
   it('new_building_recall に数があれば、その数を出す（未測定とは書かない）', async () => {
@@ -106,8 +107,27 @@ describe('/accuracy', () => {
     expect(await screen.findByText('新築の再現率')).toBeInTheDocument();
   });
 
+  it('まだ測っていない解析結果（holdout が無い）は、数字を作らず「未測定」だけを出す。測った場合の項目は出さない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ reference: null, new_building_recall: null }));
+    render(<AccuracyView />);
+    expect(await screen.findByTestId('unmeasured')).toHaveTextContent('まだ測っていません');
+    expect(screen.getAllByText('未測定')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: '分類の閾値は、未検証の初期値です' })).toBeInTheDocument();
+    expect(screen.getByText('正解が無い')).toBeInTheDocument();
+    for (const id of ['limit-absent', 'limit-reference', 'limit-haze', 'reference-note']) expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('固定の値で作った解析結果は、倍率と閾値を「調整用の地区で選んだ」と言わない', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ reference: null, new_building_recall: null, chosen: { scale: 1, threshold: 0.4, selected_by: 'fixed' } }));
+    render(<AccuracyView />);
+    await screen.findByTestId('unmeasured');
+    expect(document.body).toHaveTextContent('固定の値。写真に重ねた図を目で見て選んだもので、検証していません');
+    expect(document.body).not.toHaveTextContent('調整用の地区の物体単位 F1 がいちばん高かった組');
+  });
+
   it('細部の形が違っても（指標が少ない・無い）落ちない', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ new_building_recall: null }));
+    fetchMock.mockResolvedValue(jsonResponse({ holdout: {}, new_building_recall: null }));
     render(<AccuracyView />);
     expect(await screen.findByText('新築の再現率')).toBeInTheDocument();
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
@@ -122,30 +142,30 @@ describe('/accuracy', () => {
     }
     const bodyText = () => document.body.textContent ?? '';
 
-    it('見出しの数字は「2018 年の写真での値」と明記し、2023 年の写真での値を並べる', async () => {
+    it('見出しの数字は「2014 年の写真での値」と明記し、2024 年の写真での値を並べる', async () => {
       await renderReal();
-      expect(screen.getByTestId('eval-year-note')).toHaveTextContent('2018 年の写真から建物を抽出して測った値');
-      expect(screen.getByTestId('eval-year-note')).toHaveTextContent('2023 年の写真での値も並べています');
+      expect(screen.getByTestId('eval-year-note')).toHaveTextContent('2014 年の写真から建物を抽出して測った値');
+      expect(screen.getByTestId('eval-year-note')).toHaveTextContent('2024 年の写真での値も並べています');
       const tiles = screen.getAllByRole('listitem').filter((li) => li.classList.contains('metric-tile'));
       expect(tiles).toHaveLength(3);
-      // F1: 2018 年 0.16・2023 年 0.1（評価用）
-      expect(within(tiles[0]!).getByText('2018 年の写真での値')).toBeInTheDocument();
-      expect(tiles[0]).toHaveTextContent('2023 年の写真での値: 0.1');
+      // F1: 2014 年 0.16・2024 年 0.1（評価用）
+      expect(within(tiles[0]!).getByText('2014 年の写真での値')).toBeInTheDocument();
+      expect(tiles[0]).toHaveTextContent('2024 年の写真での値: 0.1');
       expect(within(tiles[0]!).getByText('0.16')).toBeInTheDocument();
-      // 画素 IoU: 2018 年 0.412・2023 年 0.295
-      expect(within(tiles[1]!).getByText('2018 年の写真での値')).toBeInTheDocument();
-      expect(tiles[1]).toHaveTextContent('2023 年の写真での値: 0.295');
+      // 画素 IoU: 2014 年 0.412・2024 年 0.295
+      expect(within(tiles[1]!).getByText('2014 年の写真での値')).toBeInTheDocument();
+      expect(tiles[1]).toHaveTextContent('2024 年の写真での値: 0.295');
       // 新築の再現率は年を持たない（未測定）
       expect(within(tiles[2]!).queryByText(/年の写真での値/)).not.toBeInTheDocument();
     });
 
-    it('year_compare が無い・壊れていても、2018 年の明記は出し、2023 年の値は出さず、落ちない', async () => {
-      for (const bad of [undefined, null, 'x', {}, { compare_year: 2023 }, { compare_year: 2023, by_year: {} }, { compare_year: 2023, by_year: { '2023': 5 } }, { compare_year: 2018, by_year: { '2018': { holdout: {} } } }]) {
+    it('year_compare が無い・壊れていても、2014 年の明記は出し、2024 年の値は出さず、落ちない', async () => {
+      for (const bad of [undefined, null, 'x', {}, { compare_year: 2024 }, { compare_year: 2024, by_year: {} }, { compare_year: 2024, by_year: { '2024': 5 } }, { compare_year: 2014, by_year: { '2014': { holdout: {} } } }]) {
         const { year_compare: _drop, ...rest } = metricsReal;
         void _drop;
         const { unmount } = await renderReal(bad === undefined ? rest : { ...rest, year_compare: bad });
-        expect(screen.getAllByText('2018 年の写真での値')).toHaveLength(2);
-        expect(bodyText()).not.toMatch(/2023 年の写真での値/);
+        expect(screen.getAllByText('2014 年の写真での値')).toHaveLength(2);
+        expect(bodyText()).not.toMatch(/2024 年の写真での値/);
         expect(screen.queryByRole('heading', { name: /写真の年で比べる/ })).not.toBeInTheDocument();
         unmount();
       }
@@ -153,10 +173,10 @@ describe('/accuracy', () => {
 
     it('year_compare があれば、同じ設定の 2 つの年を表で並べる', async () => {
       await renderReal();
-      expect(screen.getByRole('heading', { name: '写真の年で比べる（2018 年と 2023 年）' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '写真の年で比べる（2014 年と 2024 年）' })).toBeInTheDocument();
       const table = screen.getByRole('table', { name: /写真の年ごとの/ });
       const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent);
-      expect(headers).toEqual(['指標', '評価用・2018 年の写真', '評価用・2023 年の写真', '12 地区全体・2018 年の写真', '12 地区全体・2023 年の写真']);
+      expect(headers).toEqual(['指標', '評価用・2014 年の写真', '評価用・2024 年の写真', '12 地区全体・2014 年の写真', '12 地区全体・2024 年の写真']);
       const f1 = within(table).getByRole('row', { name: /^物体単位・F1/ });
       expect(within(f1).getAllByRole('cell').map((c) => c.textContent)).toEqual(['0.16', '0.1', '0.189', '0.123']);
       expect(screen.getByText(/倍率 2・閾値 0.4）のまま/)).toBeInTheDocument();
@@ -167,9 +187,9 @@ describe('/accuracy', () => {
       const recallHeads = screen.getAllByRole('rowheader').concat(screen.getAllByRole('columnheader')).filter((h) => /再現率/.test(h.textContent ?? ''));
       expect(recallHeads.length).toBeGreaterThanOrEqual(6);
       for (const h of recallHeads) expect(h.textContent).toMatch(/建物の抽出の再現率/);
-      expect(screen.getAllByRole('rowheader', { name: '建物の抽出の再現率（基盤地図情報に対して）' }).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByRole('rowheader', { name: '建物の抽出の再現率（正解の建物データに対して）' }).length).toBeGreaterThanOrEqual(2);
       // 新築の再現率の枠には、別の値だと書く
-      expect(screen.getByText(/「建物の抽出の再現率」（基盤地図情報に対する値）とは別の値/)).toBeInTheDocument();
+      expect(screen.getByText(/「建物の抽出の再現率」とは別の値/)).toBeInTheDocument();
       // 「再現率」だけの見出しは残さない
       expect(screen.queryByRole('rowheader', { name: '再現率' })).not.toBeInTheDocument();
     });
@@ -227,7 +247,7 @@ describe('/accuracy', () => {
       await renderReal();
       const pixel = screen.getByTestId('note-pixel');
       expect(pixel).toHaveTextContent('倍率 2 の格子の升目の数');
-      expect(pixel).toHaveTextContent('一辺が約 0.25 m');
+      expect(pixel).toHaveTextContent('一辺が約 0.2 m');
       expect(pixel).toHaveTextContent('写真の 1 画素の 4 分の 1 の面積');
       expect(screen.getByTestId('note-object')).toHaveTextContent('縁で外した物体を除いた数');
       expect(screen.getAllByRole('rowheader', { name: '参照の物体数（縁を除く）' })).toHaveLength(1);
@@ -272,11 +292,11 @@ describe('/accuracy', () => {
       expect(screen.queryByTestId('f1-basis')).not.toBeInTheDocument();
     });
 
-    it('限界欄: 2018 年の写真での見落としの実測の割合を、データから描く（正解データの代わりにはならない）', async () => {
+    it('限界欄: 2014 年の写真での見落としの実測の割合を、データから描く（正解データの代わりにはならない）', async () => {
       await renderReal();
       const limit = screen.getByTestId('limit-absent');
-      expect(limit).toHaveTextContent('2018 年の写真での見落とし（既存の建物が「2018 年は未検出」に入る）');
-      expect(limit).toHaveTextContent('基盤地図情報にある既存の建物（20 m² 以上・縁に接しない）200 棟のうち、約 3 割（66 棟）で、2018 年の抽出が何も見ていません');
+      expect(limit).toHaveTextContent('2014 年の写真での見落とし（既存の建物が「2014 年は未検出」に入る）');
+      expect(limit).toHaveTextContent('正解の建物データにある既存の建物（20 m² 以上・縁に接しない）200 棟のうち、約 3 割（66 棟）で、2014 年の抽出が何も見ていません');
       expect(limit).toHaveTextContent('半分以上を覆っているのは 約 5 割（102 棟）');
       expect(limit).toHaveTextContent('評価用の地区だけでは 110 棟のうち 34 棟（約 3 割）');
       expect(limit).toHaveTextContent('正解データの代わりにはなりません');
@@ -285,7 +305,7 @@ describe('/accuracy', () => {
     it('限界欄の見落としの割合は、データの値に従う（手書きの数字ではない）', async () => {
       const body = {
         ...metricsReal,
-        existing_absent_in_2018: { ...(metricsReal.existing_absent_in_2018 as object), overall: { n_buildings: 50, absent: 31, absent_share: 0.62, present: 10, present_share: 0.2 }, holdout: undefined },
+        existing_absent_in_2014: { ...(metricsReal.existing_absent_in_2014 as object), overall: { n_buildings: 50, absent: 31, absent_share: 0.62, present: 10, present_share: 0.2 }, holdout: undefined },
       };
       await renderReal(body);
       const limit = screen.getByTestId('limit-absent');
@@ -294,8 +314,8 @@ describe('/accuracy', () => {
       expect(limit).not.toHaveTextContent('評価用の地区だけでは');
     });
 
-    it('限界欄: existing_absent_in_2018 が無ければ、数を出さずに測れていないと書く（壊れない）', async () => {
-      const { existing_absent_in_2018: _x, ...rest } = metricsReal;
+    it('限界欄: existing_absent_in_2014 が無ければ、数を出さずに測れていないと書く（壊れない）', async () => {
+      const { existing_absent_in_2014: _x, ...rest } = metricsReal;
       void _x;
       const first = await renderReal(rest);
       const limit = screen.getByTestId('limit-absent');
@@ -304,25 +324,24 @@ describe('/accuracy', () => {
       first.unmount();
       // 形が壊れていても同じ
       for (const bad of [{ overall: { n_buildings: 0, absent: 0 } }, { overall: { n_buildings: 10, absent: 11 } }, { overall: { n_buildings: 'x', absent: 1 } }, 'x', null]) {
-        const { unmount } = await renderReal({ ...metricsReal, existing_absent_in_2018: bad });
+        const { unmount } = await renderReal({ ...metricsReal, existing_absent_in_2014: bad });
         expect(screen.getByTestId('limit-absent')).toHaveTextContent('測れていません');
         unmount();
       }
     });
 
-    it('限界欄: 参照が写真より古い可能性と、物体単位の適合率が合成値であること', async () => {
+    it('限界欄: 参照と写真の時期のずれと、物体単位の適合率が合成値であること', async () => {
       await renderReal();
       const limit = screen.getByTestId('limit-reference');
-      expect(limit).toHaveTextContent('写真より古い可能性があります（推定）');
-      expect(limit).toHaveTextContent('独立の確認はしていません');
+      expect(limit).toHaveTextContent('写真と時期が一致しないことがあります');
       expect(limit).toHaveTextContent('物体単位の適合率は、モデルの適合率ではなく、モデルの精度と参照の完全性が混ざった値');
     });
 
     it('限界欄: 写真の年ごとの画素の再現率を数字だけで書き、原因（暗さなど）は書かない', async () => {
       await renderReal();
       const limit = screen.getByTestId('limit-haze');
-      expect(limit).toHaveTextContent('2018 年の写真で 0.459、2023 年の写真で 0.34');
-      expect(limit).toHaveTextContent('モデルの見落としが「2018 年は未検出」として混ざります');
+      expect(limit).toHaveTextContent('2014 年の写真で 0.459、2024 年の写真で 0.34');
+      expect(limit).toHaveTextContent('モデルの見落としが「2014 年は未検出」として混ざります');
       expect(limit).toHaveTextContent('違いの原因（写真の暗さ・撮影条件など）は確かめていません');
       expect(limit).not.toHaveTextContent('取りこぼしが多い');
       expect(limit).not.toHaveTextContent('霞');
@@ -332,7 +351,7 @@ describe('/accuracy', () => {
       const overall = metricsReal.overall as { pixel: object; object: object };
       const swapped = { ...metricsReal, overall: { ...overall, pixel: { ...overall.pixel, recall: 0.2 } } };
       const { unmount } = await renderReal(swapped);
-      expect(screen.getByTestId('limit-haze')).toHaveTextContent('2018 年の写真で 0.2、2023 年の写真で 0.34');
+      expect(screen.getByTestId('limit-haze')).toHaveTextContent('2014 年の写真で 0.2、2024 年の写真で 0.34');
       unmount();
       const { year_compare: _y, ...rest } = metricsReal;
       void _y;
@@ -342,7 +361,7 @@ describe('/accuracy', () => {
 
     it('既存の限界の項目は残る', async () => {
       await renderReal();
-      for (const t of ['撮影月が不明', '2018 年は帯状の範囲だけ', 'タイルの縁', '誤検出の可能性', '正解が無い', '対象範囲']) {
+      for (const t of ['写真が無い期間', '写真は 2 時点', '地区は新築の多い場所', 'タイルの縁', '誤検出の可能性', '対象範囲', '未実装のもの']) {
         expect(screen.getByText(t)).toBeInTheDocument();
       }
     });
@@ -353,9 +372,9 @@ describe('/accuracy', () => {
     const devNotes = [
       'タイルの縁に接する物体は、参照・予測の両方から外した。外した数は excluded_edge_objects（内訳は excluded_edge_detail）。',
       '新築の再現率は、正解になる新築のデータが無いので未測定（new_building_recall = null）。',
-      'year_compare: 同じ参照・同じ設定で、2023 年の写真の抽出も測った。',
-      'existing_absent_in_2018: 2018 年の抽出が何も見ていない（ov_2018 <= 0.1 かつ prob_2018_p90 < 0.2）棟の数と割合。',
-      'gml:id の接頭辞は K17、lfSpanFr は 2018-10-01、devDate は 2018-10-02。docs/decisions/0001-data-candidates.md の調査は、更新が止まっていたと記す。',
+      'year_compare: 同じ参照・同じ設定で、2024 年の写真の抽出も測った。',
+      'existing_absent_in_2014: 2014 年の抽出が何も見ていない（ov_2014 <= 0.1 かつ prob_2014_p90 < 0.2）棟の数と割合。',
+      'gml:id の接頭辞は K17、lfSpanFr は 2014-10-01、devDate は 2014-10-02。docs/decisions/0001-data-candidates.md の調査は、更新が止まっていたと記す。',
     ];
 
     function routeFetch(areasBody: unknown, metricsBody: unknown = metricsReal) {
@@ -377,7 +396,7 @@ describe('/accuracy', () => {
       expect(within(panel).getByText(/開発者向けです/)).toBeVisible();
       const details = screen.getByTestId('eval-notes') as HTMLDetailsElement;
       expect(details.open).toBe(false);
-      for (const raw of [/excluded_edge_objects/, /new_building_recall/, /year_compare/, /ov_2018 <= 0\.1/, /gml:id/, /lfSpanFr/, /devDate/, /docs\/decisions\/0001/]) {
+      for (const raw of [/excluded_edge_objects/, /new_building_recall/, /year_compare/, /ov_2014 <= 0\.1/, /gml:id/, /lfSpanFr/, /devDate/, /docs\/decisions\/0001/]) {
         expect(screen.getByText(raw)).not.toBeVisible();
       }
       // 畳んだ中身を見るには、「注記をすべて見る（開発者向け）」を押す
@@ -438,17 +457,17 @@ describe('/accuracy', () => {
       routeFetch([]);
       render(<AccuracyView />);
       await screen.findByTestId('limit-reference');
-      expect(screen.getByTestId('limit-reference')).toHaveTextContent('開発時の調査記録にあります');
+      expect(screen.getByTestId('limit-reference')).toHaveTextContent('参照の建物データは');
       expect(screen.getByTestId('limit-reference')).not.toHaveTextContent('ADR');
     });
   });
 
-  it('従来の形（任意項目なし）でも、年の明記と新しい限界欄が出て、2023 年の値は出さない', async () => {
+  it('従来の形（任意項目なし）でも、年の明記と新しい限界欄が出て、2024 年の値は出さない', async () => {
     fetchMock.mockResolvedValue(jsonResponse(metrics));
     render(<AccuracyView />);
     await screen.findByText('新築の再現率');
-    expect(screen.getAllByText('2018 年の写真での値')).toHaveLength(2);
-    expect(document.body.textContent).not.toMatch(/2023 年の写真での値/);
+    expect(screen.getAllByText('2014 年の写真での値')).toHaveLength(2);
+    expect(document.body.textContent).not.toMatch(/2024 年の写真での値/);
     expect(screen.getByTestId('reference-note')).toHaveTextContent('12 地区の合計で 参照 41・予測 38です');
     expect(screen.getByTestId('limit-absent')).toHaveTextContent('測れていません');
     expect(screen.getByTestId('limit-reference')).toBeInTheDocument();
@@ -456,11 +475,12 @@ describe('/accuracy', () => {
     expect(screen.queryByTestId('limit-haze')).not.toBeInTheDocument();
   });
 
-  it('読み込み中・エラーのときも、限界欄は出る（数は出さない。年の違いの項目は出さない）', async () => {
+  it('読み込み中・エラーのときも、限界欄は出る（測定の有無で変わる項目は出さない）', async () => {
     fetchMock.mockRejectedValue(new TypeError('x'));
     render(<AccuracyView />);
-    expect(screen.getByTestId('limit-absent')).toHaveTextContent('読み込めていないため、出していません');
+    expect(screen.getByRole('region', { name: '既知の限界' })).toHaveTextContent('写真が無い期間');
     expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(screen.queryByTestId('limit-haze')).not.toBeInTheDocument();
+    for (const id of ['limit-absent', 'limit-reference', 'limit-haze']) expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+    expect(screen.queryByText('正解が無い')).not.toBeInTheDocument();
   });
 });

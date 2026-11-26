@@ -148,7 +148,7 @@ func wardNames(args Args) ([]string, error) {
 	var out []string
 	for _, w := range raw {
 		if w == "" {
-			return nil, toolErr("out_of_scope", "区の指定が正しくありません。")
+			return nil, toolErr("out_of_scope", "市町村の指定が正しくありません。")
 		}
 		if !seen[w] {
 			seen[w] = true
@@ -477,8 +477,8 @@ func showCandidate(ctx context.Context, tc *ToolContext, args Args) (Result, err
 	caption := fmt.Sprintf("%s・面積 約 %s m²。", areaName, pyFixed(float64(cand.AreaM2), 0)) +
 		"輪郭は機械が抽出した範囲で、確定ではありません。"
 	return DetectionImageResult{
-		Type: "detection_image", Title: "候補 " + cand.ID + " の写真（2018 年と 2023 年）", CandidateID: cand.ID, Class: cand.Class,
-		Images:  []ImageRef{{2018, imageURL(cand.ID, 2018)}, {2023, imageURL(cand.ID, 2023)}},
+		Type: "detection_image", Title: "候補 " + cand.ID + " の写真（2014 年と 2024 年）", CandidateID: cand.ID, Class: cand.Class,
+		Images:  []ImageRef{{2014, imageURL(cand.ID, 2014)}, {2024, imageURL(cand.ID, 2024)}},
 		Caption: caption, Provenance: provenance(tc),
 	}, nil
 }
@@ -591,7 +591,7 @@ func sizeOf(v any) int {
 	return 0
 }
 
-// evalYear は、精度を測った写真の年。評価ファイルに無ければ 2018（選んだ設定は 2018 年の抽出で決めている）。
+// evalYear は、精度を測った写真の年。評価ファイルに無ければ 2014（選んだ設定は 2014 年の抽出で決めている）。
 func evalYear(body any) int {
 	for _, path := range [][]string{{"year_compare", "selected_on_year"}, {"protocol", "year"}} {
 		if n, ok := pick(body, path...).(json.Number); ok && !strings.ContainsAny(n.String(), ".eE") {
@@ -600,7 +600,7 @@ func evalYear(body any) int {
 			}
 		}
 	}
-	return 2018
+	return 2014
 }
 
 func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
@@ -633,7 +633,7 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 	if tuneN > 0 {
 		tuned = fmt.Sprintf("調整用 %d 地区", tuneN)
 	}
-	const missing = "評価ファイルに値がありません"
+	const missing = "まだ測っていません"
 	year := evalYear(body)
 	yr := fmt.Sprintf("%d 年の写真", year)
 
@@ -648,7 +648,7 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 		metric("holdout_object_f1", fmt.Sprintf("物体単位 F1（評価用・%s）", yr), []string{"holdout", "object"}, "f1",
 			held+"。IoU 0.5 以上の 1 対 1 対応。タイルの縁に接する物体は除く"),
 		metric("holdout_object_precision", fmt.Sprintf("建物の抽出の適合率・物体単位（評価用・%s）", yr), []string{"holdout", "object"}, "precision", held),
-		metric("holdout_object_recall", fmt.Sprintf("建物の抽出の再現率・物体単位（評価用・%s。基盤地図情報に対する値）", yr), []string{"holdout", "object"}, "recall", held),
+		metric("holdout_object_recall", fmt.Sprintf("建物の抽出の再現率・物体単位（評価用・%s）", yr), []string{"holdout", "object"}, "recall", held),
 		metric("holdout_pixel_iou", fmt.Sprintf("画素 IoU（評価用・%s）", yr), []string{"holdout", "pixel"}, "iou", held),
 		metric("holdout_pixel_f1", fmt.Sprintf("画素 F1（評価用・%s）", yr), []string{"holdout", "pixel"}, "f1", held),
 		metric("tune_object_f1", fmt.Sprintf("物体単位 F1（調整用・%s）", yr), []string{"tune", "object"}, "f1",
@@ -656,19 +656,28 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 	}
 	recallNote := "新築の正解データで測った値"
 	if body["new_building_recall"] == nil {
-		recallNote = "未測定（正解になる新築のデータが無いため）。建物の抽出の再現率とは別の値"
+		recallNote = "まだ測っていません。建物の抽出の再現率とは別の値"
 	}
 	metrics = append(metrics, Metric{Key: "new_building_recall", Label: "新築の再現率", Value: firstPresent(body, nil, "new_building_recall"), Note: recallNote})
 	chosen, _ := body["chosen"].(map[string]any)
 	for _, c := range []struct{ k, label string }{{"scale", "選んだ倍率"}, {"threshold", "選んだ閾値"}} {
 		if f, ok := asFloat(chosen[c.k]); ok {
 			v := pyjson.Float(f)
-			metrics = append(metrics, Metric{Key: "chosen_" + c.k, Label: c.label, Value: &v, Note: "調整用の地区だけで選んだ値"})
+			note := "調整用の地区だけで選んだ値"
+			if chosen["selected_by"] == "fixed" {
+				note = "固定の値（写真に重ねた図を目で見て選んだ。検証していない）"
+			}
+			metrics = append(metrics, Metric{Key: "chosen_" + c.k, Label: c.label, Value: &v, Note: note})
 		}
 	}
+	title := "このアプリの精度（建物抽出の実測）"
+	_, measured := body["holdout"]
+	if !measured {
+		title = "このアプリの精度（まだ測っていません）"
+	}
 	return AccuracyResult{
-		Type: "accuracy", Title: "このアプリの精度（建物抽出の実測）", Metrics: metrics,
-		Provenance: store.AccuracyProvenanceForYear(tc.Run, year),
+		Type: "accuracy", Title: title, Metrics: metrics,
+		Provenance: store.AccuracyProvenanceForYear(tc.Run, year, measured),
 	}, nil
 }
 
@@ -677,7 +686,7 @@ func showHelp(_ context.Context, tc *ToolContext, _ Args) (Result, error) {
 		{"候補は何件ありますか？", "件数と候補の写真"},
 		{"地区ごとに候補数を比べてください", "地区の比較"},
 		{"面積の大きい候補を一覧で見せてください", "候補の一覧（表）"},
-		{"いちばん大きい候補の写真を見せてください", "2018 年と 2023 年の写真の見比べ"},
+		{"いちばん大きい候補の写真を見せてください", "2014 年と 2024 年の写真の見比べ"},
 		{"その地図での位置は？", "地図で場所を示す"},
 		{"このアプリの精度は？", "実測した精度の数字"},
 	}
@@ -715,8 +724,8 @@ func objectSchema(props map[string]any, required ...string) map[string]any {
 func areaProps() map[string]any {
 	return map[string]any{
 		"area_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "地区の id（z18-x-y）の配列。省略すると全地区"},
-		"ward":     map[string]any{"type": "string", "description": "区名（中央区・東区・西区・南区・北区）。area_ids の代わりに使える"},
-		"wards":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "区名の配列（2 つ以上の区をまとめて見るとき）。その区の地区の和集合"},
+		"ward":     map[string]any{"type": "string", "description": "市町村名（例: ナンテール・ムードン）。area_ids の代わりに使える"},
+		"wards":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "市町村名の配列（2 つ以上の市町村をまとめて見るとき）。その市町村の地区の和集合"},
 	}
 }
 
@@ -753,7 +762,7 @@ func DefaultRegistry(maxFocusIDs int) *Registry {
 		objectSchema(withProps(area, map[string]any{"cls": cls, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxListLimit}})), listCandidates})
 	must(Tool{"compare_areas", "地区ごとの候補数を比べる",
 		objectSchema(withProps(area, map[string]any{"cls": cls})), compareAreas})
-	must(Tool{"show_candidate", "候補 1 棟の 2018・2023 年の写真（輪郭つき）を返す。id を省略すると条件に合う最大の候補",
+	must(Tool{"show_candidate", "候補 1 棟の 2014・2024 年の写真（輪郭つき）を返す。id を省略すると条件に合う最大の候補",
 		objectSchema(withProps(area, map[string]any{"candidate_id": map[string]any{"type": "string"}, "cls": cls})), showCandidate})
 	must(Tool{"get_accuracy", "実測した建物抽出の精度（評価用・調整用）を返す", objectSchema(map[string]any{}), getAccuracy})
 	must(Tool{"focus_map", "地図を地区・候補に合わせる",

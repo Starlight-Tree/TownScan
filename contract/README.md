@@ -61,8 +61,8 @@ API の起動時の設定（対象に関わらず同じ）: `DATABASE_URL`・`TI
 | `GET /api/candidates` | `test_candidates.py` | 並び（面積の降順、同じなら id の昇順。`area_asc` も）・total・キーと値・`cls`/`area_id` の絞り込み・`limit`（1〜500）/`offset`（0〜1,000,000）・不正な引数は 422（`query.<名前>`）。入力値は応答に出さない |
 | `GET /api/candidates.geojson` | `test_candidates.py` | `application/geo+json`・FeatureCollection・並び・properties（`id`,`class`,`area_m2`,`area_id`）・外周の座標・絞り込み・422 |
 | `GET /api/candidates/{id}` | `test_detail.py` | 9 候補すべての詳細（evidence・geometry・理由ごとの固定の説明文・画像の URL・provenance）・内部の値（tile_x/tile_y）を出さない・404 `not_found`・形が違う id は 422（`path.candidate_id`） |
-| `GET /api/candidates/{id}/image` | `test_image.py` | PNG（`image/png`）・大きさ（64〜1024、既定 512、正方形）・年は 2018・2023 だけ・年ごとの写真・向きと範囲（候補が真ん中・余白は約 20 m・タイルの外へ出ず内側へずらす）・輪郭の色と線種（実線・破線・点線）・`Cache-Control: private`・422・404（候補なし）・404 `tile_not_found`（ファイルなし・壊れたファイル・`TILES_DIR` の外を指すリンク。パスを漏らさない） |
-| `GET /api/metrics` | `test_detail.py` | 評価ファイルの内容そのもの + provenance（2018 年の写真・固定の注記） |
+| `GET /api/candidates/{id}/image` | `test_image.py` | PNG（`image/png`）・大きさ（64〜1024、既定 512、正方形）・年は 2014・2024 だけ・年ごとの写真・向きと範囲（候補が真ん中・余白は約 20 m・タイルの外へ出ず内側へずらす）・輪郭の色と線種（実線・破線・点線）・`Cache-Control: private`・422・404（候補なし）・404 `tile_not_found`（ファイルなし・壊れたファイル・`TILES_DIR` の外を指すリンク。パスを漏らさない） |
+| `GET /api/metrics` | `test_detail.py` | 評価ファイルの内容そのもの + provenance（2014 年の写真・固定の注記） |
 | `POST /api/chat` | `test_chat_answers.py`・`test_chat_behavior.py` | 代表的な質問 29 件の答え（`tool_calls`・`results`・`content` を全体で）。ツールの選び方・範囲外の断り（`out_of_scope`・`no_photo_period`・`not_implemented`）・文脈（末尾 20 件だけ）・履歴の上限（500 件まで・1 件 2000 文字）・不正な入力は 422・**返答文の数字は結果の値だけから出る**（`support/chat.py` の検査。`guard_numbers` の契約）・SQL インジェクションの文字列が検索を変えない |
 | `GET /api/me` | `test_me.py`・`test_me_unconfigured.py` | JWT の検証（ES256 のみ・`iss`/`aud`/`exp`/`sub` 必須・完全一致・10 秒のずれまで・署名・kid・使えない鍵が混ざる JWKS）・`{sub,email,name,picture}` の整形（https の画像・254 文字のメール・100 文字の名前・印字できない文字を除く）・401（固定の文・`WWW-Authenticate: Bearer`・`no-store`）・503（未設定・JWKS 不達） |
 | `GET /api/conversations`・`GET /api/conversations/{id}/messages`・`DELETE /api/conversations/{id}`（**履歴。Go だけ。構成 `history`**） | `test_history_auth.py`・`test_history_list.py`・`test_history_messages.py`・`test_history_delete.py` | 未ログインは 3 経路とも同じ 401（ID の形の 422 より先）・本人の会話だけ（無い ID と他人の ID は、本文も同じ 404）・一覧は更新が新しい順で最大 50 件・題名の規則（40 文字・コードポイントで数える・空白を畳む）・発言は古い順で、回答は chat の `message` と JSON として等しい（＋`run_created_at`）・見るだけでは更新しない・形が違う ID は 422（`path.conversation_id`）・3 経路の全応答（200・204・401・404・422）が `Cache-Control: no-store`・削除は 204 で本当に消える（同じ ID で話しかけ直しても戻らない） |
@@ -78,7 +78,7 @@ API の起動時の設定（対象に関わらず同じ）: `DATABASE_URL`・`TI
 
 - **固定する**: 状態コード・JSON のキーの集合と型・並び順・件数・上限・エラーの `code`・固定の文（ユーザーに見える文）・`tool_calls` と `results` の全体・数字が結果から出ていること。
 - **固定しない**: 画素の完全な一致（縮小の方法は実装ごとに違ってよい。大きさ・向き・範囲・輪郭の色と線種を固定する）・座標や面積の小数の末尾（1e-6 度の許容）・時刻の表記（同じ時刻であればよい）・エラーの `details[].msg` の文（形だけ）・`no_data` の文面（読み込み方の案内を含む。読み込みの入口は将来移る）・`Cache-Control: private` の `max-age`・OpenAPI の自動文書（`/api/docs`・`/api/openapi.json` は FastAPI の機能）・末尾のスラッシュ（`/api/areas/` は Python では 307）・`HEAD`/`OPTIONS`・同じ引数の重複・`01` や `+5` のような数の別表記。
-- **数字・件数は決め打ち**: 合成データから導いた値で、結果から読まない。導き方は `support/expected.py` の冒頭（地区 3 x 候補 3、2018 年は未検出 4・2018 年も検出 3・未判定 2、面積は画素数 x 約 0.2519 m²/画素 など）。
+- **数字・件数は決め打ち**: 合成データから導いた値で、結果から読まない。導き方は `support/expected.py` の冒頭（地区 3 x 候補 3、2014 年は未検出 4・2014 年も検出 3・未判定 2、面積は画素数 x 約 0.2519 m²/画素 など）。
 - **並びの同点**: 面積が同じ 3 件（75.6 m²）は id の昇順。比較（`compare_areas`）の同数は地区名の昇順（文字コード順）。`filter.area_ids` は文字列の昇順。SQL の照合順序に依らない形になっている（この合成データでは、どの照合でも同じ）。
 
 ## データの準備
@@ -100,8 +100,8 @@ SELECT 'ct_user_' || lpad(n::text, 6, '0'), 'contract user ' || n, 'ct_user_' ||
 FROM generate_series(1, 200) AS n;
 ```
 
-写真タイルには、画像の 404 を確かめるための**故障を 3 つ仕込む**（`support/expected.py` の `TILE_FAULTS`）: 試験町の 2018 年 = ファイルが無い／仮想町の 2018 年 = PNG ではないファイル／仮想町の 2023 年 = `TILES_DIR` の外を指すシンボリックリンク（行き先は正しい PNG なので、外を読んだら 200 になって分かる）。合成町（A1）の候補は両年とも読めるので、画像の検査は主にこれを使う。
-タイルは、R=列・G=行（タイル内の画素の位置）・B=年（2018→50、2023→200）の傾斜画像。切り出した画像の画素から、元のタイルのどこを切ったか（位置・範囲・向き）と、どの年かが分かる。
+写真タイルには、画像の 404 を確かめるための**故障を 3 つ仕込む**（`support/expected.py` の `TILE_FAULTS`）: 試験町の 2014 年 = ファイルが無い／仮想町の 2014 年 = PNG ではないファイル／仮想町の 2024 年 = `TILES_DIR` の外を指すシンボリックリンク（行き先は正しい PNG なので、外を読んだら 200 になって分かる）。合成町（A1）の候補は両年とも読めるので、画像の検査は主にこれを使う。
+タイルは、R=列・G=行（タイル内の画素の位置）・B=年（2014→50、2024→200）の傾斜画像。切り出した画像の画素から、元のタイルのどこを切ったか（位置・範囲・向き）と、どの年かが分かる。
 
 ## 新しい実装（Go の `api/`）の足し方
 

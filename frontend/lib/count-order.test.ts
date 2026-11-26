@@ -3,14 +3,14 @@ import { HELD_LABELS, classText } from './classes';
 import { countRank } from './count-order';
 
 describe('件数の表の並びと、未判定の呼び分け', () => {
-  it('2018 年は未検出 → 要確認など → 端のため未判定 → 2018 年も検出', () => {
+  it('2014 年は未検出 → 要確認など → 端のため未判定 → 2014 年も検出', () => {
     const rows = [
-      { class: 'existing_omission', reason: 'present_2018' },
+      { class: 'existing_omission', reason: 'present_2014' },
       { class: 'uncertain', reason: 'edge' },
       { class: 'uncertain', reason: 'ambiguous' },
-      { class: 'confirmed_new', reason: 'new_absent_2018' },
+      { class: 'confirmed_new', reason: 'new_absent_2014' },
     ];
-    expect([...rows].sort((a, b) => countRank(a) - countRank(b)).map((r) => r.reason)).toEqual(['new_absent_2018', 'ambiguous', 'edge', 'present_2018']);
+    expect([...rows].sort((a, b) => countRank(a) - countRank(b)).map((r) => r.reason)).toEqual(['new_absent_2014', 'ambiguous', 'edge', 'present_2014']);
     // 理由の無い未判定（古いデータ）は、端より前
     expect(countRank({ class: 'uncertain' })).toBeLessThan(countRank({ class: 'uncertain', reason: 'edge' }));
   });
@@ -20,6 +20,6 @@ describe('件数の表の並びと、未判定の呼び分け', () => {
     expect(classText('uncertain', 'ambiguous')).toBe('要確認');
     expect(classText('uncertain')).toBe('未判定');
     expect(classText('uncertain', 'something_new')).toBe('未判定');
-    expect(classText('confirmed_new', 'edge')).toBe('2018 年は未検出');
+    expect(classText('confirmed_new', 'edge')).toBe('2014 年は未検出');
   });
 });

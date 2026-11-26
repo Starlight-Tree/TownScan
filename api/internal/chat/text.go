@@ -11,12 +11,12 @@ import (
 
 // 範囲外の返答文（数字は固定の年だけ。結果の message にそのまま入るので、guard は通る）
 const (
-	msgChitchat  = "このアプリは、熊本市中心部の空中写真から見つけた新築の候補（2018 年と 2023 年の写真の比較）についてだけ答えます。天気・雑談・設定の話などには答えられません。"
+	msgChitchat  = "このアプリは、パリ南西の近郊の空中写真から見つけた新築の候補（2014 年と 2024 年の写真の比較）についてだけ答えます。天気・雑談・設定の話などには答えられません。"
 	msgSatellite = "衛星による「変化の当たり」は未実装です。いま答えられるのは、空中写真から棟ごとに見つけた候補の件数・一覧・写真の見比べ・精度です。"
 	msgPanel     = "屋根の太陽光パネルの検出は未実装です。いま答えられるのは、空中写真から棟ごとに見つけた新築の候補についてです。"
-	msgDisappear = "取り壊し・減少（2018 年にあって 2023 年に無い建物）は調べていません。" +
-		"このアプリが答えるのは、建物データに載っていない建物の候補だけです。"
-	msgYear = "写真があるのは 2018 年と 2023 年だけです。それ以外の年（2024 年以降を含む）の棟の確認はできません。"
+	msgDisappear = "取り壊し・減少（2014 年にあって 2024 年に無い建物）は調べていません。" +
+		"このアプリが答えるのは、2024 年の写真で見つけた建物の候補だけです。"
+	msgYear = "写真があるのは 2014 年と 2024 年だけです。それ以外の年（2025 年以降を含む）の棟の確認はできません。"
 )
 
 // noDataMessage は、run が 1 つも無いときの断り（データの読み込み方の案内を含む）。
@@ -101,23 +101,23 @@ func joinCounts(rows []Breakdown) string {
 	return strings.Join(parts, "、")
 }
 
-// tileSideM は、1 区画（地区＝地理院タイル z18 の 1 枚）の一辺の長さ（m。画面の area-scale.ts の TILE_SIDE_TEXT と同じ）。
+// tileSideM は、1 区画（地区＝地図タイル z18 の 1 枚）の一辺の長さ（m。画面の area-scale.ts の TILE_SIDE_TEXT と同じ）。
 // 地区の名前は丁目だが、数えたのは丁目の全体ではないので、件数の本文で言う。
-const tileSideM = 130
+const tileSideM = 100
 
 // maxNamedAreas は、件数の本文で、同じ順位の地区の名前を並べる上限。
 const maxNamedAreas = 3
 
 // countSubjects は、分類を指定した件数の呼び名。分類の名前は本文に出さず、何の条件かは分かるように、モデルが確認した事実で言う。
 var countSubjects = map[string]string{
-	"confirmed_new":     "モデルが 2023 年の写真だけで見つけた候補",
-	"existing_omission": "モデルが 2018 年の写真でも見つけた候補",
+	"confirmed_new":     "モデルが 2024 年の写真だけで見つけた候補",
+	"existing_omission": "モデルが 2014 年の写真でも見つけた候補",
 	"uncertain":         "判定できていない候補",
 }
 
 // renderCount は、件数の本文。件数だけの回答では、実 LLM の文も使わず、これを返す（毎回同じ形にする）。
 func renderCount(r CountResult) string {
-	subject := "建物データに載っていない建物の候補"
+	subject := "2014 年の写真で確認できていない建物の候補"
 	if named, ok := countSubjects[r.Filter.Cls]; ok {
 		subject = named
 	}
@@ -196,7 +196,7 @@ func namedCount(items []AreaCount) string {
 
 func renderTable(r TableResult) string {
 	if r.Filter == nil { // 使い方の表（候補の表には filter がある）
-		return "このアプリは、熊本市中心部の空中写真から、新築の候補を棟ごとに見つけて答えます。次のように聞けます。"
+		return "このアプリは、パリ南西の近郊の空中写真から、新築の候補を棟ごとに見つけて答えます。次のように聞けます。"
 	}
 	scope := scopeOf(*r.Filter)
 	if r.Total == 0 {
@@ -238,16 +238,20 @@ func renderAccuracyBrief(r AccuracyResult) string {
 	}
 	var text string
 	if f1 := byKey["holdout_object_f1"].Value; f1 == nil {
-		text = "建物抽出の精度の値が、評価ファイルにありません。"
+		text = "建物抽出の精度は、まだ測っていません。"
 	} else {
 		measured := ""
 		if len(r.Provenance.PhotoYears) > 0 {
-			measured = fmt.Sprintf("（基盤地図情報を参照にして、%d 年の写真で測った値）", r.Provenance.PhotoYears[0])
+			measured = fmt.Sprintf("（%d 年の写真で測った値）", r.Provenance.PhotoYears[0])
 		}
 		text = fmt.Sprintf("建物抽出の物体単位 F1 は、評価用の地区で %s です%s。", ratio(float64(*f1)), measured)
 	}
 	if recall := byKey["new_building_recall"].Value; recall == nil {
-		text += "新築の再現率（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定です。"
+		particle := "は"
+		if byKey["holdout_object_f1"].Value == nil {
+			particle = "も" // 直前の文も「測っていません」
+		}
+		text += "新築の再現率（本当の新築のうち候補に出せた割合）" + particle + "、まだ測っていません。"
 	} else {
 		text += fmt.Sprintf("新築の再現率（本当の新築のうち候補に出せた割合）は %s です。", ratio(float64(*recall)))
 	}
@@ -273,21 +277,21 @@ func renderAccuracy(r AccuracyResult) string {
 	f1, pr, rc, tune := val("holdout_object_f1"), val("holdout_object_precision"), val("holdout_object_recall"), val("tune_object_f1")
 	var head string
 	if f1 == nil {
-		head = "建物抽出の精度の値が、評価ファイルにありません。"
+		head = "建物抽出の精度は、まだ測っていません。"
 	} else {
 		when := ""
 		if len(r.Provenance.PhotoYears) > 0 {
 			when = fmt.Sprintf("%d 年の写真で", r.Provenance.PhotoYears[0])
 		}
-		head = fmt.Sprintf("建物抽出の精度を、基盤地図情報を参照にして、%s実測しました。評価用の地区での物体単位 F1 は %s です。", when, ratio(*f1))
+		head = fmt.Sprintf("建物抽出の精度を、%s実測しました。評価用の地区での物体単位 F1 は %s です。", when, ratio(*f1))
 		if pr != nil && rc != nil {
-			head += fmt.Sprintf("建物の抽出の適合率は %s、建物の抽出の再現率（基盤地図情報に対する値）は %s です。", ratio(*pr), ratio(*rc))
+			head += fmt.Sprintf("建物の抽出の適合率は %s、建物の抽出の再現率は %s です。", ratio(*pr), ratio(*rc))
 		}
 	}
 	if tune != nil {
 		head += fmt.Sprintf("調整用の地区の F1 は %s（倍率と閾値を選ぶのに使ったので、参考値）です。", ratio(*tune))
 	}
-	tail := "「新築の再現率」（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定で、上の建物の抽出の再現率とは別の値です。分類の閾値は未検証の初期値です。"
+	tail := "「新築の再現率」（本当の新築のうち候補に出せた割合）は、まだ測っていません。分類の閾値は未検証の初期値です。"
 	if r.Provenance.RunKind == "synthetic" {
 		tail += "なお、これは合成データ（テスト用）の値です。"
 	}

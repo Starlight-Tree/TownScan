@@ -1,8 +1,9 @@
-"""事前学習の建物抽出モデルを、熊本の地理院タイル（2018・2023 年）に当てる（Colab の T4 で実行する）。
+"""事前学習の建物抽出モデルを、フランスの IGN の航空写真（2014・2024 年）に当てる（Colab の T4 で実行する）。
 
 モデル: giswqs/whu-building-unetplusplus-efficientnet-b4（Apache-2.0。UNet++ / EfficientNet-B4。WHU 0.3 m/px で学習。2 クラス）
 正規化: 0〜1 のみ（÷255。ImageNet の平均・分散は使わない。geoai の学習・推論コードで確認済み）。
-入力: 地理院タイル nendophoto{年}（z18、約 0.5 m/px、256 px）。TILES（実行役が先頭に差し込む）の各タイル × 2018・2023 年。
+入力: IGN の公開タイル配信（data.geopf.fr の WMTS。z18、県 92 の緯度で約 0.4 m/px、256 px）。
+TILES（実行役が先頭に差し込む）の各タイル × 2014・2024 年。
 倍率: 1.0 / 1.5 / 2.0 倍（双三次で拡大して推論。学習の 0.3 m/px に近づける）。出力は建物の確率 float16 (H, W)。
 
 部分に分けて別々に実行する（1 回の実行は約 300 秒まで）。実行役が、先頭に PART = "..." と TILES = [...] を差し込む:
@@ -26,10 +27,12 @@ PART = globals().get("PART", "setup")
 TILES = globals().get("TILES", [])
 REPO = "giswqs/whu-building-unetplusplus-efficientnet-b4"
 HF = f"https://huggingface.co/{REPO}/resolve/main/"
-GSI = "https://cyberjapandata.gsi.go.jp/xyz/"
+IGN_WMTS = "https://data.geopf.fr/wmts"
 UA = "TownScan-spike/0.1 (personal learning project)"
 Z = 18
-YEARS = [2018, 2023]
+YEARS = [2014, 2024]
+# 年ごとのレイヤーとタイルの組の名前（配信の説明 GetCapabilities の値。2026-11-27 に確認）
+LAYERS = {2014: ("ORTHOIMAGERY.ORTHOPHOTOS2014", "PM_0_18"), 2024: ("ORTHOIMAGERY.ORTHOPHOTOS2024", "PM_6_19")}
 SCALES = {"s100": 256, "s150": 384, "s200": 512}
 OUT = "/content/out"
 
@@ -42,6 +45,14 @@ def fetch(url, dest=None):
         with open(dest, "wb") as f:
             f.write(data)
     return data
+
+
+def tile_url(year, x, y):
+    layer, matrix_set = LAYERS[year]
+    return (
+        f"{IGN_WMTS}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER={layer}&STYLE=normal&FORMAT=image/jpeg"
+        f"&TILEMATRIXSET={matrix_set}&TILEMATRIX={Z}&TILEROW={y}&TILECOL={x}"
+    )
 
 
 if PART == "setup":
@@ -101,19 +112,16 @@ elif PART == "infer":
         for yr in YEARS:
             rec = {"year": yr, "x": x, "y": y, "fetched": False}
             img = None
-            for ext in ("png", "jpg"):
-                try:
-                    data = fetch(f"{GSI}nendophoto{yr}/{Z}/{x}/{y}.{ext}")
-                    img = Image.open(io.BytesIO(data))
-                    rec["ext"] = ext
-                    rec["bytes"] = len(data)
-                    break
-                except urllib.error.HTTPError as e:
-                    rec["http"] = e.code
-                    if e.code != 404:
-                        raise
-                finally:
-                    time.sleep(0.5)  # 地理院への負荷を抑える
+            try:
+                data = fetch(tile_url(yr, x, y))
+                img = Image.open(io.BytesIO(data))
+                rec["bytes"] = len(data)
+            except urllib.error.HTTPError as e:
+                rec["http"] = e.code
+                if e.code not in (400, 404):  # 写真が無い範囲だけは続ける
+                    raise
+            finally:
+                time.sleep(0.5)  # 配信元への負荷を抑える
             if img is None:
                 meta["tiles"].append(rec)
                 continue

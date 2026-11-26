@@ -26,7 +26,7 @@ interface Props {
 
 /**
  * 候補の詳細。拡大ビューの「写真の比較」の中に収まる、流れの中の部品（地図に重ならない）。
- * 2018・2023 の切り出し、分類の説明、根拠の数字。重なりの表示（ドロワー）をやめたが、名前は変えない（差分を小さく保つ）
+ * 2014・2024 の切り出し、分類の説明、根拠の数字。重なりの表示（ドロワー）をやめたが、名前は変えない（差分を小さく保つ）
  */
 export function CandidateDrawer({ candidateId, onShowOnMap, onLoaded, autoFocus = true, focusNonce = 0 }: Props) {
   const rootRef = useRef<HTMLElement>(null);
@@ -117,7 +117,7 @@ function DetailBody({ detail, onShowOnMap }: { detail: CandidateDetail; onShowOn
   const images =
     detail.images && detail.images.length > 0
       ? detail.images
-      : [2018, 2023].map((year) => ({ year, url: candidateImageUrl(detail.id, year) }));
+      : [2014, 2024].map((year) => ({ year, url: candidateImageUrl(detail.id, year) }));
   const reason = reasonText(detail.reason) ?? reasonText(detail.explanation_key) ?? detail.explanation ?? null;
   return (
     <>
@@ -130,14 +130,14 @@ function DetailBody({ detail, onShowOnMap }: { detail: CandidateDetail; onShowOn
         </p>
       </div>
 
-      <section aria-label="2018 年と 2023 年の写真">
+      <section aria-label="2014 年と 2024 年の写真">
         <h3 className="drawer__h">同じ場所の写真（輪郭が、この候補）</h3>
         <div className="image-pair">
           {images.map((img) => (
             <CandidateImage key={img.year} src={img.url} year={img.year} candidateId={detail.id} />
           ))}
         </div>
-        <p className="drawer__small">出典：国土地理院。写真は年度単位で、撮影月は分かりません。</p>
+        <p className="drawer__small">出典：IGN（フランス国土地理院）。撮影は 2014 年が 5〜6 月、2024 年が 8 月です。</p>
       </section>
 
       <section aria-label="分類の説明">
@@ -179,7 +179,7 @@ function DetailBody({ detail, onShowOnMap }: { detail: CandidateDetail; onShowOn
           })}
         </dl>
         <p className="drawer__small">
-          分類の閾値は未検証の初期値です（手でラベルした正解が無いため）。数字は、ツールの結果をそのまま出しています。
+          分類の閾値は未検証の初期値です（正解データで確かめていません）。数字は、ツールの結果をそのまま出しています。
         </p>
       </section>
 

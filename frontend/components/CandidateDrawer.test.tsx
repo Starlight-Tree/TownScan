@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe('候補の詳細（結果領域の「写真の比較」に埋め込む）', () => {
-  it('2018・2023 の切り出し、分類の説明、根拠の数字、「地図で見る」を出す', async () => {
+  it('2014・2024 の切り出し、分類の説明、根拠の数字、「地図で見る」を出す', async () => {
     fetchMock.mockResolvedValue(jsonResponse(detail));
     const onShowOnMap = vi.fn();
     render(<CandidateDrawer candidateId="c-1-2-1" onShowOnMap={onShowOnMap} />);
@@ -26,8 +26,8 @@ describe('候補の詳細（結果領域の「写真の比較」に埋め込む�
     const dialog = screen.getByRole('region', { name: '候補の詳細' });
     expect(await within(dialog).findAllByRole('img')).toHaveLength(2);
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/candidates/c-1-2-1');
-    expect(within(dialog).getByText('2018 年は未検出')).toBeInTheDocument();
-    expect(within(dialog).getByText(/2018 年の写真のモデルが、この範囲に建物をほとんど見ていません/)).toBeInTheDocument();
+    expect(within(dialog).getByText('2014 年は未検出')).toBeInTheDocument();
+    expect(within(dialog).getByText(/2014 年の写真のモデルが、この範囲に建物をほとんど見ていません/)).toBeInTheDocument();
     // 根拠の数字
     expect(within(dialog).getByText('0.912')).toBeInTheDocument();
     expect(within(dialog).getByText('3.1 %')).toBeInTheDocument();
@@ -230,8 +230,8 @@ describe('候補の詳細（結果領域の「写真の比較」に埋め込む�
     render(<CandidateDrawer candidateId="c-1-2-1" onShowOnMap={() => {}} />);
     const imgs = await screen.findAllByRole('img');
     expect(imgs.map((i) => i.getAttribute('src'))).toEqual([
-      '/api/candidates/c-1-2-1/image?year=2018&size=512',
-      '/api/candidates/c-1-2-1/image?year=2023&size=512',
+      '/api/candidates/c-1-2-1/image?year=2014&size=512',
+      '/api/candidates/c-1-2-1/image?year=2024&size=512',
     ]);
   });
 

@@ -14,20 +14,20 @@ import (
 	"testing"
 )
 
-// 契約の検査（contract/test_image.py）と同じ、合成の写真タイル: R=列・G=行（タイルの中の画素の位置）、B=年（2018→50、2023→200）。
+// 契約の検査（contract/test_image.py）と同じ、合成の写真タイル: R=列・G=行（タイルの中の画素の位置）、B=年（2014→50、2024→200）。
 // これで、切り出した画像の画素から、元のタイルのどこを切ったか（位置・範囲・向き）と、どの年の写真かが分かる。
 const (
-	blue2018 = 50
-	blue2023 = 200
+	blue2014 = 50
+	blue2024 = 200
 	// 契約の合成データの A1（合成町）のタイル番号
 	tileX0, tileY0 = 226249, 105759
 )
 
 func blueOf(year int) uint8 {
-	if year == 2018 {
-		return blue2018
+	if year == 2014 {
+		return blue2014
 	}
-	return blue2023
+	return blue2024
 }
 
 func gradientTile(px int, blue uint8) *image.RGBA {

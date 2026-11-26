@@ -3,7 +3,7 @@
 export const CANDIDATE_CLASSES = ['confirmed_new', 'existing_omission', 'uncertain'] as const;
 export type CandidateClass = (typeof CANDIDATE_CLASSES)[number];
 
-export const CANDIDATE_REASONS = ['new_absent_2018', 'present_2018', 'ambiguous', 'edge', 'small'] as const;
+export const CANDIDATE_REASONS = ['new_absent_2014', 'present_2014', 'ambiguous', 'edge', 'small'] as const;
 export type CandidateReason = (typeof CANDIDATE_REASONS)[number];
 
 export type BBox = [west: number, south: number, east: number, north: number];
@@ -65,9 +65,9 @@ export interface CandidateList {
 }
 
 export interface CandidateEvidence {
-  prob_2023_mean: number;
-  ov_2018: number;
-  prob_2018_p90: number;
+  prob_2024_mean: number;
+  ov_2014: number;
+  prob_2014_p90: number;
   ov_kiban: number;
   edge_touch: boolean;
 }
@@ -148,12 +148,12 @@ export interface MetricsResponse {
   /**
    * 任意項目（pipeline が足した。仕様 §6）。無くても動く。形は画面側（lib/accuracy.ts）が確かめて読む。
    * protocol: {year, compare_year, edge_overlap_min, ...} / year_compare: 比べる年の写真での指標 /
-   * existing_absent_in_2018: 既存の建物のうち 2018 年の抽出が何も見ていない棟の割合 /
+   * existing_absent_in_2014: 既存の建物のうち 2014 年の抽出が何も見ていない棟の割合 /
    * excluded_edge_by_split・excluded_edge_detail: 縁で外した数の区分別・内訳
    */
   protocol?: unknown;
   year_compare?: unknown;
-  existing_absent_in_2018?: unknown;
+  existing_absent_in_2014?: unknown;
   excluded_edge_by_split?: unknown;
   excluded_edge_detail?: unknown;
   /** 正解になる新築のデータが無いので null（画面は「未測定」と出す） */

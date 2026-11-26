@@ -5,7 +5,7 @@
   DIR/outside.png  TILES_DIR の外にある、正しい PNG（シンボリックリンクの行き先）
 
 故障（support/expected.py の TILE_FAULTS と同じ）:
-  A2 試験町の 2018 年 = ファイルが無い / A3 仮想町の 2018 年 = PNG ではないファイル / A3 仮想町の 2023 年 = TILES_DIR の外を指すリンク
+  A2 試験町の 2014 年 = ファイルが無い / A3 仮想町の 2014 年 = PNG ではないファイル / A3 仮想町の 2024 年 = TILES_DIR の外を指すリンク
 
 使い方: python contract/prepare_data.py --synthetic contract/synthetic.py --out DIR
 （Pillow が要る。scripts/test-contract.sh は、contract のイメージの中で流す。アプリの API のコードは使わない）

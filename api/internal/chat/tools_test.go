@@ -79,7 +79,7 @@ func TestResolveAreas(t *testing.T) {
 		{name: "地区の id があれば、区は表示名にだけ使う（Python と同じ）", args: Args{AreaIDs: []string{a3}, Ward: "中央区"}, ids: []string{a3}, label: "中央区"},
 		{name: "存在しない区", args: Args{Ward: "北区"}, reason: "no_data", message: "「北区」の地区はありません。"},
 		{name: "存在しない区が複数", args: Args{Wards: []string{"北区", "中央区", "南区"}}, reason: "no_data", message: "「北区・南区」の地区はありません。"},
-		{name: "空の区名", args: Args{Wards: []string{""}}, reason: "out_of_scope", message: "区の指定が正しくありません。"},
+		{name: "空の区名", args: Args{Wards: []string{""}}, reason: "out_of_scope", message: "市町村の指定が正しくありません。"},
 		{name: "知らない地区の id", args: Args{AreaIDs: []string{a1, "z18-1-1"}}, reason: "no_data", message: "指定の地区が見つかりません。"},
 	}
 	for _, c := range cases {
@@ -131,8 +131,8 @@ func TestHeldBreakdownAndCandidateLabel(t *testing.T) {
 		{"uncertain", "edge", "端のため未判定"},
 		{"uncertain", "ambiguous", "要確認"},
 		{"uncertain", "something_new", "未判定"},
-		{"confirmed_new", "edge", "2018 年は未検出"},
-		{"existing_omission", "present_2018", "2018 年も検出"},
+		{"confirmed_new", "edge", "2014 年は未検出"},
+		{"existing_omission", "present_2014", "2014 年も検出"},
 	} {
 		if got := candidateLabel(c.class, c.reason); got != c.want {
 			t.Errorf("candidateLabel(%q, %q) = %q, 期待 %q", c.class, c.reason, got, c.want)
@@ -146,18 +146,18 @@ func TestCountCandidates(t *testing.T) {
 	f := newFakeData()
 	got := jsonOf(t, callTool(t, f, "count_candidates", Args{}))
 	want := `{"type":"count","title":"候補の件数（全地区）","total":9,"breakdown":[` +
-		`{"key":"confirmed_new","label":"2018 年は未検出","value":4},` +
-		`{"key":"existing_omission","label":"2018 年も検出","value":3},` +
+		`{"key":"confirmed_new","label":"2014 年は未検出","value":4},` +
+		`{"key":"existing_omission","label":"2014 年も検出","value":3},` +
 		`{"key":"uncertain","label":"未判定","value":2}],"held":[{"key":"edge","label":"端のため未判定","value":2}],"filter":{"scope":"全地区"},` +
-		`"provenance":{"source":"国土地理院 空中写真（年度別 2018・2023 年）から建物を抽出し、2 時点を比較した結果","photo_years":[2018,2023],` +
+		`"provenance":{"source":"IGN（フランス国土地理院）の空中写真（BD ORTHO 2014・2024 年）から建物を抽出し、2 時点を比較した結果","photo_years":[2014,2024],` +
 		`"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic","note":"合成データ（テスト用）です。実データではありません。"},` +
-		`"area_ranking":{"areas_searched":3,"areas_with_candidates":3,"top":[{"name":"仮想町","count":3},{"name":"合成町","count":3},{"name":"試験町","count":3}]},"tile_side_m":130}`
+		`"area_ranking":{"areas_searched":3,"areas_with_candidates":3,"top":[{"name":"仮想町","count":3},{"name":"合成町","count":3},{"name":"試験町","count":3}]},"tile_side_m":100}`
 	if got != want {
 		t.Errorf("全地区の件数\n got  %s\n want %s", got, want)
 	}
 
 	r := callTool(t, f, "count_candidates", Args{AreaIDs: []string{a1}, Cls: "confirmed_new"}).(CountResult)
-	if r.Total != 1 || len(r.Breakdown) != 1 || r.Breakdown[0].Key != "confirmed_new" || r.Title != "「2018 年は未検出」の件数（合成町）" {
+	if r.Total != 1 || len(r.Breakdown) != 1 || r.Breakdown[0].Key != "confirmed_new" || r.Title != "「2014 年は未検出」の件数（合成町）" {
 		t.Errorf("1 地区・1 分類: %s", jsonOf(t, r))
 	}
 	if r.Filter.AreaID != a1 || r.Filter.AreaIDs != nil || r.Filter.Cls != "confirmed_new" || r.Filter.Scope != "合成町" {
@@ -265,7 +265,7 @@ func TestListCandidatesRowsAndOrder(t *testing.T) {
 	if strings.Join(ids, " ") != wantIDs {
 		t.Errorf("並び = %v", ids)
 	}
-	if got := jsonOf(t, rows[0]); got != `{"id":"c-226250-105759-1","area":"試験町","class":"2018 年は未検出","area_m2":503.8}` {
+	if got := jsonOf(t, rows[0]); got != `{"id":"c-226250-105759-1","area":"試験町","class":"2014 年は未検出","area_m2":503.8}` {
 		t.Errorf("1 行目 = %s", got)
 	}
 	if got := jsonOf(t, r.Columns); got != `[{"key":"id","label":"候補 ID"},{"key":"area","label":"地区"},{"key":"class","label":"分類"},{"key":"area_m2","label":"面積（m²）"}]` {
@@ -305,7 +305,7 @@ func TestCompareAreasSortsByCountThenName(t *testing.T) {
 	}
 	// 新規出現: 試験町 2・仮想町 1・合成町 1（同数は名前の昇順）
 	r = callTool(t, f, "compare_areas", Args{Cls: "confirmed_new"}).(CompareResult)
-	if names(r) != "試験町 仮想町 合成町" || r.SortKey != "confirmed_new" || r.Title != "地区ごとの比較（全地区・「2018 年は未検出」の多い順）" {
+	if names(r) != "試験町 仮想町 合成町" || r.SortKey != "confirmed_new" || r.Title != "地区ごとの比較（全地区・「2014 年は未検出」の多い順）" {
 		t.Errorf("新規出現: %s", jsonOf(t, r))
 	}
 	// 区で絞る
@@ -327,8 +327,8 @@ func TestCompareAreasSortsByCountThenName(t *testing.T) {
 func TestShowCandidate(t *testing.T) {
 	f := newFakeData()
 	r := callTool(t, f, "show_candidate", Args{CandidateID: "c-226249-105759-2"}).(DetectionImageResult)
-	want := `{"type":"detection_image","title":"候補 c-226249-105759-2 の写真（2018 年と 2023 年）","candidate_id":"c-226249-105759-2","class":"confirmed_new",` +
-		`"images":[{"year":2018,"url":"/api/candidates/c-226249-105759-2/image?year=2018&size=512"},{"year":2023,"url":"/api/candidates/c-226249-105759-2/image?year=2023&size=512"}],` +
+	want := `{"type":"detection_image","title":"候補 c-226249-105759-2 の写真（2014 年と 2024 年）","candidate_id":"c-226249-105759-2","class":"confirmed_new",` +
+		`"images":[{"year":2014,"url":"/api/candidates/c-226249-105759-2/image?year=2014&size=512"},{"year":2024,"url":"/api/candidates/c-226249-105759-2/image?year=2024&size=512"}],` +
 		`"caption":"合成町・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。","provenance":`
 	if got := jsonOf(t, r); !strings.HasPrefix(got, want) {
 		t.Errorf("候補を指定\n got  %s\n want %s…", got, want)
@@ -406,7 +406,7 @@ func TestFocusMap(t *testing.T) {
 	}
 	// 分類つき。候補 ID は面積の大きい順
 	r = callTool(t, f, "focus_map", Args{Cls: "confirmed_new"}).(MapFocusResult)
-	if r.Title != "全地区の「2018 年は未検出」 4 件を地図で表示" || strings.Join(r.CandidateIDs, " ") != "c-226250-105759-1 c-226249-105759-2 c-226249-105760-3 c-226250-105759-3" {
+	if r.Title != "全地区の「2014 年は未検出」 4 件を地図で表示" || strings.Join(r.CandidateIDs, " ") != "c-226250-105759-1 c-226249-105759-2 c-226249-105760-3 c-226250-105759-3" {
 		t.Errorf("新規出現: %s", jsonOf(t, r))
 	}
 	// 候補 1 件
@@ -433,7 +433,7 @@ func TestFocusMapStatesTheRealCountWhenItCutsTheIDs(t *testing.T) {
 		t.Errorf("上限 2: %s", jsonOf(t, m))
 	}
 	r, _ = reg.Call(ctx, toolCtx(f), "focus_map", Args{Cls: "confirmed_new"})
-	if m := r.(MapFocusResult); len(m.CandidateIDs) != 2 || m.Title != "全地区の「2018 年は未検出」 4 件のうち、面積の大きい上位 2 件を地図で表示" {
+	if m := r.(MapFocusResult); len(m.CandidateIDs) != 2 || m.Title != "全地区の「2014 年は未検出」 4 件のうち、面積の大きい上位 2 件を地図で表示" {
 		t.Errorf("上限 2・新規出現: %s", jsonOf(t, m))
 	}
 	// 切っていない（ちょうど上限）ときは、「のうち」を書かない
@@ -477,7 +477,7 @@ func TestGetAccuracy(t *testing.T) {
 	if want := "holdout_object_f1 holdout_object_precision holdout_object_recall holdout_pixel_iou holdout_pixel_f1 tune_object_f1 new_building_recall chosen_scale chosen_threshold"; strings.Join(keys, " ") != want {
 		t.Errorf("並び = %v", keys)
 	}
-	if v := by["holdout_object_f1"]; v.Value == nil || *v.Value != 0.58 || v.Label != "物体単位 F1（評価用・2018 年の写真）" ||
+	if v := by["holdout_object_f1"]; v.Value == nil || *v.Value != 0.58 || v.Label != "物体単位 F1（評価用・2014 年の写真）" ||
 		v.Note != "評価用 2 地区。IoU 0.5 以上の 1 対 1 対応。タイルの縁に接する物体は除く" {
 		t.Errorf("物体単位 F1 = %+v", v)
 	}
@@ -487,14 +487,14 @@ func TestGetAccuracy(t *testing.T) {
 	if v := by["holdout_object_recall"]; !strings.HasPrefix(v.Label, "建物の抽出の再現率") || v.Note != "評価用 2 地区" {
 		t.Errorf("再現率 = %+v", v)
 	}
-	if v := by["new_building_recall"]; v.Value != nil || v.Note != "未測定（正解になる新築のデータが無いため）。建物の抽出の再現率とは別の値" {
+	if v := by["new_building_recall"]; v.Value != nil || v.Note != "まだ測っていません。建物の抽出の再現率とは別の値" {
 		t.Errorf("新築の再現率 = %+v", v)
 	}
 	if v := by["chosen_scale"]; v.Value == nil || *v.Value != 1.5 || v.Note != "調整用の地区だけで選んだ値" || v.Label != "選んだ倍率" {
 		t.Errorf("選んだ倍率 = %+v", v)
 	}
-	if got := jsonOf(t, r.Provenance); !strings.Contains(got, `"photo_years":[2018]`) || !strings.Contains(got, `"metric":"物体単位 F1・画素 IoU"`) ||
-		!strings.Contains(got, "数字は 2018 年の写真で測った値。") {
+	if got := jsonOf(t, r.Provenance); !strings.Contains(got, `"photo_years":[2014]`) || !strings.Contains(got, `"metric":"物体単位 F1・画素 IoU"`) ||
+		!strings.Contains(got, "数字は 2014 年の写真で測った値。") {
 		t.Errorf("出どころ = %s", got)
 	}
 	if !strings.Contains(jsonOf(t, by["holdout_object_f1"]), `"value":0.58,`) {
@@ -513,20 +513,20 @@ func TestGetAccuracyVariants(t *testing.T) {
 		r, _ := res.(AccuracyResult)
 		return r, res
 	}
-	// 評価した年: year_compare.selected_on_year → protocol.year → 2018。整数だけ（小数・文字列・真偽値は読まない）
+	// 評価した年: year_compare.selected_on_year → protocol.year → 2014。整数だけ（小数・文字列・真偽値は読まない）
 	for _, c := range []struct {
 		metrics string
 		year    int
 	}{
-		{`{"year_compare":{"selected_on_year":2023}}`, 2023},
-		{`{"protocol":{"year":2023}}`, 2023},
-		{`{"year_compare":{"selected_on_year":2023},"protocol":{"year":2018}}`, 2023},
-		{`{"year_compare":{"selected_on_year":2023.0},"protocol":{"year":2023}}`, 2023},
-		{`{"year_compare":{"selected_on_year":2023.0}}`, 2018},
-		{`{"year_compare":{"selected_on_year":"2023"}}`, 2018},
-		{`{"year_compare":{"selected_on_year":true}}`, 2018},
-		{`{"year_compare":[1,2]}`, 2018},
-		{`{}`, 2018},
+		{`{"year_compare":{"selected_on_year":2024}}`, 2024},
+		{`{"protocol":{"year":2024}}`, 2024},
+		{`{"year_compare":{"selected_on_year":2024},"protocol":{"year":2014}}`, 2024},
+		{`{"year_compare":{"selected_on_year":2024.0},"protocol":{"year":2024}}`, 2024},
+		{`{"year_compare":{"selected_on_year":2024.0}}`, 2014},
+		{`{"year_compare":{"selected_on_year":"2024"}}`, 2014},
+		{`{"year_compare":{"selected_on_year":true}}`, 2014},
+		{`{"year_compare":[1,2]}`, 2014},
+		{`{}`, 2014},
 	} {
 		r, _ := get(c.metrics)
 		if got := r.Provenance.PhotoYears; len(got) != 1 || got[0] != c.year || !strings.Contains(r.Metrics[0].Label, fmt.Sprintf("%d 年の写真", c.year)) {
@@ -536,7 +536,7 @@ func TestGetAccuracyVariants(t *testing.T) {
 	// 値が無い項目: null と「評価ファイルに値がありません」。地区の数が分からなければ「評価用の地区」
 	r, _ := get(`{}`)
 	by := metricsByKey(r)
-	if v := by["holdout_object_f1"]; v.Value != nil || v.Note != "評価ファイルに値がありません" {
+	if v := by["holdout_object_f1"]; v.Value != nil || v.Note != "まだ測っていません" {
 		t.Errorf("値が無い = %+v", v)
 	}
 	if len(r.Metrics) != 7 { // 選んだ倍率・閾値は、値があるときだけ

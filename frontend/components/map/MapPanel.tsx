@@ -75,7 +75,7 @@ const ignoreAreaSelect = () => {};
 
 export function MapPanel(props: Props) {
   const { areas, areasState, candidatesState, focus, selectedId, highlightIds } = props;
-  const [base, setBase] = useState<BaseLayerId>('photo2023');
+  const [base, setBase] = useState<BaseLayerId>('photo2024');
   const [showFrames, setShowFrames] = useState(true);
   const [tileStatus, setTileStatus] = useState<TileStatus>('ok');
   const [zoom, setZoom] = useState(0);

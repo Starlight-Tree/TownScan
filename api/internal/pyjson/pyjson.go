@@ -215,6 +215,16 @@ func ParseObject(src []byte) (Object, error) {
 	return obj, nil
 }
 
+// Has は、そのキーがあるか。
+func (o Object) Has(key string) bool {
+	for i := range o {
+		if o[i].Key == key {
+			return true
+		}
+	}
+	return false
+}
+
 // Set は、キーがあればその位置の値を置き換え、無ければ末尾に足す（Python の dict の代入と同じ）。
 func (o *Object) Set(key string, value json.RawMessage) {
 	for i := range *o {

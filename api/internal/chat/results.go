@@ -130,7 +130,7 @@ type ImageRef struct {
 	URL  string `json:"url"`
 }
 
-// DetectionImageResult は、候補 1 棟の 2018・2023 年の写真（type: detection_image）。
+// DetectionImageResult は、候補 1 棟の 2014・2024 年の写真（type: detection_image）。
 type DetectionImageResult struct {
 	Type        string           `json:"type"`
 	Title       string           `json:"title"`
@@ -195,8 +195,8 @@ func newRefusal(reason, message string, suggestions []string) RefusalResult {
 
 // 分類の表示名（candidates.class → 画面・返答文に出す名前）。backend/app/queries.py の CLASS_LABELS と同じ
 var classLabels = map[string]string{
-	"confirmed_new":     "2018 年は未検出",
-	"existing_omission": "2018 年も検出",
+	"confirmed_new":     "2014 年は未検出",
+	"existing_omission": "2014 年も検出",
 	"uncertain":         "未判定",
 }
 

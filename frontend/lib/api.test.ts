@@ -36,8 +36,8 @@ describe('API クライアント', () => {
   });
 
   it('画像の URL は同じオリジンの相対パス', () => {
-    expect(candidateImageUrl('c-1-2-3', 2018)).toBe('/api/candidates/c-1-2-3/image?year=2018&size=512');
-    expect(candidateImageUrl('c-1-2-3', 2023, 256)).toBe('/api/candidates/c-1-2-3/image?year=2023&size=256');
+    expect(candidateImageUrl('c-1-2-3', 2014)).toBe('/api/candidates/c-1-2-3/image?year=2014&size=512');
+    expect(candidateImageUrl('c-1-2-3', 2024, 256)).toBe('/api/candidates/c-1-2-3/image?year=2024&size=256');
   });
 
   it('地区の一覧は、配列でも {items} でも受ける', async () => {

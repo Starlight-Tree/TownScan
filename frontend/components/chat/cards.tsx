@@ -46,7 +46,7 @@ function SyntheticChip({ kind }: { kind: string }) {
 /** 写真のカードで、はじめに出す件数 */
 const PHOTO_FIRST = 4;
 
-const PHOTO_YEARS = [2018, 2023] as const;
+const PHOTO_YEARS = [2014, 2024] as const;
 
 /** 写真のカード 1 枚ぶん。候補 ID は画面に出さない（読み上げの名前と写真の説明にだけ使う）。分類は回答では言わない（詳細で読める） */
 interface PhotoItem {
@@ -55,9 +55,9 @@ interface PhotoItem {
   areaM2: string;
 }
 
-/** 写真の出典。地理院タイルは出典の記載が利用の条件なので、写真を出すところに添える */
+/** 写真の出典。IGN の写真は出典の記載が利用の条件（Licence Ouverte）なので、写真を出すところに添える */
 function PhotoCredit() {
-  return <p className="result-card__note">出典：国土地理院</p>;
+  return <p className="result-card__note">出典：IGN</p>;
 }
 
 function PhotoCard({ item, actions, staleRun }: { item: PhotoItem; actions: ResultActions; staleRun: boolean }) {
@@ -85,7 +85,7 @@ function PhotoCard({ item, actions, staleRun }: { item: PhotoItem; actions: Resu
   );
 }
 
-/** 候補を、2018 年と 2023 年の写真のカードで並べる */
+/** 候補を、2014 年と 2024 年の写真のカードで並べる */
 function PhotoCards({ items, label, actions, staleRun = false }: { items: PhotoItem[]; label: string; actions: ResultActions; staleRun?: boolean }) {
   const [open, setOpen] = useState(false);
   const shown = open ? items : items.slice(0, PHOTO_FIRST);
@@ -132,7 +132,8 @@ export function CountCard({
     !features || staleRun
       ? null
       : features
-          .filter((f) => (!scope || scope.has(f.properties.area_id)) && filter.classes.has(f.properties.class))
+          // 分類を指定しない件数は、API の合計と同じく全部の分類（画面の表示用の分類で絞ると、合計と合わなくなる）
+          .filter((f) => (!scope || scope.has(f.properties.area_id)) && (cls === null || f.properties.class === cls))
           .sort(
               (a, b) =>
                 countRank(a.properties) - countRank(b.properties) ||
@@ -318,7 +319,7 @@ export function DetectionImageCard({
   const images =
     result.images.length > 0
       ? result.images
-      : [2018, 2023].map((year) => ({ year, url: candidateImageUrl(result.candidate_id, year) }));
+      : [2014, 2024].map((year) => ({ year, url: candidateImageUrl(result.candidate_id, year) }));
   return (
     <section className="result-card" aria-label={result.title}>
       <header className="result-card__head">
@@ -387,7 +388,7 @@ export function AccuracyCard({ result }: { result: AccuracyResult }) {
       {plain ? (
         <>
           <p className="accuracy-plain">
-            機械が見つけた建物のうち、既存の建物データ（基盤地図情報）と一致したのは約 <b>{percent(precision)}</b>。建物データにある建物のうち、機械が見つけられたのは約{' '}
+            機械が見つけた建物のうち、正解の建物データと一致したのは約 <b>{percent(precision)}</b>。建物データにある建物のうち、機械が見つけられたのは約{' '}
             <b>{percent(recall)}</b>です（評価用の地区）。見落としや見まちがいがあるため、結果は目で確かめる前提の「候補」です。
           </p>
           <details className="provenance">

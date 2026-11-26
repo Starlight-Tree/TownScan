@@ -1,19 +1,19 @@
 // 精度ページ（/accuracy）の読み取りと文言の部品。
-// /api/metrics の本体は eval.json（pipeline が決める）。任意の項目（year_compare・existing_absent_in_2018 など）は、
+// /api/metrics の本体は eval.json（pipeline が決める）。任意の項目（year_compare・existing_absent_in_2014 など）は、
 // 無い・形が違うときに null を返し、画面はその部分を出さないだけで壊れない（仕様 docs/spec-prototype.md §6）。
 import type { MetricBlock, MetricsResponse, SplitMetrics } from './api-types';
 
 export const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** 評価に使った写真の年。eval.json に書かれていないときの既定（仕様 §6: 対象は 2018 年の写真 12 枚） */
-export const DEFAULT_EVAL_YEAR = 2018;
+/** 評価に使った写真の年。eval.json に書かれていないときの既定（仕様 §6: 対象は 2014 年の写真 12 枚） */
+export const DEFAULT_EVAL_YEAR = 2014;
 
 /** 物体単位 F1 の根拠の一致数がこれ未満なら「少数」と書く。経験則の目安であり、検定の閾値ではない */
 export const FEW_MATCHES = 30;
 
-/** 写真 1 画素の一辺（m）。地理院タイル z18 の熊本で約 0.5 m（256 画素 ≒ 130 m） */
-const PHOTO_PIXEL_M = 0.5;
+/** 写真 1 画素の一辺（m）。IGN のタイル z18 のパリ近郊で約 0.4 m（256 画素 ≒ 100 m） */
+const PHOTO_PIXEL_M = 0.4;
 
 export type SplitKey = 'tune' | 'holdout' | 'overall';
 export type SplitMap = Partial<Record<SplitKey, SplitMetrics>>;
@@ -23,8 +23,8 @@ export type SplitMap = Partial<Record<SplitKey, SplitMetrics>>;
 /** 「再現率」は、新築の再現率（未測定）と取り違えないよう、建物の抽出の値だと修飾する */
 export const METRIC_LABEL: Record<string, string> = {
   iou: 'IoU（重なり）',
-  precision: '建物の抽出の適合率（基盤地図情報に対して）',
-  recall: '建物の抽出の再現率（基盤地図情報に対して）',
+  precision: '建物の抽出の適合率（正解の建物データに対して）',
+  recall: '建物の抽出の再現率（正解の建物データに対して）',
   f1: 'F1',
   tp: '一致（TP）',
   fp: '余分（FP）',
@@ -90,7 +90,7 @@ function asSplit(v: unknown): SplitMetrics | undefined {
   return isObj(v) ? (v as SplitMetrics) : undefined;
 }
 
-/** 評価に使った写真の年（year_compare.selected_on_year → protocol.year → 既定の 2018） */
+/** 評価に使った写真の年（year_compare.selected_on_year → protocol.year → 既定の 2014） */
 export function evalYearOf(m: MetricsResponse): number {
   const yc = m.year_compare;
   if (isObj(yc) && isNum(yc.selected_on_year)) return yc.selected_on_year;
@@ -201,7 +201,7 @@ export function getEdgeExcluded(m: MetricsResponse): EdgeExcluded {
   };
 }
 
-// ---- 2018 年の抽出が何も見ていない既存の建物（existing_absent_in_2018） ----
+// ---- 2014 年の抽出が何も見ていない既存の建物（existing_absent_in_2014） ----
 
 export interface AbsentStats {
   n: number;
@@ -212,7 +212,7 @@ export interface AbsentStats {
 }
 
 export function getAbsentStats(m: MetricsResponse, split: SplitKey = 'overall'): AbsentStats | null {
-  const e = m.existing_absent_in_2018;
+  const e = m.existing_absent_in_2014;
   if (!isObj(e)) return null;
   const s = e[split];
   if (!isObj(s) || !isNum(s.n_buildings) || !isNum(s.absent)) return null;

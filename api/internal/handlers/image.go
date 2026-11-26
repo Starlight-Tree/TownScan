@@ -11,9 +11,9 @@ import (
 	"townscan/api/internal/imaging"
 )
 
-// 検出画像の引数の検証（routes.py の candidate_image: year は Literal["2018","2023"]、size は Query(512, ge=64, le=1024)）
+// 検出画像の引数の検証（routes.py の candidate_image: year は Literal["2014","2024"]、size は Query(512, ge=64, le=1024)）
 var (
-	yearLiteral = httpx.Literal{"2018", "2023"}
+	yearLiteral = httpx.Literal{"2014", "2024"}
 	sizeRange   = httpx.IntRange{Ge: imaging.MinSize, Le: imaging.MaxSize}
 )
 

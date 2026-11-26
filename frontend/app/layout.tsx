@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'sw
 
 export const metadata: Metadata = {
   title: 'TownScan',
-  description: '熊本市中心部の航空写真から、新築の候補を棟ごとに検出し、会話で調べるアプリ（たたき台）。',
+  description: 'パリ南西の近郊の航空写真から、新築の候補を棟ごとに検出し、会話で調べるアプリ（たたき台）。',
   other: { 'color-scheme': 'light dark' },
 };
 

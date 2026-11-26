@@ -16,7 +16,7 @@ import numpy as np
 from . import tilemath
 
 SCALES = (1.0, 1.5, 2.0)
-YEARS = (2018, 2023)
+YEARS = (2014, 2024)
 _PROB_RE = re.compile(r"^prob_(\d{4})_(\d+)_(\d+)_s(\d+)\.npy$")
 _STR_TILE_RE = re.compile(r"^(?:z(\d+)-)?(\d+)[-_](\d+)$")
 

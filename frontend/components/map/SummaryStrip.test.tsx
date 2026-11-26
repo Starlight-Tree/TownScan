@@ -18,10 +18,11 @@ function area(id: string, name: string, counts: [number, number, number]): AreaS
   };
 }
 
-const areas = [area('a', 'アサヒ地区', [4, 4, 2]), area('b', 'ノース地区', [5, 3, 1]), area('c', 'ミナミ地区', [1200, 0, 0])];
+// 中央（「2014 年も検出」）は、実際のデータと同じく 0
+const areas = [area('a', 'アサヒ地区', [4, 0, 6]), area('b', 'ノース地区', [5, 0, 4]), area('c', 'ミナミ地区', [1200, 0, 0])];
 
 const strip = () => screen.getByRole('group', { name: '件数の集計' });
-/** 「2018 年は未検出 5」のように、分類ごとの数字を読む */
+/** 「2014 年は未検出 5」のように、分類ごとの数字を読む */
 const countOf = (label: string) => within(strip()).getByText(label).closest('li')!.querySelector('strong')!.textContent;
 
 function setup(filter: MapFilter = ALL_FILTER, list: AreaSummary[] = areas) {
@@ -31,12 +32,12 @@ function setup(filter: MapFilter = ALL_FILTER, list: AreaSummary[] = areas) {
 }
 
 describe('集計の帯', () => {
-  it('絞り込みが無いとき: 対象は「全 N 地区」（地区数は一覧から数える）。3 分類の件数は全地区の合計。解除のボタンは出さない', () => {
+  it('絞り込みが無いとき: 対象は「全 N 地区」（地区数は一覧から数える）。2 分類の件数は全地区の合計。「2014 年も検出」は出さない。解除のボタンは出さない', () => {
     setup();
     expect(strip()).toHaveTextContent('対象全 3 地区');
-    expect(countOf('2018 年は未検出')).toBe('1,209');
-    expect(countOf('2018 年も検出')).toBe('7');
-    expect(countOf('未判定')).toBe('3');
+    expect(countOf('2014 年は未検出')).toBe('1,209');
+    expect(countOf('未判定')).toBe('10');
+    expect(within(strip()).queryByText('2014 年も検出')).not.toBeInTheDocument();
     expect(within(strip()).queryByText(/表示中/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '条件を解除' })).not.toBeInTheDocument();
   });
@@ -50,37 +51,36 @@ describe('集計の帯', () => {
     const { onFilterChange } = setup({ ...ALL_FILTER, areaId: 'b' });
     expect(strip()).toHaveTextContent('対象ノース地区');
     expect(strip()).not.toHaveTextContent('全 3 地区');
-    expect(countOf('2018 年は未検出')).toBe('5');
-    expect(countOf('2018 年も検出')).toBe('3');
-    expect(countOf('未判定')).toBe('1');
+    expect(countOf('2014 年は未検出')).toBe('5');
+    expect(countOf('未判定')).toBe('4');
     await userEvent.click(screen.getByRole('button', { name: '条件を解除' }));
     expect(onFilterChange).toHaveBeenCalledWith(ALL_FILTER);
   });
 
-  it('分類の一部だけを表示しているとき: 3 分類の数字は全体のまま、「全 m 件のうち、表示中 n 件」を足す。外した分類は（非表示）', async () => {
-    const classes = new Set<CandidateClass>(['confirmed_new', 'uncertain']);
+  it('分類の一部だけを表示しているとき: 2 分類の数字は全体のまま、「全 m 件のうち、表示中 n 件」を足す。外した分類は（非表示）', async () => {
+    const classes = new Set<CandidateClass>(['confirmed_new']);
     const { onFilterChange } = setup({ areaId: '', classes });
-    // 全体: 1209+7+3=1219 件のうち、表示中は 1209+3=1212 件
-    expect(strip()).toHaveTextContent('全 1,219 件のうち、表示中 1,212 件');
-    expect(countOf('2018 年も検出')).toBe('7');
-    const omit = within(strip()).getByText('2018 年も検出').closest('li')!;
+    // 全体: 1209+10=1219 件のうち、表示中は 1209 件
+    expect(strip()).toHaveTextContent('全 1,219 件のうち、表示中 1,209 件');
+    expect(countOf('未判定')).toBe('10');
+    const omit = within(strip()).getByText('未判定').closest('li')!;
     expect(omit).toHaveTextContent('（非表示）');
     expect(omit).toHaveAttribute('data-shown', 'false');
-    expect(within(strip()).getByText('2018 年は未検出').closest('li')).not.toHaveTextContent('非表示');
+    expect(within(strip()).getByText('2014 年は未検出').closest('li')).not.toHaveTextContent('非表示');
     await userEvent.click(screen.getByRole('button', { name: '条件を解除' }));
     expect(onFilterChange).toHaveBeenCalledWith(ALL_FILTER);
   });
 
   it('地区と分類の両方を絞っているとき: 全体はその地区の件数', () => {
-    setup({ areaId: 'a', classes: new Set<CandidateClass>(['existing_omission']) });
+    setup({ areaId: 'a', classes: new Set<CandidateClass>(['uncertain']) });
     expect(strip()).toHaveTextContent('対象アサヒ地区');
-    expect(strip()).toHaveTextContent('全 10 件のうち、表示中 4 件');
+    expect(strip()).toHaveTextContent('全 10 件のうち、表示中 6 件');
   });
 
   it('一覧に無い地区の条件・地区の一覧が空のときは、数字を作らず「—」を出す', () => {
     setup({ ...ALL_FILTER, areaId: 'zzz' });
     expect(strip()).toHaveTextContent('対象zzz');
-    expect(countOf('2018 年は未検出')).toBe('—');
+    expect(countOf('2014 年は未検出')).toBe('—');
   });
 
   it('地区の一覧が空（未着）のとき', () => {
@@ -92,7 +92,7 @@ describe('集計の帯', () => {
 
   it('分類の印（色・線・形）を、数字のそばに付ける', () => {
     setup();
-    expect(strip().querySelectorAll('svg.class-swatch')).toHaveLength(3);
+    expect(strip().querySelectorAll('svg.class-swatch')).toHaveLength(2);
   });
 });
 
@@ -103,9 +103,8 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
     setup();
     const boxes = within(group()).getAllByRole('checkbox');
     expect(boxes.map((b) => b.getAttribute('aria-label'))).toEqual([
-      '2018 年は未検出、1,209 件',
-      '2018 年も検出、7 件',
-      '未判定、3 件',
+      '2014 年は未検出、1,209 件',
+      '未判定、10 件',
     ]);
     expect(boxes.every((b) => (b as HTMLInputElement).checked)).toBe(true);
     // ふつうの幅で 1 行に並べるため、対象・分類・解除は、同じ帯の直下の子
@@ -118,12 +117,12 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
   });
 
   it('押すと、その分類だけを切り替えて onFilterChange へ渡す（元の集合を書き換えない）', async () => {
-    const classes = new Set<CandidateClass>(['confirmed_new', 'existing_omission', 'uncertain']);
+    const classes = new Set<CandidateClass>(['confirmed_new', 'uncertain']);
     const { onFilterChange } = setup({ areaId: '', classes });
     await userEvent.click(within(group()).getByRole('checkbox', { name: /未判定/ }));
     const off = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
-    expect([...off.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
-    expect(classes.size).toBe(3);
+    expect([...off.classes]).toEqual(['confirmed_new']);
+    expect(classes.size).toBe(2);
     // 外れているものを押すと、足される
     cleanup();
     const second = setup({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new']) });
@@ -135,7 +134,7 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
   it('地区（areaId）・複数の地区（areaIds・scope）の条件は、切り替えても保つ', async () => {
     const wardFilter: MapFilter = { areaId: '', areaIds: ['a', 'b'], scope: '中央区', classes: new Set<CandidateClass>(['confirmed_new', 'uncertain']) };
     const { onFilterChange } = setup(wardFilter);
-    await userEvent.click(within(group()).getByRole('checkbox', { name: /2018 年は未検出/ }));
+    await userEvent.click(within(group()).getByRole('checkbox', { name: /2014 年は未検出/ }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaIds).toEqual(['a', 'b']);
     expect(next.scope).toBe('中央区');
@@ -144,13 +143,13 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
 
     cleanup();
     const single = setup({ areaId: 'b', classes: new Set<CandidateClass>(['confirmed_new']) });
-    await userEvent.click(within(group()).getByRole('checkbox', { name: /2018 年も検出/ }));
+    await userEvent.click(within(group()).getByRole('checkbox', { name: /未判定/ }));
     expect((single.onFilterChange.mock.calls.at(-1)![0] as MapFilter).areaId).toBe('b');
   });
 
   it('キーボードで操作できる（Tab で届き、Space で切り替わる）。押してもフォーカスは動かない', async () => {
     const { onFilterChange } = setup();
-    const box = within(group()).getByRole('checkbox', { name: /2018 年は未検出/ });
+    const box = within(group()).getByRole('checkbox', { name: /2014 年は未検出/ });
     box.focus();
     await userEvent.keyboard(' ');
     expect(onFilterChange).toHaveBeenCalledTimes(1);
@@ -158,41 +157,40 @@ describe('分類の件数は、そのまま表示の切り替え（チェック�
   });
 
   it('外した分類は（非表示）。表示中の分類にはつけない。チェックと data-shown が状態を持つ', () => {
-    setup({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new', 'uncertain']) });
+    setup({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new']) });
     const items = Array.from(group().querySelectorAll('li'));
-    expect(items.map((li) => li.getAttribute('data-shown'))).toEqual(['true', 'false', 'true']);
-    expect(items.map((li) => li.textContent?.includes('（非表示）'))).toEqual([false, true, false]);
-    expect(within(group()).getByRole('checkbox', { name: /2018 年も検出/ })).not.toBeChecked();
+    expect(items.map((li) => li.getAttribute('data-shown'))).toEqual(['true', 'false']);
+    expect(items.map((li) => li.textContent?.includes('（非表示）'))).toEqual([false, true]);
+    expect(within(group()).getByRole('checkbox', { name: /未判定/ })).not.toBeChecked();
   });
 });
 
 describe('複数の地区（区など。areaIds）の条件', () => {
   const ward = (over: Partial<MapFilter> = {}): MapFilter => ({ ...ALL_FILTER, areaIds: ['a', 'b'], scope: '中央区', ...over });
 
-  it('対象は API の表示用の名前（scope）。「全 N 地区」とは言わない。3 分類の数字は、対象の地区の和', () => {
+  it('対象は API の表示用の名前（scope）。「全 N 地区」とは言わない。2 分類の数字は、対象の地区の和', () => {
     setup(ward());
     expect(strip()).toHaveTextContent('対象中央区');
     expect(strip()).not.toHaveTextContent('全 3 地区');
-    expect(countOf('2018 年は未検出')).toBe('9'); // 4 + 5（ミナミ地区の 1,200 は入らない）
-    expect(countOf('2018 年も検出')).toBe('7');
-    expect(countOf('未判定')).toBe('3');
+    expect(countOf('2014 年は未検出')).toBe('9'); // 4 + 5（ミナミ地区の 1,200 は入らない）
+    expect(countOf('未判定')).toBe('10');
   });
 
   it('scope が無ければ、名前を作らず「N 地区」と言う', () => {
     setup(ward({ scope: undefined }));
     expect(strip()).toHaveTextContent('対象2 地区');
-    expect(countOf('2018 年は未検出')).toBe('9');
+    expect(countOf('2014 年は未検出')).toBe('9');
   });
 
   it('分類の一部だけを表示しているとき: 「全 m 件のうち、表示中 n 件」も、対象の地区の和', () => {
     setup(ward({ classes: new Set<CandidateClass>(['uncertain']) }));
-    expect(strip()).toHaveTextContent('全 19 件のうち、表示中 3 件');
+    expect(strip()).toHaveTextContent('全 19 件のうち、表示中 10 件');
   });
 
   it('対象の地区が一覧に 1 つでも無ければ、足りない和を出さず「—」', () => {
     setup(ward({ areaIds: ['a', 'zzz'] }));
     expect(strip()).toHaveTextContent('対象中央区');
-    expect(countOf('2018 年は未検出')).toBe('—');
+    expect(countOf('2014 年は未検出')).toBe('—');
   });
 
   it('「条件を解除」を出し、押すと ALL_FILTER（areaIds・scope も消える）に戻す', async () => {
@@ -260,17 +258,17 @@ describe('帯の高さが動かない（「全 m 件のうち…」と「条件�
   });
 
   it('分類を外す・地区を選ぶ・解除で、同じ要素の hidden と文が替わる。要素は増えも減りもしない（帯の行の数が変わらない）', () => {
-    const all = new Set<CandidateClass>(['confirmed_new', 'existing_omission', 'uncertain']);
+    const all = new Set<CandidateClass>(['confirmed_new', 'uncertain']);
     const onFilterChange = vi.fn();
     const view = (filter: MapFilter) => <SummaryStrip areas={areas} filter={filter} onFilterChange={onFilterChange} />;
     const { rerender } = render(view({ areaId: '', classes: all }));
     const [s0, r0] = [scope(), reset()];
 
-    rerender(view({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new', 'uncertain']) })); // 分類を 1 つ外す
+    rerender(view({ areaId: '', classes: new Set<CandidateClass>(['confirmed_new']) })); // 分類を 1 つ外す
     expect(scope()).toBe(s0);
     expect(reset()).toBe(r0);
     expect(s0).not.toHaveAttribute('hidden');
-    expect(s0).toHaveTextContent('全 1,219 件のうち、表示中 1,212 件');
+    expect(s0).toHaveTextContent('全 1,219 件のうち、表示中 1,209 件');
     expect(r0).not.toHaveAttribute('hidden');
     expect(screen.getByRole('button', { name: '条件を解除' })).toBe(r0);
 

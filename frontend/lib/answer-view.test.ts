@@ -91,14 +91,14 @@ describe('initialAnswerView（その回答をはじめて開くとき。回答�
       areaId: '',
       areaIds: ['z18-1-2', 'z18-2-2'],
       scope: '中央区',
-      classes: new Set(['confirmed_new', 'existing_omission', 'uncertain']),
+      classes: new Set(['confirmed_new', 'uncertain']),
     });
     expect(s.mapFocus?.bbox).toEqual(BOX_ALL);
   });
 
   it('比較の回答は、地区は比較の条件、分類は常にすべて（filter.cls は並べ替えの分類）。件数のあとの比較は、比較の条件', () => {
     const s = initialAnswerView([{ ...count, filter: { area_id: 'z18-1-2', cls: 'uncertain' } }, { ...compare, filter: { area_id: null, cls: 'uncertain' } }], ctx);
-    expect(s.filter).toEqual({ areaId: '', classes: new Set(['confirmed_new', 'existing_omission', 'uncertain']) });
+    expect(s.filter).toEqual({ areaId: '', classes: new Set(['confirmed_new', 'uncertain']) });
   });
 
   it('壊れた件数（filter が無い）は飛ばす。前の結果の条件を、全地区・全分類にしない', () => {
@@ -114,7 +114,7 @@ describe('initialAnswerView（その回答をはじめて開くとき。回答�
     const s = initialAnswerView([narrow, { ...mapFocus, candidate_ids: ['c-1-2-1', 'c-3-3-1'] }], ctx);
     expect([...s.highlightIds]).toEqual(['c-1-2-1', 'c-3-3-1']);
     expect(s.mapFocus).toMatchObject({ bbox: mapFocus.bbox, ids: ['c-1-2-1', 'c-3-3-1'] });
-    // 2018 年は未検出・描き漏れが足され、地区 z18-3-3 は対象の外なので全地区へ戻る
+    // 2014 年は未検出・描き漏れが足され、地区 z18-3-3 は対象の外なので全地区へ戻る
     expect(s.filter.areaId).toBe('');
     expect(s.filter.classes).toEqual(new Set(['uncertain', 'confirmed_new', 'existing_omission']));
     // 複数あれば最後のもの

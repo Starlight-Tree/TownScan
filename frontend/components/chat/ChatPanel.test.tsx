@@ -154,11 +154,11 @@ describe('チャット', () => {
     await userEvent.type(input(), '渋谷の新築は？{Enter}');
     await screen.findByText('範囲外です');
     const card = screen.getByRole('note', { name: 'この質問は範囲外です' });
-    await userEvent.click(within(card).getByRole('button', { name: '2018 年は未検出の候補は何件ありますか？' }));
+    await userEvent.click(within(card).getByRole('button', { name: '2014 年は未検出の候補は何件ありますか？' }));
     await screen.findByText('件数です');
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body)).messages.at(-1)).toEqual({
       role: 'user',
-      content: '2018 年は未検出の候補は何件ありますか？',
+      content: '2014 年は未検出の候補は何件ありますか？',
     });
   });
 
@@ -319,7 +319,7 @@ describe('新しい会話', () => {
 
 describe('最初の画面（説明・サンプルの質問）', () => {
   const threeAreas: AreaSummary[] = ['a', 'b', 'c'].map((id) => ({ ...areas[0]!, id, name: `地区 ${id}` }));
-  const FACT = (n: string) => `熊本市中心部の${n}地区（1 地区 = 地理院タイル 1 枚 = 約 130 m 四方）`;
+  const FACT = (n: string) => `パリ南西の近郊の${n}地区（1 地区 = 地図タイル 1 枚 = 約 100 m 四方）`;
 
   it('対象の地区数は、読み込んだ地区の数から出す。読み込み前は数を伏せる', () => {
     const actions = makeActions();
@@ -342,11 +342,11 @@ describe('最初の画面（説明・サンプルの質問）', () => {
     expect(screen.queryByText(/12 地区/)).not.toBeInTheDocument();
   });
 
-  it('対象・比較・出典と、2018 年は未検出の「候補」であって新築と断定しない旨を出す', () => {
+  it('対象・比較・出典と、2014 年は未検出の「候補」であって新築と断定しない旨を出す', () => {
     setup({ areas });
     const facts = screen.getByText('対象').closest('dl')!;
-    expect(within(facts).getByText('比較').nextElementSibling).toHaveTextContent('2018 年と 2023 年の航空写真');
-    expect(within(facts).getByText('出典').nextElementSibling).toHaveTextContent('国土地理院（地理院タイル・基盤地図情報）');
+    expect(within(facts).getByText('比較').nextElementSibling).toHaveTextContent('2014 年と 2024 年の航空写真');
+    expect(within(facts).getByText('出典').nextElementSibling).toHaveTextContent('IGN（フランス国土地理院）の航空写真と地図');
     expect(screen.getByText(/新築と断定するものではありません/)).toBeInTheDocument();
   });
 
@@ -962,7 +962,7 @@ describe('同じ文を 2 回出さない（本文とカード）', () => {
   });
 
   it('写真の回答: 本文の中の説明（caption）は、カードでは繰り返さない。カードの写真と、写真を押して詳細を開く操作は出す', async () => {
-    const body = `候補 c-1-2-1 の写真を、2018 年と 2023 年で並べます。${detectionImage.caption}`;
+    const body = `候補 c-1-2-1 の写真を、2014 年と 2024 年で並べます。${detectionImage.caption}`;
     fetchMock.mockResolvedValue(jsonResponse(reply(body, [detectionImage])));
     const { input } = setup();
     await userEvent.type(input(), 'いちばん大きい候補の写真を見せて{Enter}');
@@ -982,21 +982,22 @@ describe('同じ文を 2 回出さない（本文とカード）', () => {
 });
 
 describe('最初の画面: 地区の大きさ・分類の意味・「候補」の言い方', () => {
-  it('1 地区 = 約 130 m 四方であること、地区の名前はタイルの中心の住所であることを書く（丁目・区の全体に読めないように）', () => {
+  it('1 地区 = 約 100 m 四方であること、地区の名前はタイルの中心の住所であることを書く（丁目・区の全体に読めないように）', () => {
     setup({ areas });
     const facts = screen.getByText('対象').closest('dl')!;
-    expect(within(facts).getByText('対象').nextElementSibling).toHaveTextContent('1 地区 = 地理院タイル 1 枚 = 約 130 m 四方');
-    expect(within(facts).getByText('地区の名前').nextElementSibling).toHaveTextContent('タイルの中心にある住所の名前です。丁目や区の全体を数えた値ではありません。');
+    expect(within(facts).getByText('対象').nextElementSibling).toHaveTextContent('1 地区 = 地図タイル 1 枚 = 約 100 m 四方');
+    expect(within(facts).getByText('地区の名前').nextElementSibling).toHaveTextContent('タイルの中心にある住所の通り名と市町村です。通りや市町村の全体を数えた値ではありません。');
   });
 
-  it('見出しは、市全体でなく「熊本市中心部」', () => {
+  it('見出しは「パリ近郊の街の変化」', () => {
     setup();
-    expect(screen.getByRole('heading', { name: '熊本市中心部の変化を、写真と会話で調べる' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'パリ近郊の街の変化を、写真と会話で調べる' })).toBeInTheDocument();
   });
 
-  it('3 つの分類（印・名前・1 行の説明）を、最初の画面に出す。説明は詳細の画面と同じ文（CLASS_INFO.summary）', () => {
+  it('2 つの分類（印・名前・1 行の説明）を、最初の画面に出す。説明は詳細の画面と同じ文（CLASS_INFO.summary）', () => {
     setup();
-    const group = screen.getByText(/次の 3 つの分類に分けています/).closest('.welcome__classes') as HTMLElement;
+    const group = screen.getByText(/次の 2 つの分類に分けています/).closest('.welcome__classes') as HTMLElement;
+    expect(group.querySelectorAll('.class-guide__item')).toHaveLength(2);
     for (const cls of CLASS_ORDER) {
       const item = group.querySelector(`[data-class="${cls}"]`) as HTMLElement;
       expect(item).toHaveTextContent(CLASS_INFO[cls].label);
@@ -1005,20 +1006,20 @@ describe('最初の画面: 地区の大きさ・分類の意味・「候補」�
     }
   });
 
-  it('「候補」は 3 分類の合計の意味で、新築と断定しない。最初の画面は短く、くわしいことは「くわしく」の中（閉じた状態）', () => {
+  it('「候補」は 2 分類の合計の意味で、新築と断定しない。最初の画面は短く、くわしいことは「くわしく」の中（閉じた状態）', () => {
     setup();
     const lead = document.querySelector('.welcome__lead') as HTMLElement;
-    expect(lead).toHaveTextContent('建物データに載っていない建物の候補');
+    expect(lead).toHaveTextContent('2024 年に現れた建物の候補');
     expect(lead).toHaveTextContent('新築と断定するものではありません');
-    expect(lead).not.toHaveTextContent('2018 年は未検出');
+    expect(lead).not.toHaveTextContent('2014 年は未検出');
     expect(document.querySelector('.welcome__caution')).toBeNull(); // 大きな注意書きの枠は出さない
-    expect(screen.getByText(/3 つの合計が、候補の数です/)).toBeInTheDocument();
+    expect(screen.getByText(/2 つの合計が、候補の数です/)).toBeInTheDocument();
     const more = document.querySelector('details.welcome__more') as HTMLDetailsElement;
     expect(more).not.toBeNull();
     expect(more.open).toBe(false);
     // 最初に見えるのは、見出し・説明・地図のボタン・質問の例。対象・分類・出典・範囲外の質問は、くわしくの中
     expect(more).toContainElement(screen.getByText('対象'));
-    expect(more).toContainElement(screen.getByText(/次の 3 つの分類に分けています/));
+    expect(more).toContainElement(screen.getByText(/次の 2 つの分類に分けています/));
     expect(more).toContainElement(screen.getByText('範囲外の質問は、断って理由を返します'));
     expect(more).not.toContainElement(screen.getByRole('button', { name: '解析した地区を地図で見る' }));
     expect(more).not.toContainElement(screen.getByText('まず、こんな質問から'));

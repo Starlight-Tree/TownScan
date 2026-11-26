@@ -54,12 +54,49 @@ def _is_safe_name(name: str) -> bool:
     return True
 
 
+IGN_ENDPOINT = "https://data.geopf.fr/geocodage/reverse"
+IGN_NAME_SOURCE = "ign_reverse_geocoder"
+# 県 92 の選んだ地区の市町村（INSEE コード → カタカナ）。無いコードは、応答の市町村名をそのまま使う
+COMMUNES_JA = {
+    "92019": "シャトネ・マラブリー", "92020": "シャティヨン", "92023": "クラマール", "92032": "フォントネー・オ・ローズ",
+    "92048": "ムードン", "92050": "ナンテール", "92060": "ル・プレシ・ロバンソン", "92063": "リュエイユ・マルメゾン",
+}
+IGN_DEPARTMENT = "オー・ド・セーヌ県"
+
+
+def build_area_name_ign(response) -> dict:
+    """IGN の逆ジオコーダの応答（GeoJSON）→ {name, ward, municipality, name_source}。name は通り名、ward は市町村。"""
+    feats = response.get("features") if isinstance(response, dict) else None
+    props = feats[0].get("properties") if isinstance(feats, list) and feats and isinstance(feats[0], dict) else None
+    if not isinstance(props, dict):
+        return {"name": None, "ward": None, "municipality": None, "name_source": None}
+
+    def safe(value):
+        s = _text(value)
+        if s is None:
+            return None
+        s = s.replace("'", "’")  # フランス語の通り名の ' は、画面で安全な ’ にする
+        s = s[:1].upper() + s[1:]
+        return s if _is_safe_name(s) else None
+
+    name = safe(props.get("street") or props.get("name"))
+    ward = COMMUNES_JA.get(_text(props.get("citycode")) or "") or safe(props.get("city"))
+    return {
+        "name": name,
+        "ward": ward,
+        "municipality": IGN_DEPARTMENT if (_text(props.get("citycode")) or "").startswith("92") else None,
+        "name_source": IGN_NAME_SOURCE if (name or ward) else None,
+    }
+
+
 def build_area_name(response) -> dict:
     """逆ジオコーダの応答 → {name, ward, municipality, name_source}。どれも分からなければ None。
 
     name は町丁目名（lv01Nm）、ward は muniCd（43101〜43105）から。名前も区も取れなければ name_source も None。
     名前が空・長すぎる・安全でない文字を含むときは name を None にする（区は固定の表から引くので、そのまま使う）。
     """
+    if isinstance(response, dict) and "features" in response:
+        return build_area_name_ign(response)
     results = response.get("results") if isinstance(response, dict) else None
     if not isinstance(results, dict):
         return {"name": None, "ward": None, "municipality": None, "name_source": None}

@@ -274,7 +274,7 @@ func seed(t *testing.T, url string) {
 		`INSERT INTO runs (run_id, kind, created_at, model) VALUES ('e2e', 'synthetic', '2026-11-24T12:00:00+09:00', 'm')`,
 		`INSERT INTO areas (run_id, id, z, x, y, west, south, east, north, centroid_lon, centroid_lat, name, ward, municipality) VALUES ('e2e', 'z18-1-1', 18, 1, 1, 130.5, 32.5, 130.75, 32.75, 130.625, 32.625, '試験町', '中央区', '43101')`,
 		`INSERT INTO candidates (id, run_id, area_id, class, area_m2, west, south, east, north, centroid_lon, centroid_lat, geom, evidence, reason) VALUES
-		 ('c-1-1-1', 'e2e', 'z18-1-1', 'confirmed_new', 300.5, 1, 2, 3, 4, 2, 3, '{"type":"Polygon","coordinates":[]}', '{}', 'new_absent_2018'),
+		 ('c-1-1-1', 'e2e', 'z18-1-1', 'confirmed_new', 300.5, 1, 2, 3, 4, 2, 3, '{"type":"Polygon","coordinates":[]}', '{}', 'new_absent_2014'),
 		 ('c-1-1-2', 'e2e', 'z18-1-1', 'uncertain', 100, 1, 2, 3, 4, 2, 3, '{"type":"Polygon","coordinates":[]}', '{"b": 1, "a": 2}', 'edge')`,
 		`INSERT INTO metrics (run_id, body) VALUES ('e2e', '{"reference": "e2e"}')`,
 	}

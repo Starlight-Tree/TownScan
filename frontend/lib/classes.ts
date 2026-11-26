@@ -18,28 +18,28 @@ export interface ClassInfo {
 
 export const CLASS_INFO: Record<CandidateClass, ClassInfo> = {
   confirmed_new: {
-    label: '2018 年は未検出',
-    short: '2018 年は未検出',
+    label: '2014 年は未検出',
+    short: '2014 年は未検出',
     cssVar: '--class-new',
     color: 'var(--class-new)',
     dash: undefined,
     shape: 'circle',
     fillOpacity: 0.38,
-    summary: '2023 年の写真で建物を検出し、2018 年の写真では検出していません。',
+    summary: '2024 年の写真で建物を検出し、2014 年の写真では検出していません。',
     description:
-      '2023 年の写真から建物らしい塊が見つかり、建物データ（基盤地図情報 2018 年 10 月版）には載っていません。2018 年の写真のモデルの結果では、同じ場所に建物が見つかっていません。新しく建った可能性もありますが、2018 年の写真の見落としで、前からある建物も混ざります。写真で確かめてください。',
+      '2024 年の写真から建物らしい塊が見つかり、2014 年の写真のモデルの結果では、同じ場所に建物が見つかっていません。新しく建った可能性もありますが、2014 年の写真の見落としで、前からある建物も混ざります。写真で確かめてください。',
   },
   existing_omission: {
-    label: '2018 年も検出',
-    short: '2018 年も検出',
+    label: '2014 年も検出',
+    short: '2014 年も検出',
     cssVar: '--class-omit',
     color: 'var(--class-omit)',
     dash: '7 5',
     shape: 'square',
     fillOpacity: 0.2,
-    summary: '2018 年の写真でも、建物を検出しています。',
+    summary: '2014 年の写真でも、建物を検出しています。',
     description:
-      '建物データには載っていませんが、2018 年の写真でも同じ場所に建物を検出しています。新しく建ったものではなく、建物データの描き漏れの可能性が高い候補です。モデルが両方の年で同じ誤検出をしている場合も、ここに入ります。',
+      '2014 年の写真でも同じ場所に建物を検出しています。この解析では、もとからある建物として候補にしていません。',
   },
   uncertain: {
     label: '未判定',
@@ -51,11 +51,12 @@ export const CLASS_INFO: Record<CandidateClass, ClassInfo> = {
     fillOpacity: 0.1,
     summary: '写真の端で切れているもの（端のため未判定）と、どちらとも言えないもの（要確認）です。',
     description:
-      '2023 年の写真で建物らしい塊が見つかりましたが、2018 年の写真で検出したかどうかを分けていない候補です。目で確かめてください。',
+      '2024 年の写真で建物らしい塊が見つかりましたが、2014 年の写真で検出したかどうかを分けていない候補です。目で確かめてください。',
   },
 };
 
-export const CLASS_ORDER: CandidateClass[] = ['confirmed_new', 'existing_omission', 'uncertain'];
+// 画面に出す分類。「2014 年も検出」（existing_omission）は、この解析では候補にしていないので出さない（ADR 0015）
+export const CLASS_ORDER: CandidateClass[] = ['confirmed_new', 'uncertain'];
 
 /** 未判定の候補は、理由で呼び分ける（API の chat/results.go の heldLabels と同じ） */
 export const HELD_LABELS: Partial<Record<CandidateReason, string>> = {
@@ -74,9 +75,9 @@ export function isCandidateClass(value: unknown): value is CandidateClass {
 }
 
 export const REASON_TEXT: Record<CandidateReason, string> = {
-  new_absent_2018: '2018 年の写真のモデルが、この範囲に建物をほとんど見ていません。',
-  present_2018: '2018 年の写真のモデルが、この範囲の半分以上を建物として見ています。',
-  ambiguous: '2018 年の写真の結果が中間で、検出したともしていないとも言えません。',
+  new_absent_2014: '2014 年の写真のモデルが、この範囲に建物をほとんど見ていません。',
+  present_2014: '2014 年の写真のモデルが、この範囲の半分以上を建物として見ています。',
+  ambiguous: '2014 年の写真の結果が中間で、検出したともしていないとも言えません。',
   edge: '写真（タイル）の端に接していて建物が切れている可能性があるため、分けていません。面積は実際より小さい場合があります。',
   small: '面積が小さい（20 m² 未満）ため、判定の対象から外す基準に近い候補です。',
 };
@@ -88,10 +89,9 @@ export function reasonText(reason: string | undefined): string | null {
 
 // 根拠の数字（evidence）の表示名と読み方。ratio は 0〜1 を % で、prob は確率として出す
 export const EVIDENCE_FIELDS = [
-  { key: 'prob_2023_mean', label: '2023 年の建物らしさ（平均）', kind: 'prob', hint: '高いほど、2023 年の写真で建物らしい' },
-  { key: 'ov_2018', label: '2018 年の抽出が覆う割合', kind: 'ratio', hint: '0.5 以上なら「2018 年も検出」側' },
-  { key: 'prob_2018_p90', label: '2018 年の建物らしさ（上位 10% の値）', kind: 'prob', hint: '低いほど、2018 年の写真で何も見えていない' },
-  { key: 'ov_kiban', label: '建物データが覆う割合', kind: 'ratio', hint: '基盤地図情報（2018 年 10 月版）に載っている割合' },
+  { key: 'prob_2024_mean', label: '2024 年の建物らしさ（平均）', kind: 'prob', hint: '高いほど、2024 年の写真で建物らしい' },
+  { key: 'ov_2014', label: '2014 年の抽出が覆う割合', kind: 'ratio', hint: '0.5 以上なら、2014 年の写真にもある建物（候補にしない）' },
+  { key: 'prob_2014_p90', label: '2014 年の建物らしさ（上位 10% の値）', kind: 'prob', hint: '低いほど、2014 年の写真で何も見えていない' },
   { key: 'edge_touch', label: 'タイルの縁に接する', kind: 'bool', hint: '切れた建物の可能性' },
 ] as const;
 

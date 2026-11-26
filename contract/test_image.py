@@ -3,7 +3,7 @@
 画素の完全な一致は求めない（縮小の方法は実装ごとに違ってよい）。契約にするのは、PNG であること・大きさ・年ごとの写真・向きと範囲
 （候補が真ん中・余白は約 20 m・タイルの外へ出ない）・輪郭の色と線種・入力の検証・写真が使えないときの 404。
 
-写真タイルは合成（scripts/test-contract.sh が置く）: R=列・G=行（タイル内の画素の位置）、B=年（2018→50、2023→200）。
+写真タイルは合成（scripts/test-contract.sh が置く）: R=列・G=行（タイル内の画素の位置）、B=年（2014→50、2024→200）。
 これで、切り出した画像の画素から、元のタイルのどこを切ったか（位置・範囲・向き）と、どの年の写真かが分かる。
 """
 
@@ -31,7 +31,7 @@ A1_UNCERTAIN_EDGE = "c-226249-105759-1"  # 判定保留。(216,200,256,236) = �
 
 
 def fetch(api, cid: str = A1_NEW, **params):
-    params.setdefault("year", 2018)
+    params.setdefault("year", 2014)
     return api.get(f"/api/candidates/{cid}/image", params=params)
 
 
@@ -62,7 +62,7 @@ def test_size_within_64_and_1024_is_the_square_side(api, size):
     assert decode(fetch(api, size=size)).size == (size, size)
 
 
-@pytest.mark.parametrize("year, blue", [(2018, 50), (2023, 200)])
+@pytest.mark.parametrize("year, blue", [(2014, 50), (2024, 200)])
 def test_each_year_shows_its_own_photo(api, year, blue):
     img = decode(fetch(api, year=year))
     for xy in ((2, 2), (509, 2), (2, 509)):  # 輪郭から遠い隅（余白の約 20 m の外側）
@@ -95,7 +95,7 @@ def test_crop_never_leaves_the_tile_and_slides_inside_when_the_candidate_is_at_t
     g_top, g_bottom = img.getpixel((100, 16))[1], img.getpixel((100, 496))[1]
     assert 128 <= r_left <= 148 and 128 <= g_top <= 148, (r_left, g_top)
     assert r_right >= 240 and g_bottom >= 240, (r_right, g_bottom)
-    # 外側を埋めた画素（黒・透明など）が無い: 輪郭・縁取り以外の画素は、すべて 2018 年の写真（B=50）
+    # 外側を埋めた画素（黒・透明など）が無い: 輪郭・縁取り以外の画素は、すべて 2014 年の写真（B=50）
     for color, n in color_counts(img).items():
         if color != WHITE and color not in OUTLINE.values():
             assert abs(color[2] - 50) <= 3, (color, n)
@@ -143,13 +143,13 @@ def test_size_out_of_range_or_not_an_integer_is_422(api, size):
     assert_validation_error(fetch(api, size=size), "query", "size")
 
 
-@pytest.mark.parametrize("year", [2017, 2019, 2020, 2024, 0, -1, "abc", "", "2018/../../etc/passwd", "../2018", "2018.0", " 2018", "02018", "1e3", "2018 "])
-def test_year_must_be_exactly_2018_or_2023(api, year):
+@pytest.mark.parametrize("year", [2017, 2019, 2020, 2025, 0, -1, "abc", "", "2014/../../etc/passwd", "../2014", "2014.0", " 2014", "02018", "1e3", "2014 "])
+def test_year_must_be_exactly_2014_or_2024(api, year):
     assert_validation_error(fetch(api, year=year), "query", "year")
 
 
 def test_year_with_a_nul_byte_is_422(api):
-    assert_validation_error(api.get(f"/api/candidates/{A1_NEW}/image?year=2018%00"), "query", "year")
+    assert_validation_error(api.get(f"/api/candidates/{A1_NEW}/image?year=2014%00"), "query", "year")
 
 
 def test_year_is_required(api):
@@ -158,7 +158,7 @@ def test_year_is_required(api):
 
 def test_validation_comes_before_the_lookup(api):
     # 候補が無くても、引数が不正なら 422（404 より先）
-    assert_validation_error(api.get("/api/candidates/c-1-2-3/image", params={"year": 2024}), "query", "year")
+    assert_validation_error(api.get("/api/candidates/c-1-2-3/image", params={"year": 2025}), "query", "year")
 
 
 def test_unknown_candidate_is_404(api):
@@ -167,25 +167,25 @@ def test_unknown_candidate_is_404(api):
 
 @pytest.mark.parametrize("cid", ["x", "c-1-2", "c-1-2-3x", "c-1-2-3'--", "c-12345678-1-1"])
 def test_malformed_candidate_id_is_422(api, cid):
-    assert_validation_error(api.get(f"/api/candidates/{quote(cid, safe='')}/image", params={"year": 2018}), "path", "candidate_id")
+    assert_validation_error(api.get(f"/api/candidates/{quote(cid, safe='')}/image", params={"year": 2014}), "path", "candidate_id")
 
 
 @pytest.mark.parametrize("cid", ["..%2F..%2Fetc%2Fpasswd", "%2e%2e/%2e%2e/etc/passwd", "c-..%2F..%2Fx-1-1"])
 def test_path_traversal_in_the_id_is_never_served(api, cid):
-    resp = api.get(f"/api/candidates/{cid}/image?year=2018")
+    resp = api.get(f"/api/candidates/{cid}/image?year=2014")
     assert resp.status in (404, 422), resp
     assert_error(resp, resp.status)
 
 
 def test_image_only_allows_get(api):
-    assert_error(api.post(f"/api/candidates/{A1_NEW}/image?year=2018"), 405, "method_not_allowed")
+    assert_error(api.post(f"/api/candidates/{A1_NEW}/image?year=2014"), 405, "method_not_allowed")
 
 
 # ---- 写真が使えないとき（404 tile_not_found）。故障は、写真タイルを置くときに仕込んである（support/expected.py の TILE_FAULTS） ----
 
 def test_other_year_of_the_same_area_still_works(api):
-    # 試験町は 2018 年のファイルだけが無い。2023 年は読める
-    assert decode(fetch(api, expected.BIGGEST_NEW, year=2023)).size == (512, 512)
+    # 試験町は 2014 年のファイルだけが無い。2024 年は読める
+    assert decode(fetch(api, expected.BIGGEST_NEW, year=2024)).size == (512, 512)
 
 
 @pytest.mark.parametrize("area_id, year, fault", [(a, y, f) for (a, y), f in expected.TILE_FAULTS.items()], ids=lambda v: str(v))

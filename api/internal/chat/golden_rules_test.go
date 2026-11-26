@@ -29,6 +29,10 @@ func TestGoldenRulesMatchPythonIncludingDotlessI(t *testing.T) {
 		if want && (containsRune(text, 'ı') || containsRune(text, 'İ')) {
 			dotless++
 		}
+		// Python のあとに、意図して変えた語（対象をフランスに変えた。ADR 0015）。変えた語は rules_test.go の TestFranceWords で確かめる
+		if name == "DOMAIN" && text == "熊本" {
+			want = false
+		}
 		if got := r.matches(text); got != want {
 			t.Errorf("%s.matches(%+q) = %v, Python は %v", name, text, got, want)
 		}

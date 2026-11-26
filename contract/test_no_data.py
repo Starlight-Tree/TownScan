@@ -18,7 +18,7 @@ NO_DATA_PATHS = [
     "/api/candidates.geojson",
     "/api/metrics",
     "/api/candidates/c-1-2-3",
-    "/api/candidates/c-1-2-3/image?year=2018",
+    "/api/candidates/c-1-2-3/image?year=2014",
 ]
 DB_DOWN_TIMEOUT = 45.0  # 接続の待ちの上限（実装の 10 秒前後）を見込む
 

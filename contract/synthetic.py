@@ -29,25 +29,25 @@ AREA_DEFS = [
 # 地区ごとの候補: (左, 上, 右, 下)（タイル内のピクセル）, class, reason, edge_touch
 CANDIDATE_DEFS = {
     0: [
-        ((100, 100, 140, 130), "confirmed_new", "new_absent_2018", False),
-        ((30, 40, 50, 55), "existing_omission", "present_2018", False),
+        ((100, 100, 140, 130), "confirmed_new", "new_absent_2014", False),
+        ((30, 40, 50, 55), "existing_omission", "present_2014", False),
         ((216, 200, 256, 236), "uncertain", "edge", True),
     ],
     1: [
-        ((60, 60, 110, 100), "confirmed_new", "new_absent_2018", False),
-        ((150, 150, 170, 165), "confirmed_new", "new_absent_2018", False),
+        ((60, 60, 110, 100), "confirmed_new", "new_absent_2014", False),
+        ((150, 150, 170, 165), "confirmed_new", "new_absent_2014", False),
         ((0, 10, 24, 30), "uncertain", "edge", True),
     ],
     2: [
-        ((90, 90, 120, 115), "existing_omission", "present_2018", False),
-        ((10, 200, 30, 220), "existing_omission", "present_2018", False),
-        ((140, 30, 160, 45), "confirmed_new", "new_absent_2018", False),
+        ((90, 90, 120, 115), "existing_omission", "present_2014", False),
+        ((10, 200, 30, 220), "existing_omission", "present_2014", False),
+        ((140, 30, 160, 45), "confirmed_new", "new_absent_2014", False),
     ],
 }
 EVIDENCE = {
-    "confirmed_new": {"prob_2023_mean": 0.91, "ov_2018": 0.02, "prob_2018_p90": 0.05, "ov_kiban": 0.0},
-    "existing_omission": {"prob_2023_mean": 0.88, "ov_2018": 0.83, "prob_2018_p90": 0.77, "ov_kiban": 0.05},
-    "uncertain": {"prob_2023_mean": 0.74, "ov_2018": 0.30, "prob_2018_p90": 0.40, "ov_kiban": 0.10},
+    "confirmed_new": {"prob_2024_mean": 0.91, "ov_2014": 0.02, "prob_2014_p90": 0.05, "ov_kiban": 0.0},
+    "existing_omission": {"prob_2024_mean": 0.88, "ov_2014": 0.83, "prob_2014_p90": 0.77, "ov_kiban": 0.05},
+    "uncertain": {"prob_2024_mean": 0.74, "ov_2014": 0.30, "prob_2014_p90": 0.40, "ov_kiban": 0.10},
 }
 
 
@@ -125,7 +125,7 @@ def candidates_geojson() -> dict:
 
 def buildings_geojson(year: int) -> dict:
     boxes = [(20, 20, 45, 40), (150, 60, 175, 85), (60, 180, 90, 205)]
-    if year == 2023:
+    if year == 2024:
         boxes += [(100, 100, 140, 130), (200, 20, 220, 40)]
     features = []
     for a in areas():
@@ -178,8 +178,8 @@ def write_run(out_dir: Path) -> None:
     files = {
         "run.json": run_json(),
         "areas.json": areas(),
-        "buildings_2018.geojson": buildings_geojson(2018),
-        "buildings_2023.geojson": buildings_geojson(2023),
+        "buildings_2014.geojson": buildings_geojson(2014),
+        "buildings_2024.geojson": buildings_geojson(2024),
         "candidates.geojson": candidates_geojson(),
         "eval.json": eval_json(),
     }
@@ -188,8 +188,8 @@ def write_run(out_dir: Path) -> None:
 
 
 def write_tiles(tiles_dir: Path) -> None:
-    """R=列, G=行（タイル内の位置が画素から分かる）, B=年（2018→50、2023→200）の傾斜画像。"""
-    for year, blue in ((2018, 50), (2023, 200)):
+    """R=列, G=行（タイル内の位置が画素から分かる）, B=年（2014→50、2024→200）の傾斜画像。"""
+    for year, blue in ((2014, 50), (2024, 200)):
         d = tiles_dir / str(year)
         d.mkdir(parents=True, exist_ok=True)
         for a in areas():

@@ -1,10 +1,12 @@
 import type { BBox, CandidateFeature, CandidateGeometry, AreaSummary } from './api-types';
 import { formatNumber } from './format';
 
-// 地図タイルは、仕様 §7 のとおり地理院から直接読む（API の呼び出しではないので、同じオリジンの縛りの外）。
-const GSI_XYZ = 'https://cyberjapandata.gsi.go.jp/xyz';
+// 地図タイルは、仕様 §7 のとおり配信元（フランス国土地理院 IGN の公開タイル配信）から直接読む（API の呼び出しではないので、同じオリジンの縛りの外）。
+const IGN_WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&STYLE=normal';
+const ignUrl = (layer: string, matrixSet: string, format: string) =>
+  `${IGN_WMTS}&LAYER=${layer}&FORMAT=${format}&TILEMATRIXSET=${matrixSet}&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
 
-export type BaseLayerId = 'std' | 'photo2018' | 'photo2023';
+export type BaseLayerId = 'std' | 'photo2014' | 'photo2024';
 
 export interface BaseLayerDef {
   id: BaseLayerId;
@@ -17,26 +19,26 @@ export interface BaseLayerDef {
 }
 
 export const BASE_LAYERS: Record<BaseLayerId, BaseLayerDef> = {
-  std: { id: 'std', label: '標準地図', photo: false, url: `${GSI_XYZ}/std/{z}/{x}/{y}.png`, maxNativeZoom: 18 },
-  photo2018: {
-    id: 'photo2018',
-    label: '2018 年の写真',
+  std: { id: 'std', label: '標準地図', photo: false, url: ignUrl('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'PM_0_19', 'image/png'), maxNativeZoom: 19 },
+  photo2014: {
+    id: 'photo2014',
+    label: '2014 年の写真',
     photo: true,
-    year: 2018,
-    url: `${GSI_XYZ}/nendophoto2018/{z}/{x}/{y}.png`,
+    year: 2014,
+    url: ignUrl('ORTHOIMAGERY.ORTHOPHOTOS2014', 'PM_0_18', 'image/jpeg'),
     maxNativeZoom: 18,
   },
-  photo2023: {
-    id: 'photo2023',
-    label: '2023 年の写真',
+  photo2024: {
+    id: 'photo2024',
+    label: '2024 年の写真',
     photo: true,
-    year: 2023,
-    url: `${GSI_XYZ}/nendophoto2023/{z}/{x}/{y}.png`,
-    maxNativeZoom: 18,
+    year: 2024,
+    url: ignUrl('ORTHOIMAGERY.ORTHOPHOTOS2024', 'PM_6_19', 'image/jpeg'),
+    maxNativeZoom: 19,
   },
 };
 
-export const BASE_LAYER_ORDER: BaseLayerId[] = ['photo2023', 'photo2018', 'std'];
+export const BASE_LAYER_ORDER: BaseLayerId[] = ['photo2024', 'photo2014', 'std'];
 
 /** 写真のタイルが、いま見えている範囲に届いたか。ok=すべて、partial=一部は標準地図、none=1 枚も無い */
 export type TileStatus = 'ok' | 'partial' | 'none';
@@ -58,14 +60,14 @@ export function displayStatusText(base: BaseLayerId, tile: TileStatus, candidate
 export const STD_URL = BASE_LAYERS.std.url;
 
 export const ATTRIBUTION =
-  '出典：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">国土地理院（地理院タイル）</a>';
+  '出典：<a href="https://cartes.gouv.fr/cgu/" target="_blank" rel="noopener noreferrer">IGN（フランス国土地理院）</a>';
 
 /** 404 のタイルに出す透明な 1×1 PNG（壊れた画像のアイコンを出さない） */
 export const BLANK_TILE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=';
 
-export const DEFAULT_CENTER: [number, number] = [32.8032, 130.7417]; // 熊本市中心部（緯度, 経度）
-export const DEFAULT_ZOOM = 14;
+export const DEFAULT_CENTER: [number, number] = [48.8376, 2.2474]; // パリ南西の近郊（緯度, 経度）
+export const DEFAULT_ZOOM = 12;
 export const MIN_ZOOM = 10;
 export const MAX_ZOOM = 20;
 /** このズーム以上で候補を形（ポリゴン）で描く。未満は印（点）。z17 は約 1 m/px */

@@ -101,7 +101,7 @@ describe('標準地図のときは、写真が無い旨のタイル通知を出�
     await userEvent.click(screen.getByRole('button', { name: 'タイル（partial）' }));
     expect(tileNotice()).toBe('');
     // 写真の地図へ戻すと、同じタイルの状態で、通知が出る
-    await userEvent.click(screen.getByRole('button', { name: '2023 年の写真' }));
+    await userEvent.click(screen.getByRole('button', { name: '2024 年の写真' }));
     expect(tileNotice()).toContain('この範囲の一部には、この年の写真がありません');
   });
 });

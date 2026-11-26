@@ -206,11 +206,11 @@ func (m *MockModel) refusal(text string, s *slots) *Call {
 			if len(names) > 0 {
 				listing = fmt.Sprintf("解析した地区は、%s です。", strings.Join(names, "、"))
 			}
-			msg := fmt.Sprintf("「%s」は、解析した地区に含まれていません。対象は熊本市中心部の、解析した地区だけです。%s", label, listing)
+			msg := fmt.Sprintf("「%s」は、解析した地区に含まれていません。対象はパリ南西の近郊の、解析した地区だけです。%s", label, listing)
 			if len(findUnsupportedNumbersLikePython(msg, genericOf(map[string]string{"message": msg}))) > 0 {
 				// 利用者の語に漢数字+助数詞（三年町など）が入ると、数字の検査で本文だけが差し替わる。語を写さない形にする
 				// （検査は、service が模擬モデルの返答にかける guardTemplateNumbers と同じ。Python と同じ範囲）
-				msg = "その場所は、解析した地区に含まれていません。対象は熊本市中心部の、解析した地区だけです。" + listing
+				msg = "その場所は、解析した地区に含まれていません。対象はパリ南西の近郊の、解析した地区だけです。" + listing
 			}
 			var sug []string
 			if len(names) > 0 {

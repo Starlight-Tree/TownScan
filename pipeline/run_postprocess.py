@@ -2,8 +2,8 @@
 
 入力: <data-root>/<run>/colab（meta*.json・prob_*.npy）、基盤地図情報の BldA、あれば <data-root>/<run>/geocode.json。
 地区名が取れない地区（geocode.json が無い・応答が想定外）は、name=「地区 {x}-{y}」・ward=「区不明」・name_source="fallback"（geocode.area_fields）。
-出力: <data-root>/<run>/out（run.json・areas.json・buildings_2018.geojson・buildings_2023.geojson・candidates.geojson・eval.json）。
-流れ: 評価（2018 年。調整用で倍率・閾値を選ぶ）→ 選んだ値で 2 時点の建物ポリゴン → 差分と 3 分類。
+出力: <data-root>/<run>/out（run.json・areas.json・buildings_2014.geojson・buildings_2024.geojson・candidates.geojson・eval.json）。
+流れ: 評価（2014 年。調整用で倍率・閾値を選ぶ）→ 選んだ値で 2 時点の建物ポリゴン → 差分と 3 分類。
 """
 
 from __future__ import annotations
@@ -117,6 +117,20 @@ def reference_notes(vintage: dict, kept: int, kind: str) -> list[str]:
     return notes
 
 
+def unmeasured_eval(scale: float, threshold: float) -> dict:
+    """精度を測っていない解析結果の eval.json。数字の項目は書かない（画面と回答は「未測定」を出す）。"""
+    return {
+        "reference": None,
+        "chosen": {"scale": scale, "threshold": threshold, "selected_by": "fixed"},
+        "protocol": {"year": colabio.YEARS[-1]},
+        "new_building_recall": None,
+        "notes": [
+            "建物の抽出と新築の精度は、まだ測っていない。",
+            f"倍率 {scale}・閾値 {threshold} は、写真に重ねた図を目で見て選んだ、検証していない値。",
+        ],
+    }
+
+
 def run_postprocess(
     data_root,
     run: str = "run1",
@@ -130,18 +144,23 @@ def run_postprocess(
     scales=evaluate.DEFAULT_SCALES,
     thresholds=evaluate.DEFAULT_THRESHOLDS,
     geocode_path=None,
+    fixed: tuple[float, float] | None = None,
     log: Callable[[str], None] = print,
 ) -> dict:
+    """fixed=(倍率, 閾値) を渡すと、正解の建物データを使わない（精度は未測定。差分は写真だけで行う。ADR 0015）。"""
     data_root = Path(data_root)
     run_dir = data_root / run
     colab_dir = run_dir / "colab"
     out_dir = Path(out_dir) if out_dir else run_dir / "out"
-    diff_params = diff_params or diff.DiffParams()
+    diff_params = diff_params or diff.DiffParams(drop_present_before=fixed is not None)
     geocode_path = Path(geocode_path) if geocode_path else run_dir / "geocode.json"
 
     meta = colabio.read_meta(colab_dir)
     kind = resolve_kind(meta, kind)
-    kiban_dir = default_kiban_dir(kind, data_root) if kiban_dir is None else Path(kiban_dir)
+    if fixed is None:
+        kiban_dir = default_kiban_dir(kind, data_root) if kiban_dir is None else Path(kiban_dir)
+    else:
+        scales = (fixed[0],)
     run_id = run_id or default_run_id(kind, run)
     created = created or datetime.now(UTC).isoformat(timespec="seconds")
     notes: list[str] = []
@@ -158,63 +177,71 @@ def run_postprocess(
         raise RuntimeError(f"処理できるタイルが 2 枚未満: {len(tiles)}（入力 {colab_dir}）")
     log(f"タイル {len(tiles)} 枚（入力 {len(all_tiles)}）。kind={kind} run_id={run_id}")
 
-    # 2. 基盤地図情報（全タイルの範囲だけを読む）
-    files = kiban.find_xml_files(kiban_dir)
-    if not files:
-        raise FileNotFoundError(f"基盤地図情報の BldA の XML が見つからない: {kiban_dir}")
-    bboxes = {t: tilemath.tile_bbox_lonlat(*t) for t in tiles}
-    kstats = kiban.LoadStats()
-    kb = kiban.load_buildings(files, kiban.union_bbox(bboxes.values(), KIBAN_PAD_DEG), stats=kstats)
-    log(f"基盤地図情報: {kstats.blocks} 棟を読み、範囲内 {kstats.kept} 棟（飛ばした {dict(kstats.skipped)}）")
-    if kstats.skipped:
-        notes.append(f"基盤地図情報で読めずに飛ばした建物: {dict(kstats.skipped)}")
-    tree = STRtree([b.geometry for b in kb])
-    kiban_in = {t: [kb[int(i)].geometry for i in tree.query(box(*bboxes[t]))] for t in tiles}
-    for t in tiles:
-        if not kiban_in[t]:
-            notes.append(f"{tilemath.area_id(*t)} は基盤地図情報の建物が 0 棟（郊外・水域などで実際に無いこともある。フォルダの取り違えでないか確かめる）")
+    if fixed is not None:
+        # 2・3. 正解の建物データは使わない。倍率と閾値は固定で、精度は未測定
+        kiban_in = {t: [] for t in tiles}
+        kstats = None
+        eval_json = unmeasured_eval(*fixed)
+        scale, threshold = fixed
+        log(f"正解の建物データなし。倍率 {scale} 閾値 {threshold}（固定。検証していない値）。精度は未測定")
+    else:
+        # 2. 基盤地図情報（全タイルの範囲だけを読む）
+        files = kiban.find_xml_files(kiban_dir)
+        if not files:
+            raise FileNotFoundError(f"基盤地図情報の BldA の XML が見つからない: {kiban_dir}")
+        bboxes = {t: tilemath.tile_bbox_lonlat(*t) for t in tiles}
+        kstats = kiban.LoadStats()
+        kb = kiban.load_buildings(files, kiban.union_bbox(bboxes.values(), KIBAN_PAD_DEG), stats=kstats)
+        log(f"基盤地図情報: {kstats.blocks} 棟を読み、範囲内 {kstats.kept} 棟（飛ばした {dict(kstats.skipped)}）")
+        if kstats.skipped:
+            notes.append(f"基盤地図情報で読めずに飛ばした建物: {dict(kstats.skipped)}")
+        tree = STRtree([b.geometry for b in kb])
+        kiban_in = {t: [kb[int(i)].geometry for i in tree.query(box(*bboxes[t]))] for t in tiles}
+        for t in tiles:
+            if not kiban_in[t]:
+                notes.append(f"{tilemath.area_id(*t)} は基盤地図情報の建物が 0 棟（郊外・水域などで実際に無いこともある。フォルダの取り違えでないか確かめる）")
 
-    # 3. 評価（2018 年）。倍率・閾値の選択は調整用だけ
-    references = {t: evaluate.prepare_reference(*t, kiban_in[t]) for t in tiles}
-    vintage = kstats.vintage_dict()
-    eval_json = evaluate.run_evaluation(
-        tiles,
-        lambda t, s: colabio.load_prob(colab_dir, evaluate.EVAL_YEAR, t[1], t[2], s),
-        references,
-        scales=scales,
-        thresholds=thresholds,
-        reference=f"{KIBAN_LABEL}（{evaluate.EVAL_YEAR} 年の写真と比べる）",
-        reference_detail={
-            "name": KIBAN_LABEL,
-            "files": [Path(f).name for f in files],
-            "buildings_loaded_in_range": kstats.kept,
-            "photo_year": evaluate.EVAL_YEAR,
-            "vintage": vintage,
-        },
-        reference_notes=reference_notes(vintage, kstats.kept, kind),
-        load_prob_compare=lambda t, s: colabio.load_prob(colab_dir, COMPARE_YEAR, t[1], t[2], s),
-        compare_year=COMPARE_YEAR,
-        diff_params=diff_params,
-    )
-    scale, threshold = eval_json["chosen"]["scale"], eval_json["chosen"]["threshold"]
-    log(f"選んだ値: 倍率 {scale} 閾値 {threshold}（調整用）。評価用の物体単位 F1 = {eval_json['holdout']['object']['f1']}")
+        # 3. 評価（2014 年）。倍率・閾値の選択は調整用だけ
+        references = {t: evaluate.prepare_reference(*t, kiban_in[t]) for t in tiles}
+        vintage = kstats.vintage_dict()
+        eval_json = evaluate.run_evaluation(
+            tiles,
+            lambda t, s: colabio.load_prob(colab_dir, evaluate.EVAL_YEAR, t[1], t[2], s),
+            references,
+            scales=scales,
+            thresholds=thresholds,
+            reference=f"{KIBAN_LABEL}（{evaluate.EVAL_YEAR} 年の写真と比べる）",
+            reference_detail={
+                "name": KIBAN_LABEL,
+                "files": [Path(f).name for f in files],
+                "buildings_loaded_in_range": kstats.kept,
+                "photo_year": evaluate.EVAL_YEAR,
+                "vintage": vintage,
+            },
+            reference_notes=reference_notes(vintage, kstats.kept, kind),
+            load_prob_compare=lambda t, s: colabio.load_prob(colab_dir, COMPARE_YEAR, t[1], t[2], s),
+            compare_year=COMPARE_YEAR,
+            diff_params=diff_params,
+        )
+        scale, threshold = eval_json["chosen"]["scale"], eval_json["chosen"]["threshold"]
+        log(f"選んだ値: 倍率 {scale} 閾値 {threshold}（調整用）。評価用の物体単位 F1 = {eval_json['holdout']['object']['f1']}")
 
     # 4. 選んだ値で 2 時点の建物 → 差分
     geocodes = _read_geocode(geocode_path)
-    areas, feats_2018, feats_2023, feats_cand = [], [], [], []
+    areas, feats_2014, feats_2024, feats_cand = [], [], [], []
     per_area_stats = {}
     for (z, x, y) in tiles:
         aid = tilemath.area_id(z, x, y)
-        p2018 = colabio.load_prob(colab_dir, 2018, x, y, scale)
-        p2023 = colabio.load_prob(colab_dir, 2023, x, y, scale)
-        b18 = vectorize.vectorize_tile(p2018, z, x, y, threshold=threshold)
-        b23 = vectorize.vectorize_tile(p2023, z, x, y, threshold=threshold)
-        cands, stats = diff.build_candidates(z, x, y, b23, b18, p2018, kiban_in[(z, x, y)], diff_params)
+        p2014 = colabio.load_prob(colab_dir, 2014, x, y, scale)
+        p2024 = colabio.load_prob(colab_dir, 2024, x, y, scale)
+        b18 = vectorize.vectorize_tile(p2014, z, x, y, threshold=threshold)
+        b23 = vectorize.vectorize_tile(p2024, z, x, y, threshold=threshold)
+        cands, stats = diff.build_candidates(z, x, y, b23, b18, p2014, kiban_in[(z, x, y)], diff_params)
         cands = diff.number_candidates(x, y, cands)
-        stats.update(buildings_2018=len(b18), kiban=len(kiban_in[(z, x, y)]))
+        stats.update(buildings_2014=len(b18), kiban=len(kiban_in[(z, x, y)]))
         per_area_stats[aid] = stats
 
-        for bs, sink in ((b18, feats_2018), (b23, feats_2023)):
+        for bs, sink in ((b18, feats_2014), (b23, feats_2024)):
             for b in bs:
                 sink.append(
                     _feature(b.geom_lonlat, {"area_id": aid, "area_m2": round(b.area_m2, 2), "prob_mean": round(b.prob_mean, 4)})
@@ -238,13 +265,18 @@ def run_postprocess(
                 **info,
             }
         )
-        log(f"  {aid}: 建物 2018={len(b18)} 2023={len(b23)} 候補={stats['candidates']} "
+        log(f"  {aid}: 建物 2014={len(b18)} 2024={len(b23)} 候補={stats['candidates']} "
             f"(新規={stats[diff.CLASS_NEW]} 描き漏れ={stats[diff.CLASS_OMISSION]} 保留={stats[diff.CLASS_UNCERTAIN]})")
 
+    seen_names: dict[str, int] = {}
+    for a in areas:  # 同じ通り名の地区は、2 つ目から番号を付けて区別する
+        seen_names[a["name"]] = seen_names.get(a["name"], 0) + 1
+        if seen_names[a["name"]] > 1:
+            a["name"] = f"{a['name']} その{seen_names[a['name']]}"
     n_fallback = sum(a["name_source"] == geocode.FALLBACK_SOURCE for a in areas)
     if n_fallback:
         notes.append(f"地区名を取得できず、代わりの名前（地区 x-y）を入れた地区: {n_fallback}/{len(areas)}（geocode.json が無い・応答が想定外・名前が安全でない、のどれか）")
-    notes.append("差分の閾値（kiban_ov_max・min_area_m2・omission_ov_2018_min・new_ov_2018_max・new_p90_max）は、正解データで確かめていない未検証の初期値。")
+    notes.append("差分の閾値（kiban_ov_max・min_area_m2・omission_ov_2014_min・new_ov_2014_max・new_p90_max）は、正解データで確かめていない未検証の初期値。")
     total_by_class = {c: sum(s[c] for s in per_area_stats.values()) for c in diff.CLASSES}
     run_json = {
         "run_id": run_id,
@@ -255,7 +287,7 @@ def run_postprocess(
             "z": tiles[0][0],
             "scale": scale,
             "threshold": threshold,
-            "selected_on": "tune",
+            "selected_on": "tune" if fixed is None else "fixed",
             "vectorize": {
                 "binarize": "prob >= threshold",
                 "min_blob_m2": vectorize.DEFAULT_MIN_BLOB_M2,
@@ -264,7 +296,7 @@ def run_postprocess(
             "diff": diff_params.to_dict(),
             "diff_thresholds_status": "unverified_initial_values",
             "eval": eval_json["protocol"],
-            "kiban": {"dataset": KIBAN_LABEL, "load": kstats.as_dict()},
+            "kiban": {"dataset": KIBAN_LABEL, "load": kstats.as_dict()} if kstats else None,
             "colab": colabio.colab_summary(meta),
         },
         "tiles": [tilemath.area_id(*t) for t in tiles],
@@ -275,8 +307,8 @@ def run_postprocess(
     # 5. 書き出し（run.json は最後。ローダーが途中の状態を読まないように）
     _write_json(out_dir / "eval.json", eval_json)
     _write_json(out_dir / "areas.json", areas)
-    _write_json(out_dir / "buildings_2018.geojson", _collection(feats_2018), compact=True)
-    _write_json(out_dir / "buildings_2023.geojson", _collection(feats_2023), compact=True)
+    _write_json(out_dir / "buildings_2014.geojson", _collection(feats_2014), compact=True)
+    _write_json(out_dir / "buildings_2024.geojson", _collection(feats_2024), compact=True)
     _write_json(out_dir / "candidates.geojson", _collection(feats_cand), compact=True)
     _write_json(out_dir / "run.json", run_json)
     log(f"書き出し: {out_dir}（候補 {len(feats_cand)} 件: {total_by_class}）")
@@ -285,13 +317,13 @@ def run_postprocess(
         "run_id": run_id,
         "kind": kind,
         "areas": len(areas),
-        "buildings_2018": len(feats_2018),
-        "buildings_2023": len(feats_2023),
+        "buildings_2014": len(feats_2014),
+        "buildings_2024": len(feats_2024),
         "candidates": len(feats_cand),
         "by_class": total_by_class,
         "chosen": eval_json["chosen"],
-        "holdout": eval_json["holdout"],
-        "tune": eval_json["tune"],
+        "holdout": eval_json.get("holdout"),
+        "tune": eval_json.get("tune"),
     }
 
 
@@ -312,10 +344,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--geocode", default=None, help="既定 <data-root>/<run>/geocode.json")
     ap.add_argument("--scales", type=_floats, default=evaluate.DEFAULT_SCALES)
     ap.add_argument("--thresholds", type=_floats, default=evaluate.DEFAULT_THRESHOLDS)
+    ap.add_argument("--fixed", type=_floats, default=None, metavar="倍率,閾値", help="正解の建物データを使わず、この値で候補を作る（精度は未測定）")
     ap.add_argument("--kiban-ov-max", type=float, default=d.kiban_ov_max)
     ap.add_argument("--min-area-m2", type=float, default=d.min_area_m2)
-    ap.add_argument("--omission-ov-2018-min", type=float, default=d.omission_ov_2018_min)
-    ap.add_argument("--new-ov-2018-max", type=float, default=d.new_ov_2018_max)
+    ap.add_argument("--omission-ov-2014-min", type=float, default=d.omission_ov_2014_min)
+    ap.add_argument("--new-ov-2014-max", type=float, default=d.new_ov_2014_max)
     ap.add_argument("--new-p90-max", type=float, default=d.new_p90_max)
     a = ap.parse_args(argv)
     summary = run_postprocess(
@@ -329,7 +362,8 @@ def main(argv: list[str] | None = None) -> int:
         scales=a.scales,
         thresholds=a.thresholds,
         geocode_path=a.geocode,
-        diff_params=diff.DiffParams(a.kiban_ov_max, a.min_area_m2, a.omission_ov_2018_min, a.new_ov_2018_max, a.new_p90_max),
+        fixed=a.fixed,
+        diff_params=diff.DiffParams(a.kiban_ov_max, a.min_area_m2, a.omission_ov_2014_min, a.new_ov_2014_max, a.new_p90_max, a.fixed is not None),
     )
     print(json.dumps(summary, ensure_ascii=False))
     return 0

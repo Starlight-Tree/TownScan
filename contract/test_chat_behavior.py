@@ -93,22 +93,22 @@ def test_show_candidate_for_a_class_in_an_area(api):
     ("六本木ヒルズ周辺の建物は？", "out_of_scope"),
     ("熊本城の新築は？", "out_of_scope"),
     ("熊本県全域の新築は？", "out_of_scope"),
-    ("2024年に建った家は？", "no_photo_period"),
+    ("2025年に建った家は？", "no_photo_period"),
     ("2025 年の新築を見せて", "no_photo_period"),
     ("２０２６年の候補は？", "no_photo_period"),
     ("2020年の写真を見せて", "no_photo_period"),
-    ("2016年と2023年を比べて", "no_photo_period"),
+    ("2016年と2024年を比べて", "no_photo_period"),
     ("去年建った家は何件？", "no_photo_period"),
     ("今年の新築は？", "no_photo_period"),
-    ("令和6年の新築は？", "no_photo_period"),
-    ("二〇二四年の新築は？", "no_photo_period"),
+    ("令和7年の新築は？", "no_photo_period"),
+    ("二〇二五年の新築は？", "no_photo_period"),
     ("最近の新築は何件？", "no_photo_period"),
     ("R7年の新築は？", "no_photo_period"),
     ("衛星で変化の当たりを見せて", "not_implemented"),
     ("Earth Engine のヒートマップは？", "not_implemented"),
     ("太陽光パネルはどこにある？", "not_implemented"),
     ("取り壊された建物は？", "not_implemented"),
-    ("2018年にあって2023年に無い建物は？", "not_implemented"),
+    ("2014年にあって2024年に無い建物は？", "not_implemented"),
     ("建物が減った場所は？", "not_implemented"),
 ])
 def test_questions_outside_the_scope_are_refused_with_the_reason(api, text, reason):
@@ -126,12 +126,12 @@ def test_refusal_for_another_place_names_the_analyzed_areas(api):
 
 
 def test_no_photo_period_message_states_the_available_years(api):
-    msg = ask(api, "2024年の新築は？")["results"][0]["message"]
-    assert "2018 年" in msg and "2023 年" in msg
+    msg = ask(api, "2025年の新築は？")["results"][0]["message"]
+    assert "2014 年" in msg and "2024 年" in msg
 
 
 @pytest.mark.parametrize("text", [
-    "全地区の候補は何件？", "この地区の候補は？", "新規出現の候補は何件？", "熊本市の新築は何件？", "熊本の新築は？",
+    "全地区の候補は何件？", "この地区の候補は？", "新規出現の候補は何件？", "パリ近郊の新築は何件？", "フランスの新築は？",
     "候補の写真を見せて", "新築の件数は？", "中心部の候補は？", "面積の大きい候補は？", "新規出現の写真を見せて",
 ])
 def test_ordinary_questions_are_not_mistaken_for_other_places(api, text):
@@ -139,11 +139,11 @@ def test_ordinary_questions_are_not_mistaken_for_other_places(api, text):
 
 
 def test_years_with_photos_are_not_refused(api):
-    assert ask(api, "2018年と2023年の写真を比べた新規出現は何件？")["results"][0]["type"] == "count"
+    assert ask(api, "2014年と2024年の写真を比べた新規出現は何件？")["results"][0]["type"] == "count"
 
 
 def test_scope_words_are_answered_not_refused(api):
-    for q in ("熊本市内の新築は何件？", "全域の新築は何件？", "対象地域の新築は何件ですか", "解析した範囲の新築は？"):
+    for q in ("市内の新築は何件？", "全域の新築は何件？", "対象地域の新築は何件ですか", "解析した範囲の新築は？"):
         r = ask(api, q)["results"][0]
         assert r["type"] == "count" and r["total"] == 4 and "area_id" not in r["filter"], q  # 全地区の新規出現 4
 
@@ -258,7 +258,7 @@ QUESTIONS = [
     "一番大きい候補の写真", "c-226249-105760-3 の写真", "地図で見せて", "このアプリの精度は", "再現率は？",
     "使い方", "何ができる？", "天気は？", "2030年は？", "福岡は？", "衛星は？", "パネルは？", "あ", "?", "候補",
     "合成町と試験町を比べて", "中央区の新規出現を一覧で", "仮想町の写真", "新築はどこにある？",
-    "c-226249-105760-3の写真", "中央区と東区を比べて", "熊本市内の新築は？", "取り壊された建物は？", "令和6年の新築は？", "二〇二四年の新築は？",
+    "c-226249-105760-3の写真", "中央区と東区を比べて", "市内の新築は？", "取り壊された建物は？", "令和7年の新築は？", "二〇二五年の新築は？",
     "最近の新築は？", "三年町の新築は？", "百件の一覧", "１２３件の候補", "新規出現は何棟？", "上位１０件を表で",
 ]
 

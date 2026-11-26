@@ -60,46 +60,23 @@ var (
 			`|おすすめの(?:店|レストラン)|ランチ|ラーメン|joke`)
 	ruleSatellite = newRule(`衛星|earth ?engine|ヒートマップ|変化の当たり|変化のあたり|広域|埋め込み|sentinel|landsat|リモートセンシング|ndvi`, "gee")
 	rulePanel     = newRule(`パネル|太陽光|ソーラー|発電`)
-	// 写真が無い時期を指す相対語（写真は 2018・2023 年だけなので、いまに近い話は答えられない）
+	// 写真が無い時期を指す相対語（写真は 2014・2024 年だけなので、いまに近い話は答えられない）
 	ruleRelativeTime = newRule(
 		`今年|昨年|去年|来年|今月|先月|直近|今日|昨日|おととし|一昨年|今週|先週|先日` +
 			`|最近|近年|近頃|現在|現状|今後|将来|未来|ここ数年|この数年|数年前`)
-	// このアプリが扱わない向き（建物が無くなった・減った）。2023 年に新しく現れた候補だけを扱う
+	// このアプリが扱わない向き（建物が無くなった・減った）。2024 年に新しく現れた候補だけを扱う
 	ruleDisappear = newRule(`取り壊|取壊|解体|壊され|撤去|滅失|無くなっ|なくなっ|消え|消滅|減っ|減少|あっ(?:て|た).{0,15}(?:無い|ない|なく|消)`)
 )
 
-// 対象外の場所。Python の OTHER_PLACES の、後読みの無い部分（otherPlaces が、後読みのある 2 つを足して探す）。
+// 対象外の場所（対象はフランスなので、日本の地名はすべて対象外）。
 var otherPlacesRE = regexp.MustCompile(
-	`(?i)東京|大阪|京都|名古屋|福岡|札幌|横浜|神戸|広島|仙台|北九州|長崎|大分|鹿児島|宮崎|佐賀|沖縄|那覇|八代|天草|宇土|益城|合志|菊陽|玉名|荒尾|山鹿|人吉|阿蘇|宇城` +
+	`(?i)熊本|東京|大阪|京都|名古屋|福岡|札幌|横浜|神戸|広島|仙台|北九州|長崎|大分|鹿児島|宮崎|佐賀|沖縄|那覇|八代|天草|宇土|益城|合志|菊陽|玉名|荒尾|山鹿|人吉|阿蘇|宇城` +
 		`|北海道|青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|兵庫|奈良|和歌山|鳥取|島根|岡山|山口|徳島|香川|愛媛|高知` +
-		`|海外|アメリカ|中国|韓国|全国|県全域|県全体|熊本県`)
+		`|アメリカ|中国|韓国|全国|県全域|県全体|市全域|市全体`)
 
-// otherPlaces は、Python の OTHER_PLACES.search(文) が返す、いちばん左の一致（無ければ ""）。
-// Python の正規表現には、(?<!熊本)市全域 と (?<!熊本)市全体 がある（「熊本市全域」は対象そのもの）。RE2 には後読みが無いので、
-// この 2 語は、直前が「熊本」でない出現だけを手で探し、ほかの語の一致と、開始位置の小さい方を取る
-// （どの語も「市全」から始まる語と同じ位置で始まらないので、同じ位置の優先順位は考えなくてよい）。
+// otherPlaces は、文の中のいちばん左の「対象外の場所」を返す（無ければ ""）。
 func otherPlaces(text string) string {
-	best, bestAt := "", -1
-	if loc := otherPlacesRE.FindStringIndex(text); loc != nil {
-		best, bestAt = text[loc[0]:loc[1]], loc[0]
-	}
-	for _, w := range []string{"市全域", "市全体"} {
-		for from := 0; ; {
-			i := strings.Index(text[from:], w)
-			if i < 0 {
-				break
-			}
-			at := from + i
-			if !strings.HasSuffix(text[:at], "熊本") {
-				if bestAt < 0 || at < bestAt {
-					best, bestAt = w, at
-				}
-				break
-			}
-			from = at + 1
-		}
-	}
-	return best
+	return otherPlacesRE.FindString(text)
 }
 
 // 「渋谷の新築」「六本木ヒルズ周辺の建物」のような、<場所>の<このアプリの語> の形。
@@ -107,10 +84,10 @@ func otherPlaces(text string) string {
 var (
 	placeTokenRE = regexp.MustCompile(`[一-龥]{2,5}(?:市|区|町|村)`)
 	placeNounRE  = regexp.MustCompile(`([一-龥ァ-ヶー]{2,8}?)(?:周辺|付近|近辺|あたり|辺り)?(?:の|での|にある|にあたる)(?:新築|建物|建築|新規|候補|件数|写真|地図|棟)`)
-	placeOKWords = map[string]bool{"熊本市": true}
+	placeOKWords = map[string]bool{"パリ近郊": true}
 
 	ruleOwnVocabulary = newRule(`新築|新規|候補|建物|建築|描き漏れ|既存|保留|未検出|未判定|要確認|確定|地区|全体|全部|旧写真|新写真|写真|画像|地図|精度|一覧|面積|分類|件数|合計|最大|最新|中心部|結果|分析`)
-	ownExactWords     = map[string]bool{"熊本": true, "熊本市": true, "市内": true, "中心部": true, "市中心部": true, "熊本市中心部": true}
+	ownExactWords     = map[string]bool{"フランス": true, "パリ近郊": true, "市内": true, "中心部": true}
 )
 
 // 対象そのもの・時間を指す語。<場所>の位置に来ても、対象外の場所ではない。
@@ -118,14 +95,14 @@ var (
 // 長い語から除く（同じ長さの語は、ここに書いた順）。
 var ownScopeWords = func() []string {
 	words := []string{
-		"熊本市内", "熊本市", "熊本", "市内", "中心部", "市街地", "全域", "全エリア", "全地域", "全範囲", "エリア", "地域", "範囲", "区域", "域内", "圏内",
+		"オー・ド・セーヌ県", "パリ南西の近郊", "パリ近郊", "フランス", "市内", "中心部", "市街地", "全域", "全エリア", "全地域", "全範囲", "エリア", "地域", "範囲", "区域", "域内", "圏内",
 		"対象", "解析", "以前", "昔", "過去", "かつて", "当時", "従来", "最新", "以降", "以後", "その後", "当初",
 	}
 	sort.SliceStable(words, func(i, j int) bool { return utf8.RuneCountInString(words[i]) > utf8.RuneCountInString(words[j]) })
 	return words
 }()
 
-// isOwnPlaceWord は、<場所>の位置に来た語が、このアプリの対象（解析した地区・熊本市内・全域など）を指すか。
+// isOwnPlaceWord は、<場所>の位置に来た語が、このアプリの対象（解析した地区・市内・全域など）を指すか。
 func isOwnPlaceWord(word string) bool {
 	if ownExactWords[word] || ruleOwnVocabulary.matches(word) {
 		return true
@@ -161,7 +138,7 @@ var (
 	ruleMap      = newRule(`地図|マップ|位置|場所|どこにある|どこにあり|どの辺|どのあたり|ズーム|フォーカス`)
 
 	ruleCompareStrong = newRule(
-		`地区別|地区ごと|地区毎|区ごと|ランキング|順位|多い順|少ない順|どの地区|どこが|多い地区|少ない地区|多いところ` +
+		`地区別|地区ごと|地区毎|区ごと|市ごと|市町村ごと|ランキング|順位|多い順|少ない順|どの地区|どこが|多い地区|少ない地区|多いところ` +
 			`|一番多|最も多|もっとも多|最多|最少`)
 	ruleCompareWeak  = newRule(`比較|比べ|くらべ|違い|どちら|どっち`)
 	ruleListExplicit = newRule(`一覧|リスト|表で|表に|表形式`)
@@ -170,7 +147,7 @@ var (
 			`|大きい(?:もの|候補|新築|建物)|候補(?:を|は|が)?(?:見せ|出し|教え|ください|どれ|どんな)`, "top")
 	ruleCount       = newRule(`何件|件数|いくつ|何棟|何個|何軒|何戸|何か所|数は|総数|合計|全部で|どれくらい|どのくらい|どれだけ|どのぐらい|多い|少ない|増え|ありますか|あります`)
 	ruleCountStrong = newRule(`何件|件数|何棟|いくつ|何軒|何戸|何個`)
-	ruleDomain      = newRule(`新築|新規|建物|建築|棟|候補|描き漏れ|保留|未検出|未判定|要確認|分類|熊本|地区`)
+	ruleDomain      = newRule(`新築|新規|建物|建築|棟|候補|描き漏れ|保留|未検出|未判定|要確認|分類|フランス|パリ|地区`)
 )
 
 // ---- ID の読み取り ----

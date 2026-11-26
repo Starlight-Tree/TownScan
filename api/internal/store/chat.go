@@ -120,14 +120,17 @@ func (s *Store) AreaUnionBBox(ctx context.Context, runID string, areaIDs []strin
 
 // ---- 出どころ（チャットの結果に付ける） ----
 
-// CandidateProvenanceWithNote は、候補の出どころ（写真 2018・2023 年）に、注記を足したもの。
+// CandidateProvenanceWithNote は、候補の出どころ（写真 2014・2024 年）に、注記を足したもの。
 func CandidateProvenanceWithNote(run Run, note string) Provenance {
 	return newProvenance(run, sourceCandidates, photoYears, "", note)
 }
 
-// AccuracyProvenanceForYear は、精度の出どころ。year は、精度を測った写真の年（評価ファイルにある年。無ければ 2018）。
-// /api/metrics の出どころ（AccuracyProvenance）は、年が 2018 に決まっている版。
-func AccuracyProvenanceForYear(run Run, year int) Provenance {
-	note := fmt.Sprintf("数字は %d 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。", year)
-	return newProvenance(run, sourceAccuracy, []int{year}, metricsMetric, note)
+// AccuracyProvenanceForYear は、精度の出どころ。year は、精度を測った写真の年（評価ファイルにある年。無ければ 2014）。
+// measured は、評価の結果に数字（holdout）があるか。無ければ、測った年を言わず「まだ測っていない」とする。
+// /api/metrics の出どころ（AccuracyProvenance）は、年が 2014 に決まっている版。
+func AccuracyProvenanceForYear(run Run, year int, measured bool) Provenance {
+	if !measured {
+		return newProvenance(run, sourceUnmeasured, []int{year}, metricsMetric, noteUnmeasured)
+	}
+	return newProvenance(run, fmt.Sprintf(sourceMeasured, year), []int{year}, metricsMetric, fmt.Sprintf(noteMeasured, year))
 }

@@ -14,7 +14,7 @@ def _res():
 def test_single_rectangle_area_and_shape():
     prob = prob_with_rects([(100, 80, 120, 90)])  # 20×10 画素
     (b,) = vectorize.vectorize_tile(prob, *TILE)
-    # 面積は EPSG:6670 の m²。地上の一辺 × 画素数（投影のひずみは 1% 未満）
+    # 面積は m²（geo.metric_crs）。地上の一辺 × 画素数（投影のひずみは 1% 未満）
     assert b.area_m2 == pytest.approx(20 * 10 * _res() ** 2, rel=0.01)
     assert b.edge_touch is False
     assert b.prob_mean == pytest.approx(0.9, abs=1e-6)

@@ -3,7 +3,7 @@
 Next.js 16（App Router・TypeScript strict・Node 24）。仕様は [../docs/spec-prototype.md](../docs/spec-prototype.md) §7。
 
 - 画面: `/`（チャットの 1 列）・`/accuracy`（精度・既知の限界・出典と規約）・`/login`（任意のログイン）・`/healthz`（コンテナのヘルスチェック）
-  回答の本文の下に出る表示は 1 つ。順位は、地図の表示 ＞ 候補 1 件の写真 ＞ 地区の比較 ＞ 候補の一覧 ＞ 件数（`lib/answer-view.ts` の `planAnswer`。[ADR 0013](../docs/decisions/0013-one-view-per-answer.md)）。精度・お断り・使い方の表は、順位に関係なく出る。2 位以下の結果と、地図・グラフの見方は、最新の回答の下の「表示を切り替える」に 2 つまで出る。比較はグラフ、地図の表示は地図が、回答の中の**図**になる（`components/AnswerFigure.tsx`。地図は画面に近づくまでマウントしない）。件数と候補の一覧は、2018 年と 2023 年の写真のカード（件数のカードは、地図と同じ候補データから作る〔`lib/candidates-context.ts`〕）。
+  回答の本文の下に出る表示は 1 つ。順位は、地図の表示 ＞ 候補 1 件の写真 ＞ 地区の比較 ＞ 候補の一覧 ＞ 件数（`lib/answer-view.ts` の `planAnswer`。[ADR 0013](../docs/decisions/0013-one-view-per-answer.md)）。精度・お断り・使い方の表は、順位に関係なく出る。2 位以下の結果と、地図・グラフの見方は、最新の回答の下の「表示を切り替える」に 2 つまで出る。比較はグラフ、地図の表示は地図が、回答の中の**図**になる（`components/AnswerFigure.tsx`。地図は画面に近づくまでマウントしない）。件数と候補の一覧は、2014 年と 2024 年の写真のカード（件数のカードは、地図と同じ候補データから作る〔`lib/candidates-context.ts`〕）。
   拡大ビュー（`components/ExpandedView.tsx`）が開くのは、回答の写真（写真のカード・候補 1 件の写真）、図の「拡大」、地図の図の「写真を比べる」、グラフの図の「地図で見る」（絞り込み中に出る）、「表示を切り替える」の「地図で見る」「グラフで見る」、最初の画面の「解析した地区を地図で見る」を押したときと、開いていないときにタブの「地図」「グラフ」「画像」を押したとき（回答を持たない、全地区の拡大ビュー）。回答が届いただけでは開かない。
   拡大ビューはダイアログではなく、全幅のタブ「回答｜地図｜グラフ｜画像」の画面（ADR 0008）。タブの帯（`components/ResultArea.tsx` の `ResultTabs`）は、`components/HomeClient.tsx` がメインの枠の上端にいつも置く。閉じる手段は、右上の ✕ と Esc（拡大ビューの中か、地図・グラフ・画像のタブで）で、回答へ戻る。「回答」のタブを押すと、拡大ビューを開いたまま会話へ戻る。
   3 つの画面の中身は `ResultArea`（候補の詳細は `components/CandidateDrawer.tsx`）。状態の単位は回答 1 件で、タブ・絞り込み・選んだ候補は回答ごとに保ち、回答の中の図と拡大ビューが共有する（`lib/answer-view.ts`・`components/HomeClient.tsx`）。
@@ -11,7 +11,7 @@ Next.js 16（App Router・TypeScript strict・Node 24）。仕様は [../docs/sp
   `app/(site)/` が枠つきの 3 ページ、`app/(auth)/` がログイン。
 - API: ブラウザからは同じオリジンの `/api/*` だけを呼ぶ。転送は `proxy.ts`（実行時の環境変数 `API_URL`。既定 `http://127.0.0.1:8500`）。ただし `/api/auth/*`（ログイン）は転送せず、この画面のサーバー（`app/api/auth/[...all]/route.ts`）が受ける。
   `next.config` の `rewrites` はビルド時に転送先が固定されるため使っていない（実測）。
-- 地図: Leaflet 1.9.4。地理院タイル（標準地図・`nendophoto2018`・`nendophoto2023`）を直接読む。
+- 地図: Leaflet 1.9.4。IGN の公開タイル配信（標準地図 Plan IGN・2014 年と 2024 年の BD ORTHO）を直接読む。
 
 ## ログイン（任意。Better Auth・Google だけ）
 

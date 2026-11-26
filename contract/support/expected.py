@@ -12,7 +12,7 @@
   （A1・A2 は同じ緯度で同じ値。A3 は緯度が 1 タイル南だが、0.1 に丸めると同じ 75.6）。A3 の 750 → 188.9、480（A2）→ 120.9、400 → 100.8。
 - 同じ面積（75.6 が 3 つ）の順は、API の並びの規則（面積の降順、同じなら id の昇順）で決まる。
 - 緯度経度は、Web メルカトルのタイル座標（z18）から導く（下の tile_lonlat）。丸めの差を見込んで 1e-6 度（約 0.1 m）の許容で比べる。
-- 件数: 2018 年は未検出（confirmed_new）4・2018 年も検出（existing_omission）3・未判定（uncertain。どちらも理由は edge）2、合計 9。建物は 1 地区 8（2018 年 3＋2023 年 5）× 3 = 24。
+- 件数: 2014 年は未検出（confirmed_new）4・2014 年も検出（existing_omission）3・未判定（uncertain。どちらも理由は edge）2、合計 9。建物は 1 地区 8（2014 年 3＋2024 年 5）× 3 = 24。
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ COUNTS = {"areas": 3, "candidates": 9, "buildings": 24}
 
 CLASSES = ("confirmed_new", "existing_omission", "uncertain")
 CLASS_LABELS = {
-    "confirmed_new": "2018 年は未検出",
-    "existing_omission": "2018 年も検出",
+    "confirmed_new": "2014 年は未検出",
+    "existing_omission": "2014 年も検出",
     "uncertain": "未判定",
 }
 # 未判定の候補は、理由で呼び分ける（並びは、返り値の held の順）
@@ -45,23 +45,23 @@ def row_label(cls: str, reason: str) -> str:
 A1, A2, A3 = "z18-226249-105759", "z18-226250-105759", "z18-226249-105760"
 
 # provenance の固定の文（旧 Python の API の provenance.py。git 履歴 e9a6614）
-SOURCE_CANDIDATES = "国土地理院 空中写真（年度別 2018・2023 年）から建物を抽出し、2 時点を比較した結果"
-SOURCE_ACCURACY = "基盤地図情報（2018-10 版）を参照にした、2018 年の写真での建物抽出の評価"
+SOURCE_CANDIDATES = "IGN（フランス国土地理院）の空中写真（BD ORTHO 2014・2024 年）から建物を抽出し、2 時点を比較した結果"
+SOURCE_ACCURACY = "2014 年の写真での建物抽出の評価"
 NOTE_SYNTHETIC = "合成データ（テスト用）です。実データではありません。"
-NOTE_UNVERIFIED_ACCURACY = "数字は 2018 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。"
+NOTE_UNVERIFIED_ACCURACY = "数字は 2014 年の写真で測った値。分類の閾値は未検証の初期値。"
 
 # 候補の説明文（旧 Python の API の explanations.py。git 履歴 e9a6614。reason ごとの固定文）
 EXPLANATIONS = {
-    "new_absent_2018": "2023 年の写真では建物を検出し、2018 年の写真では検出していません。前からある建物の場合もあるので、写真で確かめてください。",
-    "present_2018": "2018 年の写真にも既に建物があります。建物データ（基盤地図情報）の描き漏れの可能性が高く、新築とは限りません。",
+    "new_absent_2014": "2024 年の写真では建物を検出し、2014 年の写真では検出していません。前からある建物の場合もあるので、写真で確かめてください。",
+    "present_2014": "2014 年の写真にも既に建物があります。",
     "edge": "写真（タイル）の端に接していて建物が切れている可能性があるため、分けていません。面積は実際より小さい場合があります。",
 }
 
 # 分類ごとの証拠（synthetic.py の EVIDENCE。edge_touch は候補ごと）
 EVIDENCE = {
-    "confirmed_new": {"prob_2023_mean": 0.91, "ov_2018": 0.02, "prob_2018_p90": 0.05, "ov_kiban": 0.0},
-    "existing_omission": {"prob_2023_mean": 0.88, "ov_2018": 0.83, "prob_2018_p90": 0.77, "ov_kiban": 0.05},
-    "uncertain": {"prob_2023_mean": 0.74, "ov_2018": 0.30, "prob_2018_p90": 0.40, "ov_kiban": 0.10},
+    "confirmed_new": {"prob_2024_mean": 0.91, "ov_2014": 0.02, "prob_2014_p90": 0.05, "ov_kiban": 0.0},
+    "existing_omission": {"prob_2024_mean": 0.88, "ov_2014": 0.83, "prob_2014_p90": 0.77, "ov_kiban": 0.05},
+    "uncertain": {"prob_2024_mean": 0.74, "ov_2014": 0.30, "prob_2014_p90": 0.40, "ov_kiban": 0.10},
 }
 
 
@@ -141,15 +141,15 @@ class Candidate:
 # 面積の降順（同じ面積は id の昇順）。この並びが、API の既定の並び（sort=area_desc）。
 # 画素の箱 → 画素数（幅 x 高さ）: 50x40=2000, 40x36=1440, 40x30=1200, 30x25=750, 24x20=480, 20x20=400, 20x15=300（3 つ）
 CANDIDATES = [
-    Candidate("c-226250-105759-1", A2, "confirmed_new", "new_absent_2018", False, (60, 60, 110, 100), 503.8),
+    Candidate("c-226250-105759-1", A2, "confirmed_new", "new_absent_2014", False, (60, 60, 110, 100), 503.8),
     Candidate("c-226249-105759-1", A1, "uncertain", "edge", True, (216, 200, 256, 236), 362.8),
-    Candidate("c-226249-105759-2", A1, "confirmed_new", "new_absent_2018", False, (100, 100, 140, 130), 302.3),
-    Candidate("c-226249-105760-1", A3, "existing_omission", "present_2018", False, (90, 90, 120, 115), 188.9),
+    Candidate("c-226249-105759-2", A1, "confirmed_new", "new_absent_2014", False, (100, 100, 140, 130), 302.3),
+    Candidate("c-226249-105760-1", A3, "existing_omission", "present_2014", False, (90, 90, 120, 115), 188.9),
     Candidate("c-226250-105759-2", A2, "uncertain", "edge", True, (0, 10, 24, 30), 120.9),
-    Candidate("c-226249-105760-2", A3, "existing_omission", "present_2018", False, (10, 200, 30, 220), 100.8),
-    Candidate("c-226249-105759-3", A1, "existing_omission", "present_2018", False, (30, 40, 50, 55), 75.6),
-    Candidate("c-226249-105760-3", A3, "confirmed_new", "new_absent_2018", False, (140, 30, 160, 45), 75.6),
-    Candidate("c-226250-105759-3", A2, "confirmed_new", "new_absent_2018", False, (150, 150, 170, 165), 75.6),
+    Candidate("c-226249-105760-2", A3, "existing_omission", "present_2014", False, (10, 200, 30, 220), 100.8),
+    Candidate("c-226249-105759-3", A1, "existing_omission", "present_2014", False, (30, 40, 50, 55), 75.6),
+    Candidate("c-226249-105760-3", A3, "confirmed_new", "new_absent_2014", False, (140, 30, 160, 45), 75.6),
+    Candidate("c-226250-105759-3", A2, "confirmed_new", "new_absent_2014", False, (150, 150, 170, 165), 75.6),
 ]
 CANDIDATE_BY_ID = {c.id: c for c in CANDIDATES}
 BIGGEST_NEW = "c-226250-105759-1"  # 503.8 m²。分類は新規出現で、全体で最大
@@ -182,12 +182,12 @@ EVAL = {
     "notes": ["合成データ（テスト用）の値で、実測ではない"],
 }
 
-# 写真タイル（scripts/test-contract.sh が置く。contract/prepare_data.py）。R=列・G=行（タイル内の位置が画素から分かる）、B=年（2018→50、2023→200）。
-# どの候補の写真も、A1 は両年とも読める。A2 の 2018 年は「ファイルが無い」、A3 の 2018 年は「壊れたファイル」、
-# A3 の 2023 年は「TILES_DIR の外を指すシンボリックリンク」（読んではいけない）。この 3 つは、画像の 404（tile_not_found）の検査に使う。
-TILE_BLUE = {2018: 50, 2023: 200}
+# 写真タイル（scripts/test-contract.sh が置く。contract/prepare_data.py）。R=列・G=行（タイル内の位置が画素から分かる）、B=年（2014→50、2024→200）。
+# どの候補の写真も、A1 は両年とも読める。A2 の 2014 年は「ファイルが無い」、A3 の 2014 年は「壊れたファイル」、
+# A3 の 2024 年は「TILES_DIR の外を指すシンボリックリンク」（読んではいけない）。この 3 つは、画像の 404（tile_not_found）の検査に使う。
+TILE_BLUE = {2014: 50, 2024: 200}
 TILE_FAULTS = {
-    (A2, 2018): "missing",
-    (A3, 2018): "corrupt",
-    (A3, 2023): "symlink_outside",
+    (A2, 2014): "missing",
+    (A3, 2014): "corrupt",
+    (A3, 2024): "symlink_outside",
 }

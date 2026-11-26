@@ -23,10 +23,10 @@ def synth(tmp_path_factory):
 
 def test_all_contract_files_are_written(synth):
     names = {p.name for p in synth["out"].iterdir()}
-    assert names == {"run.json", "areas.json", "buildings_2018.geojson", "buildings_2023.geojson", "candidates.geojson", "eval.json"}
+    assert names == {"run.json", "areas.json", "buildings_2014.geojson", "buildings_2024.geojson", "candidates.geojson", "eval.json"}
     # 入力の側（backend の画像切り出し・ローダーのテストが使う）
     root = synth["root"]
-    for year in (2018, 2023):
+    for year in (2014, 2024):
         for x, y, *_ in make_synthetic_run.SYNTH_TILES:
             assert (root / "tiles" / str(year) / f"{x}_{y}.png").is_file()
     assert (root / "run1" / "colab" / "meta.json").is_file() and (root / "run1" / "truth.json").is_file()
@@ -39,7 +39,7 @@ def test_run_json_marks_synthetic_clearly(synth):
     assert isinstance(run["model"], str) and isinstance(run["notes"], str) and "合成" in run["notes"]
     p = run["params"]
     assert p["scale"] in evaluate.DEFAULT_SCALES and p["threshold"] in evaluate.DEFAULT_THRESHOLDS
-    assert p["diff"] == {"kiban_ov_max": 0.25, "min_area_m2": 20.0, "omission_ov_2018_min": 0.5, "new_ov_2018_max": 0.1, "new_p90_max": 0.2}
+    assert p["diff"] == {"kiban_ov_max": 0.25, "min_area_m2": 20.0, "omission_ov_2014_min": 0.5, "new_ov_2014_max": 0.1, "new_p90_max": 0.2, "drop_present_before": False}
     assert p["diff_thresholds_status"] == "unverified_initial_values"
     assert run["tiles"] == [a["id"] for a in synth["load"]("areas.json")]  # 地区 id の配列
 
@@ -89,7 +89,7 @@ def test_candidates_geojson_matches_contract(synth):
         assert f["geometry"]["type"] == "Polygon"
         p = f["properties"]
         assert set(p) == {"area_id", "class", "area_m2", "bbox", "centroid", "evidence", "reason"}
-        assert set(p["evidence"]) == {"prob_2023_mean", "ov_2018", "prob_2018_p90", "ov_kiban", "edge_touch"}
+        assert set(p["evidence"]) == {"prob_2024_mean", "ov_2014", "prob_2014_p90", "ov_kiban", "edge_touch"}
         a = areas[p["area_id"]]
         assert f["id"].startswith(f"c-{a['x']}-{a['y']}-")
         assert p["evidence"]["ov_kiban"] < 0.25 and p["area_m2"] >= 20.0  # 入口の条件
@@ -112,14 +112,14 @@ def test_evidence_values_for_known_buildings(synth):
     cands = synth["load"]("candidates.geojson")["features"]
     truth = {t["name"]: t for t in synth["truth"]}
     ev = lambda name: _candidate_at(cands, truth[name]["center"])["properties"]["evidence"]  # noqa: E731
-    assert ev("A_new")["ov_2018"] == 0.0 and ev("A_new")["prob_2018_p90"] < 0.2
-    assert ev("A_omit")["ov_2018"] > 0.9 and ev("A_omit")["prob_2018_p90"] > 0.8
-    assert 0.2 <= ev("A_unc")["prob_2018_p90"] < 0.5 and ev("A_unc")["ov_2018"] == 0.0  # 2018 の確率が弱く出ている
-    assert ev("A_edge")["edge_touch"] is True and ev("B_edge")["ov_2018"] > 0.9  # 描き漏れの値でも縁なら保留
+    assert ev("A_new")["ov_2014"] == 0.0 and ev("A_new")["prob_2014_p90"] < 0.2
+    assert ev("A_omit")["ov_2014"] > 0.9 and ev("A_omit")["prob_2014_p90"] > 0.8
+    assert 0.2 <= ev("A_unc")["prob_2014_p90"] < 0.5 and ev("A_unc")["ov_2014"] == 0.0  # 2014 の確率が弱く出ている
+    assert ev("A_edge")["edge_touch"] is True and ev("B_edge")["ov_2014"] > 0.9  # 描き漏れの値でも縁なら保留
 
 
 def test_buildings_geojson_properties_and_area_in_6670(synth):
-    for year in (2018, 2023):
+    for year in (2014, 2024):
         fc = synth["load"](f"buildings_{year}.geojson")
         assert fc["features"], year
         for f in fc["features"]:
@@ -129,11 +129,11 @@ def test_buildings_geojson_properties_and_area_in_6670(synth):
             # 書き出しで座標を 1 cm 程度に丸めるぶんの差は許す
             assert f["properties"]["area_m2"] == pytest.approx(geo.area_m2(g), abs=0.5 + 1e-3 * g.area)
             assert 0 <= f["properties"]["prob_mean"] <= 1
-    # 候補は 2023 年の建物の中から出る
-    b23 = {json.dumps(f["geometry"]) for f in synth["load"]("buildings_2023.geojson")["features"]}
+    # 候補は 2024 年の建物の中から出る
+    b23 = {json.dumps(f["geometry"]) for f in synth["load"]("buildings_2024.geojson")["features"]}
     assert all(json.dumps(f["geometry"]) in b23 for f in synth["load"]("candidates.geojson")["features"])
-    # 2018 年には新築が無い（2023 年だけの建物の分、少ない）
-    assert len(synth["load"]("buildings_2018.geojson")["features"]) < len(synth["load"]("buildings_2023.geojson")["features"])
+    # 2014 年には新築が無い（2024 年だけの建物の分、少ない）
+    assert len(synth["load"]("buildings_2014.geojson")["features"]) < len(synth["load"]("buildings_2024.geojson")["features"])
 
 
 def test_eval_json_matches_contract(synth):
@@ -166,17 +166,17 @@ def test_eval_json_matches_contract(synth):
 
 
 def test_eval_json_optional_diagnostics(synth):
-    """仕様 §6 の任意項目: year_compare・existing_absent_in_2018・excluded_edge_detail・reference_detail.vintage。既存の項目と食い違わない。"""
+    """仕様 §6 の任意項目: year_compare・existing_absent_in_2014・excluded_edge_detail・reference_detail.vintage。既存の項目と食い違わない。"""
     e = synth["load"]("eval.json")
-    # year_compare: 2018 年の側はトップレベルと同じ。評価の年（protocol.year）は 2018 のまま、比べる年を別に明示
-    assert e["protocol"]["year"] == 2018 and e["protocol"]["compare_year"] == 2023
+    # year_compare: 2014 年の側はトップレベルと同じ。評価の年（protocol.year）は 2014 のまま、比べる年を別に明示
+    assert e["protocol"]["year"] == 2014 and e["protocol"]["compare_year"] == 2024
     yc = e["year_compare"]
-    assert (yc["selected_on_year"], yc["compare_year"]) == (2018, 2023)
+    assert (yc["selected_on_year"], yc["compare_year"]) == (2014, 2024)
     assert yc["setting"] == {"scale": e["chosen"]["scale"], "threshold": e["chosen"]["threshold"]}
-    assert yc["by_year"]["2018"] == {"tune": e["tune"], "holdout": e["holdout"], "overall": e["overall"]}
-    assert set(yc["by_year"]["2023"]) == {"tune", "holdout", "overall"}
-    # existing_absent_in_2018: 参照（縁を除く・20 m² 以上）の棟の数。割合は 棟数 / 全体
-    a = e["existing_absent_in_2018"]
+    assert yc["by_year"]["2014"] == {"tune": e["tune"], "holdout": e["holdout"], "overall": e["overall"]}
+    assert set(yc["by_year"]["2024"]) == {"tune", "holdout", "overall"}
+    # existing_absent_in_2014: 参照（縁を除く・20 m² 以上）の棟の数。割合は 棟数 / 全体
+    a = e["existing_absent_in_2014"]
     assert a["params"]["min_area_m2"] == 20.0 and a["setting"] == yc["setting"]
     assert a["overall"]["n_buildings"] == a["tune"]["n_buildings"] + a["holdout"]["n_buildings"] > 0
     assert a["overall"]["absent"] + a["overall"]["present"] <= a["overall"]["n_buildings"]
@@ -208,7 +208,7 @@ def test_reference_notes_separate_facts_from_estimates():
 
 def test_synthetic_run_is_reproducible(synth, tmp_path):
     again = make_synthetic_run.make_synthetic_run(tmp_path, created=CREATED)
-    for name in ("candidates.geojson", "buildings_2023.geojson", "eval.json", "run.json", "areas.json"):
+    for name in ("candidates.geojson", "buildings_2024.geojson", "eval.json", "run.json", "areas.json"):
         assert (tmp_path / "run1" / "out" / name).read_text(encoding="utf-8") == (synth["out"] / name).read_text(encoding="utf-8"), name
     assert again["summary"]["candidates"] == 7
 
@@ -332,7 +332,7 @@ def test_tile_with_incomplete_arrays_is_skipped_with_a_note(synth, tmp_path):
     x_new = x0 + 10
     for f in list(colab.glob(f"prob_*_{x0}_{y0}_s*.npy")):
         shutil.copy(f, colab / f.name.replace(f"_{x0}_{y0}_", f"_{x_new}_{y0}_"))
-    (colab / f"prob_2023_{x_new}_{y0}_s150.npy").unlink()  # 3 枚目のタイルは、1 つ欠ける
+    (colab / f"prob_2024_{x_new}_{y0}_s150.npy").unlink()  # 3 枚目のタイルは、1 つ欠ける
     meta["tiles"].append({"z": 18, "x": x_new, "y": y0, "id": tilemath.area_id(18, x_new, y0)})
     (colab / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
     run_postprocess.run_postprocess(dst, log=lambda m: None)
@@ -344,7 +344,7 @@ def test_tile_with_incomplete_arrays_is_skipped_with_a_note(synth, tmp_path):
 
 def test_fewer_than_two_usable_tiles_is_an_error(synth, tmp_path):
     dst = _copy_input(synth, tmp_path)
-    next((dst / "run1" / "colab").glob("prob_2023_*_s150.npy")).unlink()
+    next((dst / "run1" / "colab").glob("prob_2024_*_s150.npy")).unlink()
     with pytest.raises(RuntimeError):  # 2 枚のうち 1 枚が欠けると、調整用と評価用に分けられない
         run_postprocess.run_postprocess(dst, log=lambda m: None)
 
@@ -362,7 +362,7 @@ def test_cli_main_runs(synth, tmp_path, capsys):
     assert printed["kind"] == "synthetic" and printed["candidates"] == 7
     run = json.loads((out / "run.json").read_text(encoding="utf-8"))
     assert run["params"]["diff"]["new_p90_max"] == 0.5  # 閾値は引数で変えられ、run.json に残る
-    # p90 の上限を 0.5 に緩めると、A_unc（2018 の確率が 0.25 前後）が新規側に入る
+    # p90 の上限を 0.5 に緩めると、A_unc（2014 の確率が 0.25 前後）が新規側に入る
     classes = [f["properties"]["class"] for f in json.loads((out / "candidates.geojson").read_text(encoding="utf-8"))["features"]]
     assert classes.count("confirmed_new") == 4
 

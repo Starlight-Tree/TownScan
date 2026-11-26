@@ -45,10 +45,10 @@
     "class": "uncertain",
     "evidence": {
      "edge_touch": true,
-     "ov_2018": 0.3,
+     "ov_2014": 0.3,
      "ov_kiban": 0.1,
-     "prob_2018_p90": 0.4,
-     "prob_2023_mean": 0.74
+     "prob_2014_p90": 0.4,
+     "prob_2024_mean": 0.74
     },
     "reason": "edge"
    },
@@ -99,12 +99,12 @@
     "class": "confirmed_new",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.02,
+     "ov_2014": 0.02,
      "ov_kiban": 0.0,
-     "prob_2018_p90": 0.05,
-     "prob_2023_mean": 0.91
+     "prob_2014_p90": 0.05,
+     "prob_2024_mean": 0.91
     },
-    "reason": "new_absent_2018"
+    "reason": "new_absent_2014"
    },
    "type": "Feature"
   },
@@ -153,12 +153,12 @@
     "class": "existing_omission",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.83,
+     "ov_2014": 0.83,
      "ov_kiban": 0.05,
-     "prob_2018_p90": 0.77,
-     "prob_2023_mean": 0.88
+     "prob_2014_p90": 0.77,
+     "prob_2024_mean": 0.88
     },
-    "reason": "present_2018"
+    "reason": "present_2014"
    },
    "type": "Feature"
   },
@@ -207,12 +207,12 @@
     "class": "confirmed_new",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.02,
+     "ov_2014": 0.02,
      "ov_kiban": 0.0,
-     "prob_2018_p90": 0.05,
-     "prob_2023_mean": 0.91
+     "prob_2014_p90": 0.05,
+     "prob_2024_mean": 0.91
     },
-    "reason": "new_absent_2018"
+    "reason": "new_absent_2014"
    },
    "type": "Feature"
   },
@@ -261,10 +261,10 @@
     "class": "uncertain",
     "evidence": {
      "edge_touch": true,
-     "ov_2018": 0.3,
+     "ov_2014": 0.3,
      "ov_kiban": 0.1,
-     "prob_2018_p90": 0.4,
-     "prob_2023_mean": 0.74
+     "prob_2014_p90": 0.4,
+     "prob_2024_mean": 0.74
     },
     "reason": "edge"
    },
@@ -315,12 +315,12 @@
     "class": "confirmed_new",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.02,
+     "ov_2014": 0.02,
      "ov_kiban": 0.0,
-     "prob_2018_p90": 0.05,
-     "prob_2023_mean": 0.91
+     "prob_2014_p90": 0.05,
+     "prob_2024_mean": 0.91
     },
-    "reason": "new_absent_2018"
+    "reason": "new_absent_2014"
    },
    "type": "Feature"
   },
@@ -369,12 +369,12 @@
     "class": "existing_omission",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.83,
+     "ov_2014": 0.83,
      "ov_kiban": 0.05,
-     "prob_2018_p90": 0.77,
-     "prob_2023_mean": 0.88
+     "prob_2014_p90": 0.77,
+     "prob_2024_mean": 0.88
     },
-    "reason": "present_2018"
+    "reason": "present_2014"
    },
    "type": "Feature"
   },
@@ -423,12 +423,12 @@
     "class": "existing_omission",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.83,
+     "ov_2014": 0.83,
      "ov_kiban": 0.05,
-     "prob_2018_p90": 0.77,
-     "prob_2023_mean": 0.88
+     "prob_2014_p90": 0.77,
+     "prob_2024_mean": 0.88
     },
-    "reason": "present_2018"
+    "reason": "present_2014"
    },
    "type": "Feature"
   },
@@ -477,12 +477,12 @@
     "class": "confirmed_new",
     "evidence": {
      "edge_touch": false,
-     "ov_2018": 0.02,
+     "ov_2014": 0.02,
      "ov_kiban": 0.0,
-     "prob_2018_p90": 0.05,
-     "prob_2023_mean": 0.91
+     "prob_2014_p90": 0.05,
+     "prob_2024_mean": 0.91
     },
-    "reason": "new_absent_2018"
+    "reason": "new_absent_2014"
    },
    "type": "Feature"
   }

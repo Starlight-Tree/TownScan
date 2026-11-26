@@ -5,7 +5,7 @@ import { compare } from '../tests/fixtures';
 
 const item = (name: string, counts: Record<string, number>) => ({ area_id: `id-${name}`, name, counts });
 
-// 画面の例（熊本の 12 地区のうち、候補のある 6 地区）: 合計 18 件・2018 年は未検出 7・2018 年も検出 1・未判定 10
+// 画面の例（熊本の 12 地区のうち、候補のある 6 地区）: 合計 18 件・2014 年は未検出 7・2014 年も検出 1・未判定 10
 const SAMPLE: CompareResult = {
   ...compare,
   filter: undefined,
@@ -37,7 +37,7 @@ describe('compareSummary', () => {
 
   it('並びの基準の分類（filter.cls）があれば、その分類で最多を言う', () => {
     const byNew: CompareResult = { ...SAMPLE, filter: { cls: 'confirmed_new' } };
-    expect(compareSummary(byNew)?.lead).toBe('2018 年は未検出の候補が最も多いのは薄場一丁目で、3 件です。');
+    expect(compareSummary(byNew)?.lead).toBe('2014 年は未検出の候補が最も多いのは薄場一丁目で、3 件です。');
   });
 
   it('候補が 0 件なら、そう言う。内訳の文は無い', () => {

@@ -71,7 +71,8 @@ function area(id: string, name: string, counts: [number, number, number]): AreaS
     counts: { confirmed_new, existing_omission, uncertain, total: confirmed_new + existing_omission + uncertain },
   };
 }
-const areas = [area('a', 'アサヒ地区', [4, 4, 2]), area('b', 'ノース地区', [5, 3, 1])];
+// 中央（「2014 年も検出」）は、実際のデータと同じく 0
+const areas = [area('a', 'アサヒ地区', [4, 0, 6]), area('b', 'ノース地区', [5, 0, 4])];
 
 function feature(id: string, cls: CandidateFeature['properties']['class'], area_id: string): CandidateFeature {
   return {
@@ -140,27 +141,27 @@ afterEach(() => {
 const status = () => document.querySelector('.map-status__text')!.firstElementChild!.textContent;
 
 describe('地図の下の「現在表示」', () => {
-  it('選んだ地図の種類と候補の件数。初期は 2023 年の写真', async () => {
+  it('選んだ地図の種類と候補の件数。初期は 2024 年の写真', async () => {
     setup();
-    expect(status()).toBe('表示中: 2023 年の写真・候補 3 件');
+    expect(status()).toBe('表示中: 2024 年の写真・候補 3 件');
     await userEvent.click(screen.getByRole('button', { name: '標準地図' }));
     expect(status()).toBe('表示中: 標準地図・候補 3 件');
-    await userEvent.click(screen.getByRole('button', { name: '2018 年の写真' }));
-    expect(status()).toBe('表示中: 2018 年の写真・候補 3 件');
+    await userEvent.click(screen.getByRole('button', { name: '2014 年の写真' }));
+    expect(status()).toBe('表示中: 2014 年の写真・候補 3 件');
   });
 
   it('写真が一部しか無いとき・まったく無いときは、実際に見えているものを言い、既存の注意書き（role=status）も残す', async () => {
     setup();
     await userEvent.click(screen.getByRole('button', { name: 'タイル（partial）' }));
-    expect(status()).toBe('表示中: 2023 年の写真（一部は標準地図）・候補 3 件');
+    expect(status()).toBe('表示中: 2024 年の写真（一部は標準地図）・候補 3 件');
     expect(screen.getByRole('status')).toHaveTextContent('この範囲の一部には、この年の写真がありません');
 
     await userEvent.click(screen.getByRole('button', { name: 'タイル（none）' }));
-    expect(status()).toBe('表示中: 標準地図（この範囲には 2023 年の写真がありません）・候補 3 件');
+    expect(status()).toBe('表示中: 標準地図（この範囲には 2024 年の写真がありません）・候補 3 件');
     expect(screen.getByRole('status')).toHaveTextContent('この範囲には、この年の写真がありません');
 
     await userEvent.click(screen.getByRole('button', { name: 'タイル（ok）' }));
-    expect(status()).toBe('表示中: 2023 年の写真・候補 3 件');
+    expect(status()).toBe('表示中: 2024 年の写真・候補 3 件');
     // 通知の入れ物は、いつも描く（文だけを替える）。文が無いあいだは空
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
@@ -174,12 +175,12 @@ describe('地図の下の「現在表示」', () => {
 
   it('候補がまだ届いていないときは、0 件とは言わない', () => {
     setup({ candidates: 'loading' });
-    expect(status()).toBe('表示中: 2023 年の写真・候補はまだ表示できていません');
+    expect(status()).toBe('表示中: 2024 年の写真・候補はまだ表示できていません');
   });
 
   it('候補の件数は、絞り込み後の件数', () => {
     setup({ filter: { areaId: '', classes: new Set(['uncertain']) } });
-    expect(status()).toBe('表示中: 2023 年の写真・候補 1 件');
+    expect(status()).toBe('表示中: 2024 年の写真・候補 1 件');
   });
 
   it('標準地図を選んでいれば、タイルが無い範囲でも、「この年の写真がありません」の通知は出ない（通知の入れ物は空のまま）', async () => {
@@ -190,7 +191,7 @@ describe('地図の下の「現在表示」', () => {
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(document.body).not.toHaveTextContent('この年の写真がありません');
     // 写真へ戻せば、また出る（標準地図のときだけ抑える）
-    await userEvent.click(screen.getByRole('button', { name: '2018 年の写真' }));
+    await userEvent.click(screen.getByRole('button', { name: '2014 年の写真' }));
     expect(screen.getByRole('status')).toHaveTextContent('この範囲には、この年の写真がありません');
   });
 
@@ -236,7 +237,7 @@ describe('ツールバーの並び（DOM の順 = Tab の順 = 見た目の順�
     const order = Array.from(bar.querySelectorAll<HTMLElement>('button, input, select')).map((el) =>
       el.matches('select') ? '地区の選択' : el.matches('input') ? el.closest('label')!.textContent!.trim() : el.textContent,
     );
-    expect(order).toEqual(['2023 年の写真', '2018 年の写真', '標準地図', '解析した地区の枠', '地区の選択', '表示範囲を戻す']);
+    expect(order).toEqual(['2024 年の写真', '2014 年の写真', '標準地図', '解析した地区の枠', '地区の選択', '表示範囲を戻す']);
   });
 });
 
@@ -245,10 +246,10 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
     setup();
     const strip = screen.getByRole('group', { name: '件数の集計' });
     expect(strip).toHaveTextContent('全 2 地区');
-    expect(strip).toHaveTextContent('2018 年は未検出9');
+    expect(strip).toHaveTextContent('2014 年は未検出9');
     // 表示の切り替え（チェックボックス）が、数字のそばにある
     const classes = within(strip).getByRole('group', { name: /表示する分類/ });
-    expect(within(classes).getAllByRole('checkbox')).toHaveLength(3);
+    expect(within(classes).getAllByRole('checkbox')).toHaveLength(2);
     expect(within(classes).getByText('9')).toBeInTheDocument();
   });
 
@@ -257,9 +258,9 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
     expect(document.querySelector('fieldset')).toBeNull();
     expect(document.querySelector('legend')).toBeNull();
     expect(document.querySelector('.legend')).toBeNull();
-    expect(screen.getAllByRole('checkbox', { name: /2018 年は未検出/ })).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox', { name: /2014 年は未検出/ })).toHaveLength(1);
     const stage = document.querySelector<HTMLElement>('.map-stage')!;
-    expect(within(stage).queryByRole('checkbox', { name: /2018 年は未検出|2018 年も検出|未判定/ })).not.toBeInTheDocument();
+    expect(within(stage).queryByRole('checkbox', { name: /2014 年は未検出|2014 年も検出|未判定/ })).not.toBeInTheDocument();
     // 「表示する分類」は 1 つのグループで、集計の帯の中にある
     const group = screen.getByRole('group', { name: '表示する分類（色・線・形で区別）' });
     expect(screen.getByRole('group', { name: '件数の集計' })).toContainElement(group);
@@ -269,26 +270,26 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
     setup();
     const group = screen.getByRole('group', { name: /表示する分類/ });
     const items = Array.from(group.querySelectorAll('li'));
-    expect(items.map((li) => li.getAttribute('data-class'))).toEqual(['confirmed_new', 'existing_omission', 'uncertain']);
+    expect(items.map((li) => li.getAttribute('data-class'))).toEqual(['confirmed_new', 'uncertain']);
     for (const li of items) {
       const label = li.querySelector('label')!;
       expect(label.querySelector('input[type="checkbox"]')).not.toBeNull();
       expect(label.querySelector('svg.class-swatch')).not.toBeNull();
     }
-    expect(screen.getByRole('checkbox', { name: /2018 年は未検出/ })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /2018 年も検出/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /2014 年は未検出/ })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: /2014 年も検出/ })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /未判定/ })).toBeChecked();
     // 分類の全文（旧写真に無い、など）は、ラベルの title に残す
-    expect(items[0]!.querySelector('label')).toHaveAttribute('title', '2018 年は未検出');
+    expect(items[0]!.querySelector('label')).toHaveAttribute('title', '2014 年は未検出');
   });
 
   it('チェックの状態は、渡された絞り込みに従う。外した分類は（非表示）と言う（チェックが外れているので、読み上げでは重ねない）', () => {
     setup({ filter: { areaId: '', classes: new Set<CandidateClass>(['confirmed_new']) } });
-    expect(screen.getByRole('checkbox', { name: /2018 年は未検出/ })).toBeChecked();
-    const omit = screen.getByRole('checkbox', { name: /2018 年も検出/ });
+    expect(screen.getByRole('checkbox', { name: /2014 年は未検出/ })).toBeChecked();
+    const omit = screen.getByRole('checkbox', { name: /未判定/ });
     expect(omit).not.toBeChecked();
     expect(omit.closest('li')).toHaveTextContent('（非表示）');
-    expect(omit).toHaveAccessibleName('2018 年も検出、7 件');
+    expect(omit).toHaveAccessibleName('未判定、10 件');
   });
 
   it('分類を外すと、集計の帯に「表示中」の差と「条件を解除」が出る。解除すると全部に戻る（親が持つ絞り込みにも伝える）', async () => {
@@ -297,7 +298,7 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
     await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     expect(onFilterChange).toHaveBeenLastCalledWith(expect.objectContaining({ areaId: '' }));
     const strip = screen.getByRole('group', { name: '件数の集計' });
-    expect(strip).toHaveTextContent('全 19 件のうち、表示中 16 件');
+    expect(strip).toHaveTextContent('全 19 件のうち、表示中 9 件');
     // 解除（自分で持つ絞り込みでも、全部に戻る）
     await userEvent.click(within(strip).getByRole('button', { name: '条件を解除' }));
     expect(onFilterChange).toHaveBeenLastCalledWith(ALL_FILTER);
@@ -306,7 +307,7 @@ describe('集計の帯（分類の件数が、そのまま表示の切り替え�
   });
 
   it('親が渡した絞り込み（地区）を、集計の帯・地区の選択・地図へ同じ条件で反映する', () => {
-    setup({ filter: { areaId: 'b', classes: new Set(['confirmed_new', 'existing_omission', 'uncertain']) } });
+    setup({ filter: { areaId: 'b', classes: new Set(['confirmed_new', 'uncertain']) } });
     const strip = screen.getByRole('group', { name: '件数の集計' });
     expect(strip).toHaveTextContent('対象ノース地区');
     expect(screen.getByRole('combobox', { name: '地区' })).toHaveValue('b');
@@ -340,18 +341,18 @@ describe('地図の寄せ方（詳細は地図に重ならない）', () => {
   });
 });
 
-// 分類ごとの件数（集計の帯の中の数字）を、表示順（2018 年は未検出・2018 年も検出・未判定）で読む
+// 分類ごとの件数（集計の帯の中の数字）を、表示順（2014 年は未検出・未判定）で読む
 const classCounts = () =>
   Array.from(screen.getByRole('group', { name: /表示する分類/ }).querySelectorAll('li strong')).map((e) => e.textContent);
 
 describe('地区を選んだときの件数と絞り込み', () => {
   it('分類ごとの件数は、選んだ地区だけの数になる（全地区の数のままにしない）', async () => {
     setup();
-    expect(classCounts()).toEqual(['9', '7', '3']); // アサヒ [4,4,2] + ノース [5,3,1]
+    expect(classCounts()).toEqual(['9', '10']); // アサヒ [4,0,6] + ノース [5,0,4]
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '地区' }), 'b');
-    expect(classCounts()).toEqual(['5', '3', '1']);
+    expect(classCounts()).toEqual(['5', '4']);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '地区' }), '');
-    expect(classCounts()).toEqual(['9', '7', '3']);
+    expect(classCounts()).toEqual(['9', '10']);
   });
 
   it('地区を選んだまま分類を切り替えても、地区の絞り込み（areaId）は保たれる', async () => {
@@ -362,7 +363,7 @@ describe('地区を選んだときの件数と絞り込み', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     const next = onFilterChange.mock.calls.at(-1)![0] as MapFilter;
     expect(next.areaId).toBe('b');
-    expect([...next.classes].sort()).toEqual(['confirmed_new', 'existing_omission']);
+    expect([...next.classes]).toEqual(['confirmed_new']);
     // 地図・集計の帯にも、その地区のまま反映される
     expect(screen.getByRole('group', { name: '件数の集計' })).toHaveTextContent('対象ノース地区');
   });
@@ -379,16 +380,16 @@ describe('複数の地区（区など。areaIds）の絞り込み', () => {
   it('地図に出す候補を、対象の地区だけにする（c の候補は出ない）。「現在表示」の件数も同じ', () => {
     setupWard();
     expect(screen.getByTestId('leaflet')).toHaveAttribute('data-count', '3');
-    expect(status()).toBe('表示中: 2023 年の写真・候補 3 件');
+    expect(status()).toBe('表示中: 2024 年の写真・候補 3 件');
   });
 
   it('分類ごとの件数と集計の帯は、対象の地区の和（c の 10 件は入らない）。対象は API の名前（scope）', () => {
     setupWard();
-    expect(classCounts()).toEqual(['9', '7', '3']);
+    expect(classCounts()).toEqual(['9', '10']);
     const strip = screen.getByRole('group', { name: '件数の集計' });
     expect(strip).toHaveTextContent('対象中央区');
     expect(strip).not.toHaveTextContent('全 3 地区');
-    expect(strip).toHaveTextContent('2018 年は未検出9');
+    expect(strip).toHaveTextContent('2014 年は未検出9');
   });
 
   it('地区の選択ボックスは、先頭に「{scope}（複数の地区）」を選択済みで出す。選び直しても何も変えない', async () => {
@@ -614,7 +615,7 @@ describe('地図の下の 1 行の帯（現在表示・案内・通知）と、�
     setup();
     await userEvent.click(screen.getByRole('button', { name: 'タイル（partial）' }));
     await userEvent.click(screen.getByRole('button', { name: 'ズーム（15）' }));
-    expect(status()).toBe('表示中: 2023 年の写真（一部は標準地図）・候補 3 件');
+    expect(status()).toBe('表示中: 2024 年の写真（一部は標準地図）・候補 3 件');
     expect(document.querySelector('.map-overlay-top')).toBeNull();
     expect(document.querySelector('.map-note')).toBeNull();
   });
@@ -687,13 +688,13 @@ describe('一覧へ渡す分類（API は分類を 1 つしか受けない）', 
     expect(api.getCandidates).toHaveBeenCalledWith({ area_id: 'a', cls: 'uncertain', limit: 30 }, expect.anything());
   });
 
-  it('分類を 2 つ以上表示しているとき（2 つ・3 つ）は、cls を渡さない（null）', async () => {
+  it('分類を 2 つとも表示しているときは、cls を渡さない（null）', async () => {
     const { unmount } = setup({ filter: { areaId: 'a', classes: new Set<CandidateClass>(['uncertain', 'confirmed_new']) } });
     await openList();
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(1));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: 'a', cls: null, limit: 30 }, expect.anything());
     unmount();
-    setup({ filter: { areaId: 'a', classes: new Set<CandidateClass>(['uncertain', 'confirmed_new', 'existing_omission']) } });
+    setup({ filter: { areaId: 'a', classes: new Set<CandidateClass>(['confirmed_new', 'uncertain']) } });
     await openList();
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(2));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: 'a', cls: null, limit: 30 }, expect.anything());
@@ -705,7 +706,6 @@ describe('一覧へ渡す分類（API は分類を 1 つしか受けない）', 
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(1));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: null, cls: null, limit: 30 }, expect.anything());
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /2018 年も検出/ })); // 2 つ残る: 条件は同じ
     await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ })); // 1 つだけ残る
     await waitFor(() => expect(api.getCandidates).toHaveBeenCalledTimes(2));
     expect(api.getCandidates).toHaveBeenLastCalledWith({ area_id: null, cls: 'confirmed_new', limit: 30 }, expect.anything());
@@ -727,13 +727,13 @@ describe('ランドマークの名前', () => {
 
 describe('絞り込みの地区が替わったら、地図の表示範囲もそれに合わせる（どの経路でも）', () => {
   const spread = [
-    { ...area('a', 'アサヒ地区', [4, 4, 2]), bbox: [130.7, 32.8, 130.71, 32.81] as [number, number, number, number] },
-    { ...area('b', 'ノース地区', [5, 3, 1]), bbox: [130.8, 32.9, 130.81, 32.91] as [number, number, number, number] },
+    { ...area('a', 'アサヒ地区', [4, 0, 6]), bbox: [130.7, 32.8, 130.71, 32.81] as [number, number, number, number] },
+    { ...area('b', 'ノース地区', [5, 0, 4]), bbox: [130.8, 32.9, 130.81, 32.91] as [number, number, number, number] },
   ];
   const BOX_A = '130.7,32.8,130.71,32.81';
   const BOX_B = '130.8,32.9,130.81,32.91';
   const BOX_ALL = '130.7,32.8,130.81,32.91';
-  const all = new Set<CandidateClass>(['confirmed_new', 'existing_omission', 'uncertain']);
+  const all = new Set<CandidateClass>(['confirmed_new', 'uncertain']);
   const only = (areaId: string, classes = all): MapFilter => ({ areaId, classes });
   const leaflet = () => screen.getByTestId('leaflet');
 

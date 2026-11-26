@@ -45,7 +45,7 @@ function PhotosEmptyState() {
   return (
     // フォーカスできる中身が無いパネルなので、外枠をフォーカスできるようにする（キーボードの人がパネルへ入れるように）
     <div className="result-area__empty" tabIndex={0}>
-      <p>候補を選ぶと、2018 年と 2023 年の写真を並べて見られます。</p>
+      <p>候補を選ぶと、2014 年と 2024 年の写真を並べて見られます。</p>
       <p className="result-area__empty-hint">地図の印、候補の一覧、チャットの結果の写真から選べます。</p>
     </div>
   );

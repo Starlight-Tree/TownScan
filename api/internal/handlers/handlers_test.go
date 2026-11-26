@@ -102,7 +102,7 @@ func summary(id, areaID string, name *string, class string, area float64) store.
 		ID: id, AreaID: areaID, AreaName: name, Ward: str("中央区"), Class: class, AreaM2: pyjson.Float(area),
 		BBox:     [4]pyjson.Float{130.7074142, 32.8064481, 130.7076824, 32.8066285},
 		Centroid: [2]pyjson.Float{130.70754829999998, 32.8065383},
-		Reason:   "new_absent_2018",
+		Reason:   "new_absent_2014",
 	}
 }
 
@@ -238,7 +238,7 @@ func TestCandidatesBodyAndDefaults(t *testing.T) {
 	fake := &fakeStore{run: syntheticRun(), total: 9, summaries: []store.Summary{summary("c-226250-105759-1", "z18-226250-105759", str("試験町"), "confirmed_new", 503.8)}}
 	tt := newTester(t, fake)
 	tt.wantJSON(tt.get("/api/candidates"), 200, jsonCT,
-		`{"total":9,"items":[{"id":"c-226250-105759-1","area_id":"z18-226250-105759","area_name":"試験町","ward":"中央区","class":"confirmed_new","area_m2":503.8,"bbox":[130.7074142,32.8064481,130.7076824,32.8066285],"centroid":[130.70754829999998,32.8065383],"reason":"new_absent_2018"}]}`)
+		`{"total":9,"items":[{"id":"c-226250-105759-1","area_id":"z18-226250-105759","area_name":"試験町","ward":"中央区","class":"confirmed_new","area_m2":503.8,"bbox":[130.7074142,32.8064481,130.7076824,32.8066285],"centroid":[130.70754829999998,32.8065383],"reason":"new_absent_2014"}]}`)
 	want := listArgs{runID: "synthetic-test", sort: store.SortAreaDesc, limit: 50, offset: 0}
 	if fake.gotList.runID != want.runID || fake.gotList.sort != want.sort || fake.gotList.limit != 50 || fake.gotList.offset != 0 ||
 		fake.gotList.filter.AreaIDs != nil || fake.gotList.filter.Class != "" {
@@ -341,12 +341,12 @@ func TestGeoJSON(t *testing.T) {
 	feat := store.Feature{
 		Type: "Feature", ID: "c-226250-105759-1",
 		Geometry:   json.RawMessage(`{"type":"Polygon","coordinates":[[[130.7074142,32.8066285],[130.7074142,32.8064481]]]}`),
-		Properties: store.FeatureProps{ID: "c-226250-105759-1", Class: "confirmed_new", AreaM2: 503.8, AreaID: "z18-226250-105759", Reason: "new_absent_2018"},
+		Properties: store.FeatureProps{ID: "c-226250-105759-1", Class: "confirmed_new", AreaM2: 503.8, AreaID: "z18-226250-105759", Reason: "new_absent_2014"},
 	}
 	fake := &fakeStore{run: syntheticRun(), features: []store.Feature{feat}}
 	tt := newTester(t, fake)
 	tt.wantJSON(tt.get("/api/candidates.geojson?cls=uncertain&area_id=z18-1-1"), 200, "application/geo+json",
-		`{"type":"FeatureCollection","features":[{"type":"Feature","id":"c-226250-105759-1","geometry":{"type":"Polygon","coordinates":[[[130.7074142,32.8066285],[130.7074142,32.8064481]]]},"properties":{"id":"c-226250-105759-1","class":"confirmed_new","area_m2":503.8,"area_id":"z18-226250-105759","reason":"new_absent_2018"}}]}`)
+		`{"type":"FeatureCollection","features":[{"type":"Feature","id":"c-226250-105759-1","geometry":{"type":"Polygon","coordinates":[[[130.7074142,32.8066285],[130.7074142,32.8064481]]]},"properties":{"id":"c-226250-105759-1","class":"confirmed_new","area_m2":503.8,"area_id":"z18-226250-105759","reason":"new_absent_2014"}}]}`)
 	if fake.gotFeat.Class != "uncertain" || len(fake.gotFeat.AreaIDs) != 1 {
 		t.Errorf("絞り込み = %+v", fake.gotFeat)
 	}
@@ -365,7 +365,7 @@ func TestGeoJSONValidation(t *testing.T) {
 func detailCandidate() *store.Candidate {
 	return &store.Candidate{
 		Summary:  summary("c-226250-105759-1", "z18-226250-105759", str("試験町"), "confirmed_new", 503.8),
-		Evidence: json.RawMessage(`{"ov_2018":0.02,"edge_touch":false,"prob_2023_mean":0.91}`),
+		Evidence: json.RawMessage(`{"ov_2014":0.02,"edge_touch":false,"prob_2024_mean":0.91}`),
 		Geometry: json.RawMessage(`{"type":"Polygon","coordinates":[[[1.5,2.0]]]}`),
 		TileX:    226250, TileY: 105759,
 	}
@@ -376,11 +376,11 @@ func TestCandidateDetail(t *testing.T) {
 	tt := newTester(t, fake)
 	tt.wantJSON(tt.get("/api/candidates/c-226250-105759-1"), 200, jsonCT,
 		`{"id":"c-226250-105759-1","area_id":"z18-226250-105759","area_name":"試験町","ward":"中央区","class":"confirmed_new","area_m2":503.8,`+
-			`"bbox":[130.7074142,32.8064481,130.7076824,32.8066285],"centroid":[130.70754829999998,32.8065383],"reason":"new_absent_2018",`+
-			`"evidence":{"ov_2018":0.02,"edge_touch":false,"prob_2023_mean":0.91},"geometry":{"type":"Polygon","coordinates":[[[1.5,2.0]]]},`+
-			`"explanation_key":"new_absent_2018","explanation":"2023 年の写真では建物を検出し、2018 年の写真では検出していません。前からある建物の場合もあるので、写真で確かめてください。",`+
-			`"images":[{"year":2018,"url":"/api/candidates/c-226250-105759-1/image?year=2018&size=512"},{"year":2023,"url":"/api/candidates/c-226250-105759-1/image?year=2023&size=512"}],`+
-			`"provenance":{"source":"国土地理院 空中写真（年度別 2018・2023 年）から建物を抽出し、2 時点を比較した結果","photo_years":[2018,2023],"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic","note":"合成データ（テスト用）です。実データではありません。"}}`)
+			`"bbox":[130.7074142,32.8064481,130.7076824,32.8066285],"centroid":[130.70754829999998,32.8065383],"reason":"new_absent_2014",`+
+			`"evidence":{"ov_2014":0.02,"edge_touch":false,"prob_2024_mean":0.91},"geometry":{"type":"Polygon","coordinates":[[[1.5,2.0]]]},`+
+			`"explanation_key":"new_absent_2014","explanation":"2024 年の写真では建物を検出し、2014 年の写真では検出していません。前からある建物の場合もあるので、写真で確かめてください。",`+
+			`"images":[{"year":2014,"url":"/api/candidates/c-226250-105759-1/image?year=2014&size=512"},{"year":2024,"url":"/api/candidates/c-226250-105759-1/image?year=2024&size=512"}],`+
+			`"provenance":{"source":"IGN（フランス国土地理院）の空中写真（BD ORTHO 2014・2024 年）から建物を抽出し、2 時点を比較した結果","photo_years":[2014,2024],"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic","note":"合成データ（テスト用）です。実データではありません。"}}`)
 	if fake.gotCandI != "c-226250-105759-1" {
 		t.Errorf("id = %q", fake.gotCandI)
 	}
@@ -427,8 +427,8 @@ func TestMetricsAppendsProvenanceAndKeepsKeyOrder(t *testing.T) {
 	tt := newTester(t, fake)
 	tt.wantJSON(tt.get("/api/metrics"), 200, jsonCT,
 		`{"reference":"合成データ","new_building_recall":null,"holdout":{"object":{"f1":0.58}},"notes":["a"],`+
-			`"provenance":{"source":"基盤地図情報（2018-10 版）を参照にした、2018 年の写真での建物抽出の評価","photo_years":[2018],"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic",`+
-			`"metric":"物体単位 F1・画素 IoU","note":"合成データ（テスト用）です。実データではありません。 数字は 2018 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。"}}`)
+			`"provenance":{"source":"2014 年の写真での建物抽出の評価","photo_years":[2014],"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic",`+
+			`"metric":"物体単位 F1・画素 IoU","note":"合成データ（テスト用）です。実データではありません。 数字は 2014 年の写真で測った値。分類の閾値は未検証の初期値。"}}`)
 }
 
 func TestMetricsReplacesAnExistingProvenanceInPlace(t *testing.T) {
@@ -439,7 +439,8 @@ func TestMetricsReplacesAnExistingProvenanceInPlace(t *testing.T) {
 	if !strings.HasPrefix(body, `{"a":1,"provenance":{"source":`) || !strings.HasSuffix(body, `,"b":2}`) || strings.Contains(body, `"old"`) {
 		t.Errorf("本文 = %s", body)
 	}
-	if !strings.Contains(body, `"note":"数字は 2018 年の写真で測った値。`) { // real の run には、合成データの注記が付かない
+	// holdout が無い結果は、測った値があるとは言わない。real の run には、合成データの注記が付かない
+	if !strings.Contains(body, `"note":"建物の抽出と新築の精度は、まだ測っていない。`) {
 		t.Errorf("note = %s", body)
 	}
 }

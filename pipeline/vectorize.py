@@ -2,7 +2,7 @@
 
 配列は 256×倍率 の正方形（タイル全体）。二値化は `prob >= threshold`。
 小さな粒・穴の除去は rasterio.features.sieve（4 近傍）。面積のしきい値（m²）を、倍率に合わせて画素数に直す。
-面積は EPSG:6670 の m²。タイルの縁に接するか（edge_touch）は、単純化の前の画素のポリゴンで見る。
+面積は m²（geo.metric_crs）。タイルの縁に接するか（edge_touch）は、単純化の前の画素のポリゴンで見る。
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class Building:
 
     geom_lonlat: Polygon  # 単純化済み
     geom_merc: Polygon  # 同じ形を EPSG:3857 で（確率の配列を切り出すため）
-    geom_6670: Polygon  # 同じ形を EPSG:6670 で（面積の重なりを計るため）
+    geom_m: Polygon  # 同じ形を面積を測る座標系で（面積の重なりを計るため）
     area_m2: float
     prob_mean: float
     edge_touch: bool
@@ -145,13 +145,13 @@ def vectorize_tile(
         if merc is None:
             continue
         lonlat = geo.merc_to_lonlat_geom(merc)
-        g6670 = geo.lonlat_to_6670_geom(lonlat)
+        g_m = geo.lonlat_to_metric_geom(lonlat)
         out.append(
             Building(
                 geom_lonlat=lonlat,
                 geom_merc=merc,
-                geom_6670=g6670,
-                area_m2=float(g6670.area),
+                geom_m=g_m,
+                area_m2=float(g_m.area),
                 prob_mean=prob_mean,
                 edge_touch=comp.edge_touch,
                 comp_index=idx,

@@ -171,7 +171,7 @@ const closeDialog = async () => {
 const figureRegion = (kind: FigureKind, root: Pick<typeof screen, 'getByRole'> = screen) => root.getByRole('region', { name: kind === 'map' ? '地図' : 'グラフ' });
 const figureExpand = (kind: FigureKind, root: Pick<typeof screen, 'getByRole'> = screen) =>
   within(figureRegion(kind, root)).getByRole('button', { name: kind === 'map' ? '地図を拡大ビューで開く' : 'グラフを拡大ビューで開く' });
-/** 件数の条件（分類 = 2018 年は未検出）つきで、グラフの図が出る回答。回答の中の図は 1 つ（順位が上の比較のグラフ）で、条件は後ろの件数のもの */
+/** 件数の条件（分類 = 2014 年は未検出）つきで、グラフの図が出る回答。回答の中の図は 1 つ（順位が上の比較のグラフ）で、条件は後ろの件数のもの */
 const countWithChart: ToolResult[] = [compare, count];
 /** 回答の下の「表示を切り替える」のボタンを押す（最新の回答の、ほかの見方） */
 const pressSwitch = (name: string) => userEvent.click(within(screen.getByRole('group', { name: '表示を切り替える' })).getByRole('button', { name }));
@@ -307,7 +307,7 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     return d;
   }
 
-  it('回答のグラフの「グラフを拡大」: グラフの画面で開く。回答の条件（分類 = 2018 年は未検出）が、グラフにも拡大ビューにも写る。押したボタンは、閉じるまで覚えている', async () => {
+  it('回答のグラフの「グラフを拡大」: グラフの画面で開く。回答の条件（分類 = 2014 年は未検出）が、グラフにも拡大ビューにも写る。押したボタンは、閉じるまで覚えている', async () => {
     await ask(countWithChart);
     // 図のグラフは、はじめから回答の条件で出ている
     await waitFor(() => expect(within(figureRegion('chart')).getByTestId('chart')).toHaveAttribute('data-classes', 'confirmed_new'));
@@ -330,13 +330,13 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     expect(map).toHaveAttribute('data-classes', 'confirmed_new');
   });
 
-  it('比較の回答は、グラフの図だけ（地図の図は無い）。「グラフを拡大」で、グラフの画面で開く。比較は 3 分類すべて、地区は全地区', async () => {
+  it('比較の回答は、グラフの図だけ（地図の図は無い）。「グラフを拡大」で、グラフの画面で開く。比較は 2 分類すべて、地区は全地区', async () => {
     await ask([compare]);
     expect(screen.queryByRole('region', { name: '地図' })).toBeNull();
     expect(screen.queryByTestId('leaflet')).toBeNull();
     await userEvent.click(figureExpand('chart'));
     expectOpenDialog('グラフ');
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
     expect(chart()).toHaveAttribute('data-area-id', '');
   });
 
@@ -359,7 +359,7 @@ describe('結果カードのボタンで、その回答の拡大ビューが開�
     const card = screen.getByRole('region', { name: count.title });
     const photos = await within(card).findAllByRole('listitem');
     const shown = photos.filter((li) => li.classList.contains('photo-card'));
-    expect(shown).toHaveLength(1); // 2018 年は未検出の 1 件（未判定の c-1-2-2 は入らない）
+    expect(shown).toHaveLength(1); // 2014 年は未検出の 1 件（未判定の c-1-2-2 は入らない）
     expect(shown[0]).toHaveTextContent('c-1-2-1');
     expect(shown[0]).toHaveTextContent('123.4 m²');
     await userEvent.click(within(card).getByRole('button', { name: /詳細.*c-1-2-1/ }));
@@ -522,7 +522,7 @@ describe('拡大ビューを閉じる（「閉じる」・Esc）。フォーカ�
 
 describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
   const uncertainOnly = { ...count, title: '未判定の件数', total: 18, filter: { area_id: null, cls: 'uncertain' as const } };
-  const areaOne = { ...count, title: '地区 01 の2018 年は未検出', filter: { area_id: 'z18-1-2', cls: 'confirmed_new' as const } };
+  const areaOne = { ...count, title: '地区 01 の2014 年は未検出', filter: { area_id: 'z18-1-2', cls: 'confirmed_new' as const } };
 
   it('回答 A のタブ・絞り込み・選んだ候補を変えて閉じ、回答 B を開くと B は B の状態で開く。A を開き直すと、A の変えた状態が残る（B と混ざらない）', async () => {
     await renderLoaded();
@@ -532,7 +532,7 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
     await expand(A, view('chart'));
     expect(chart()).toHaveAttribute('data-classes', 'uncertain');
     await userEvent.click(tab('地図'));
-    await userEvent.click(screen.getByRole('checkbox', { name: /2018 年は未検出/ })); // 2018 年は未検出を足す
+    await userEvent.click(screen.getByRole('checkbox', { name: /2014 年は未検出/ })); // 2014 年は未検出を足す
     const map = screen.getByTestId('leaflet');
     await waitFor(() => expect(map).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
     await userEvent.click(screen.getByRole('button', { name: '地図の印（c-1-2-2）' }));
@@ -570,7 +570,7 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
     const A = answerOf(uncertainOnly);
     await expand(A, view('chart'));
     await userEvent.click(tab('地図'));
-    await userEvent.click(screen.getByRole('checkbox', { name: /2018 年は未検出/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /2014 年は未検出/ }));
     await closeDialog();
     await expand(A, view('chart'));
     expect(tab('グラフ')).toHaveAttribute('aria-selected', 'true');
@@ -600,7 +600,7 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
 
     // 比較の回答の図（グラフ）の「拡大」で開いて、閉じる
     await userEvent.click(figureExpand('chart', second));
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
     await closeDialog();
 
     // 古い件数の図の「拡大」を押すと、その回答の条件（未判定だけ）で開く
@@ -610,7 +610,7 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
 
     // 手で凡例を替えて閉じ、図の「拡大」で開き直して地図へ移っても、替えたまま
     await userEvent.click(tab('地図'));
-    await userEvent.click(within(panelEl()).getByRole('checkbox', { name: /2018 年は未検出/ }));
+    await userEvent.click(within(panelEl()).getByRole('checkbox', { name: /2014 年は未検出/ }));
     await closeDialog();
     await userEvent.click(figureExpand('chart', first));
     await userEvent.click(tab('地図'));
@@ -641,7 +641,7 @@ describe('回答ごとの状態（拡大の単位は回答 1 件）', () => {
     await expand(answerOf(uncertainOnly, byWard), view('chart'));
     expect(chart()).toHaveAttribute('data-area-ids', 'z18-1-2,z18-2-2');
     expect(chart()).toHaveAttribute('data-scope', '中央区');
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
   });
 });
 
@@ -676,7 +676,7 @@ describe('「新しい会話」: 拡大ビューを閉じ、回答ごとの状�
     const A = answerOf({ ...count, filter: { area_id: null, cls: 'uncertain' } });
     await expand(A, view('chart'));
     await userEvent.click(tab('地図'));
-    await userEvent.click(screen.getByRole('checkbox', { name: /2018 年は未検出/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /2014 年は未検出/ }));
     await closeDialog();
     // 「新しい会話」は、会話が 1 件以上のときだけ出る。質問して、押す
     await userEvent.type(input(), 'x{Enter}');
@@ -718,24 +718,24 @@ describe('「新しい会話」: 拡大ビューを閉じ、回答ごとの状�
 });
 
 describe('画面 `/`（地図・詳細の連携）', () => {
-  it('地区の枠と候補を読み込み、地図に渡す。標準の下地は 2023 年の写真', async () => {
+  it('地区の枠と候補を読み込み、地図に渡す。標準の下地は 2024 年の写真', async () => {
     await renderLoaded();
     const map = await openWelcomeMap();
-    expect(map).toHaveAttribute('data-base', 'photo2023');
+    expect(map).toHaveAttribute('data-base', 'photo2024');
     expect(screen.getByRole('combobox', { name: '地区' })).toHaveTextContent('テスト地区 01');
     // 凡例に分類ごとの件数（地区の件数の合計）
     const legend = screen.getByRole('group', { name: /表示する分類/ });
-    expect(within(legend).getAllByRole('checkbox')).toHaveLength(3);
+    expect(within(legend).getAllByRole('checkbox')).toHaveLength(2);
     expect(within(legend).getByText('5')).toBeInTheDocument();
   });
 
   it('下地を切り替える（aria-pressed）', async () => {
     await renderLoaded();
     const map = await openWelcomeMap();
-    await userEvent.click(screen.getByRole('button', { name: '2018 年の写真' }));
-    expect(map).toHaveAttribute('data-base', 'photo2018');
-    expect(screen.getByRole('button', { name: '2018 年の写真' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '2023 年の写真' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: '2014 年の写真' }));
+    expect(map).toHaveAttribute('data-base', 'photo2014');
+    expect(screen.getByRole('button', { name: '2014 年の写真' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '2024 年の写真' })).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(screen.getByRole('button', { name: '標準地図' }));
     expect(map).toHaveAttribute('data-base', 'std');
   });
@@ -745,7 +745,7 @@ describe('画面 `/`（地図・詳細の連携）', () => {
     const map = await openWelcomeMap();
     await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     expect(map).toHaveAttribute('data-classes', 'confirmed_new');
-    await userEvent.click(screen.getByRole('checkbox', { name: /2018 年は未検出/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /2014 年は未検出/ }));
     expect(map).toHaveAttribute('data-count', '0');
     expect(screen.getByText(/条件に合う候補がありません/)).toBeInTheDocument();
   });
@@ -959,7 +959,7 @@ describe('回答の中の図（地図・グラフ）', () => {
     });
 
     it('図で変えた絞り込みは、その回答の拡大ビューに引き継がれる。拡大ビューで変えたことも、図に戻る', async () => {
-      await ask(countWithChart); // 分類 = 2018 年は未検出
+      await ask(countWithChart); // 分類 = 2014 年は未検出
       const chartEl = await inlineChart();
       await waitFor(() => expect(chartEl).toHaveAttribute('data-classes', 'confirmed_new'));
 
@@ -977,7 +977,7 @@ describe('回答の中の図（地図・グラフ）', () => {
       await waitFor(() => expect(panelMap()).toHaveAttribute('data-classes', 'uncertain'));
 
       // 拡大ビューの地図で、分類を足す → 閉じると、図に写っている
-      await userEvent.click(within(panelEl()).getByRole('checkbox', { name: /2018 年は未検出/ }));
+      await userEvent.click(within(panelEl()).getByRole('checkbox', { name: /2014 年は未検出/ }));
       // 図は外れない（チャットは隠れるだけ）
       expect(chartEl.isConnected).toBe(true);
       await closeDialog();
@@ -1017,7 +1017,7 @@ describe('回答の中の図（地図・グラフ）', () => {
       const firstChart = await inlineChart(first);
       const secondChart = await inlineChart(second);
       expect(firstChart).toHaveAttribute('data-classes', 'uncertain');
-      expect(secondChart).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+      expect(secondChart).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
 
       // 回答 1 の拡大ビューを開いたまま、チャットのタブで回答 2 の図を操作する（操作は鍵で、回答 2 の状態にだけ当たる）
       await userEvent.click(figureExpand('chart', first));
@@ -1031,7 +1031,7 @@ describe('回答の中の図（地図・グラフ）', () => {
       expect(secondChart.isConnected).toBe(true);
       // 開いている回答 1 の中の操作は、回答 2 に写らない
       await userEvent.click(tab('地図'));
-      await userEvent.click(within(panelEl()).getByRole('checkbox', { name: /2018 年は未検出/ }));
+      await userEvent.click(within(panelEl()).getByRole('checkbox', { name: /2014 年は未検出/ }));
       expect(secondChart).toHaveAttribute('data-classes', 'uncertain');
       await closeDialog();
       // 閉じて戻った回答 1 の図に、パネルで変えたことが写っている
@@ -1273,7 +1273,7 @@ describe('回答の中の図（地図・グラフ）', () => {
       expect(screen.queryByTestId('leaflet')).toBeNull();
       release();
       const map = await inlineMap();
-      // 候補が届いてから決めたので、強調する未判定の候補（c-1-2-2）が、絞り込み（2018 年は未検出だけ）から隠れていない
+      // 候補が届いてから決めたので、強調する未判定の候補（c-1-2-2）が、絞り込み（2014 年は未検出だけ）から隠れていない
       await waitFor(() => expect(map).toHaveAttribute('data-classes', 'confirmed_new,uncertain'));
       await userEvent.click(figureExpand('map'));
       await userEvent.click(tab('グラフ'));
@@ -1323,7 +1323,7 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
     expect(map.closest('[role="tabpanel"]')).toHaveAttribute('hidden');
     // 写真の比較は、候補を選ぶまで空の状態の文
     await userEvent.click(tab('画像'));
-    expect(screen.getByText('候補を選ぶと、2018 年と 2023 年の写真を並べて見られます。')).toBeVisible();
+    expect(screen.getByText('候補を選ぶと、2014 年と 2024 年の写真を並べて見られます。')).toBeVisible();
     expect(screen.getByText(/地図の印、候補の一覧、チャットの結果の写真から選べます/)).toBeVisible();
     await userEvent.click(tab('地図'));
     expect(screen.getByTestId('leaflet')).toBe(map);
@@ -1332,7 +1332,7 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
 
   it('回答の件数の条件（分類・地区）を、地図とグラフの絞り込みに同じ条件で写す（その回答をはじめて開くとき）。条件の無い回答（表）は、すべて', async () => {
     await renderLoaded();
-    await expand(answerOf(count), view('chart')); // 分類 = 2018 年は未検出、地区 = すべて
+    await expand(answerOf(count), view('chart')); // 分類 = 2014 年は未検出、地区 = すべて
     const map = screen.getByTestId('leaflet');
     await waitFor(() => expect(map).toHaveAttribute('data-count', '1'));
     expect(chart()).toHaveAttribute('data-classes', 'confirmed_new');
@@ -1341,12 +1341,12 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
     await closeDialog();
 
     await expand(answerOf(table), view('chart')); // 件数ではない回答（表）。別の回答なので、前の回答の条件は持ち越さない
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
     await closeDialog();
 
     await expand(answerOf({ ...count, filter: { area_id: 'z18-1-2', cls: null } }), view('chart'));
     expect(chart()).toHaveAttribute('data-area-id', 'z18-1-2');
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
     await waitFor(() => expect(screen.getByTestId('leaflet')).toHaveAttribute('data-count', '2'));
   });
 
@@ -1355,7 +1355,7 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
     await userEvent.click(screen.getByRole('checkbox', { name: /未判定/ }));
     expect(map).toHaveAttribute('data-classes', 'confirmed_new');
     await userEvent.click(tab('グラフ'));
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new');
 
     await userEvent.click(screen.getByRole('button', { name: /グラフの行/ }));
     expect(map).toHaveAttribute('data-classes', 'uncertain');
@@ -1366,7 +1366,7 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
     await renderLoaded();
     await expand(answerOf(count), view('photos'));
     expect(tab('画像')).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('候補を選ぶと、2018 年と 2023 年の写真を並べて見られます。')).toBeVisible();
+    expect(screen.getByText('候補を選ぶと、2014 年と 2024 年の写真を並べて見られます。')).toBeVisible();
     expect(tab('画像')).toHaveFocus();
   });
 
@@ -1454,7 +1454,7 @@ describe('拡大ビューのタブ（地図・グラフ・写真の比較）', (
   it('写真の比較の空の状態は、フォーカスできる中身が無いパネルなので、外枠にフォーカスできる', async () => {
     await renderReady();
     await userEvent.click(tab('画像'));
-    const empty = screen.getByText('候補を選ぶと、2018 年と 2023 年の写真を並べて見られます。').closest('.result-area__empty') as HTMLElement;
+    const empty = screen.getByText('候補を選ぶと、2014 年と 2024 年の写真を並べて見られます。').closest('.result-area__empty') as HTMLElement;
     expect(empty).toHaveAttribute('tabindex', '0');
     empty.focus();
     expect(empty).toHaveFocus();
@@ -1472,7 +1472,7 @@ describe('回答の条件の受け渡し（複数地区・比較・壊れた結�
       areaId: '',
       areaIds: ['z18-1-2', 'z18-2-2'],
       scope: '中央区',
-      classes: new Set(['confirmed_new', 'existing_omission', 'uncertain']),
+      classes: new Set(['confirmed_new', 'uncertain']),
     });
   });
 
@@ -1484,7 +1484,7 @@ describe('回答の条件の受け渡し（複数地区・比較・壊れた結�
     await closeDialog();
 
     await expand(answerOf(compare), view('chart'));
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
     expect(chart()).toHaveAttribute('data-area-id', '');
   });
 
@@ -1495,7 +1495,7 @@ describe('回答の条件の受け渡し（複数地区・比較・壊れた結�
     await expand(answerOf(byWard, noFilter), view('chart'));
     expect(chart()).toHaveAttribute('data-area-ids', 'z18-1-2,z18-2-2');
     expect(chart()).toHaveAttribute('data-scope', '中央区');
-    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,existing_omission,uncertain');
+    expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain');
   });
 });
 
@@ -1722,7 +1722,7 @@ describe('候補の選び方（地図に留まる・検出画像の選択・絞�
       const map = screen.getByTestId('leaflet');
       expect(chart()).toHaveAttribute('data-classes', 'uncertain');
       await userEvent.click(await screen.findByRole('button', { name: '地図で見る' }));
-      expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain'); // 詳細の分類は2018 年は未検出
+      expect(chart()).toHaveAttribute('data-classes', 'confirmed_new,uncertain'); // 詳細の分類は2014 年は未検出
       expect(tab('地図')).toHaveAttribute('aria-selected', 'true');
       expect(map).toHaveAttribute('data-selected', 'c-1-2-1');
     });
@@ -2184,7 +2184,7 @@ describe('地図の表示範囲（絞り込みの経路が違っても同じ）�
 
   it('チャットの「解析した地区を地図で見る」: 開き直すと、保っている寄せ先（全地区）の範囲へ寄る', async () => {
     await renderReady();
-    await screen.findByText(/熊本市中心部の 2 地区/);
+    await screen.findByText(/パリ南西の近郊の 2 地区/);
     const map = await openMapOfTwo(null, view('map'));
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '地区' }), 'z18-1-2');
     expect(map).toHaveAttribute('data-focus-bbox', BOX_1);
@@ -2368,10 +2368,10 @@ describe('全幅の 4 つのタブ: チャット・地図・グラフ・写真�
   }
 
   it('回答の質問の行と右上の ✕: 質問を示し、押すと拡大ビューを閉じて回答へ戻る。フォーカスは開いたボタンへ。「回答」タブなら、閉じずに回答を見られる', async () => {
-    await ask([mapFocus], '回答です。', '2018 年は未検出は何件？');
+    await ask([mapFocus], '回答です。', '2014 年は未検出は何件？');
     const opener = figureExpand('map');
     await userEvent.click(opener);
-    expect(within(document.querySelector<HTMLElement>('.home__panel')!).getByText(/2018 年は未検出は何件？/)).toBeInTheDocument();
+    expect(within(document.querySelector<HTMLElement>('.home__panel')!).getByText(/2014 年は未検出は何件？/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'チャットへ戻る' })).toBeNull();
     await userEvent.click(tab('回答'));
     expect(document.querySelector('.home__panel')).toHaveAttribute('hidden');

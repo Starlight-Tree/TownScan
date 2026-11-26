@@ -45,5 +45,5 @@ def test_other_endpoints_never_require_or_check_login(api, jwks, headers):
 
 @pytest.mark.variant(*AUTH_VARIANTS)
 def test_the_image_does_not_require_login(api, jwks):
-    resp = api.get("/api/candidates/c-226249-105759-2/image", params={"year": 2018, "size": 64}, headers={"Authorization": "Bearer garbage"})
+    resp = api.get("/api/candidates/c-226249-105759-2/image", params={"year": 2014, "size": 64}, headers={"Authorization": "Bearer garbage"})
     assert resp.status == 200 and resp.header("content-type") == "image/png"
