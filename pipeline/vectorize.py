@@ -109,14 +109,18 @@ def values_in_polygon_px(prob: np.ndarray, poly_px, *, all_touched: bool = False
     return prob[r0:r1, c0:c1][m]
 
 
-def values_in_polygon_merc(prob: np.ndarray, geom_merc, z: int, x: int, y: int) -> np.ndarray:
-    """EPSG:3857 のポリゴンの内側にある確率の値。極小で画素の中心が入らないときは、触れる画素まで広げる。"""
-    inv = ~tilemath.tile_transform(z, x, y, prob.shape[0])
-    poly_px = geo.affine_geom(geom_merc, inv)
+def values_covering_px(prob: np.ndarray, poly_px) -> np.ndarray:
+    """画素座標のポリゴンの内側にある確率の値。極小で画素の中心が入らないときは、触れる画素まで広げる。"""
     vals = values_in_polygon_px(prob, poly_px)
     if vals.size == 0:
         vals = values_in_polygon_px(prob, poly_px, all_touched=True)
     return vals
+
+
+def values_in_polygon_merc(prob: np.ndarray, geom_merc, z: int, x: int, y: int) -> np.ndarray:
+    """EPSG:3857 のポリゴンで values_covering_px を引く。"""
+    inv = ~tilemath.tile_transform(z, x, y, prob.shape[0])
+    return values_covering_px(prob, geo.affine_geom(geom_merc, inv))
 
 
 def vectorize_tile(

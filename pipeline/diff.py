@@ -98,9 +98,12 @@ def evidence_vs_2014(geom_m, geom_merc, cover_2014, prob_2014: np.ndarray, z: in
     cover_2014 は cover_of(2014 年の建物の geom_m)、prob_2014 は vectorize.as_prob_array を通した配列。
     """
     ov_2014 = round(overlap_fraction(geom_m, cover_2014), 4)
-    vals = vectorize.values_in_polygon_merc(prob_2014, geom_merc, z, x, y)
-    p90 = round(float(np.percentile(vals, 90)), 4) if vals.size else 0.0
-    return ov_2014, p90
+    return ov_2014, p90_of(vectorize.values_in_polygon_merc(prob_2014, geom_merc, z, x, y))
+
+
+def p90_of(values: np.ndarray) -> float:
+    """確率の値の 90 パーセンタイル（丸めた値。値が無ければ 0）。FOTBCD の評価も同じ計算を使う。"""
+    return round(float(np.percentile(values, 90)), 4) if values.size else 0.0
 
 
 def build_candidates(

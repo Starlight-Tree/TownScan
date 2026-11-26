@@ -435,7 +435,30 @@ ToolResult =
 
 ## 6. 評価（`pipeline/evaluate.py` → `eval.json`）
 
-**フランス版は未測定**（2026-11-27）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は、写真に重ねた図を目で見て選んだ、検証していない値。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、実装はこのあと。
+**フランス版は未測定**（2026-11-27）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は、写真に重ねた図を目で見て選んだ、検証していない値。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。結果をアプリ（`eval.json`・精度の画面）へ載せる形は、val の推論のあとに決める。
+
+### 6.1 FOTBCD の評価（`pipeline/fotbcd.py`・`pipeline/evaluate_fotbcd.py`）
+
+指標と除外の定義は [ADR 0015](decisions/0015-move-to-france.md) が正。ここは入力と出力の形。
+
+```
+python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000.tar --probs data/fr/val/probs
+```
+
+- **正解（tar。展開せずに読む）:** 1 組 = `{番号 9 桁}.before.png`・`.after.png`・`.json`。JSON は `image`（`dep`・`before_year`・`after_year`・`width`・`height`＝512・`epsg`＝2154・`patch_bounds`＝102.4 m 四方）、`categories`（`id` と `name`。`name` は `UNCHANGED`・`DEMOLISHED`・`NEW`）、`annotations`（`category_id` と `segmentation`＝画素座標の輪 1 本）。**形が違えば、組の番号を示して止める**（読み飛ばさない）。座標は 0〜512 の外を認めない（誤差 1e-6）。画像の中身は読まない。
+- **推論の出力（`--probs` のフォルダ）:** `{番号}_{before|after}_{256|320|512}.npy`（建物の確率。float16、一辺は名前の数）。倍率 0.5・0.625・1.0 が、順に 256・320・512。`meta.json` があれば、出力の `inference` にそのまま写す。**必要なファイルが 1 つでも無ければ、計算を始めずに止める。**
+- **`--split`:** `val` か `test`。tar の名前がその分割で始まらなければ止める。`test` は `--fixed 倍率,閾値` が必須（test の結果で設定を選ばない）。
+- **出力（`--out`。既定 `data/fr/eval_{split}.json`）:**
+  - `dataset`: `{name:"FOTBCD", split, file, sha256, pairs, footprints:{UNCHANGED,DEMOLISHED,NEW}}`（`footprints` は除外の前の数）
+  - `used_for_tuning`: val は `true`
+  - `protocol`: 除外・対応づけ・分類の閾値など、計算の取り決め
+  - `sweep`: `[{scale, threshold, after_object_f1, after_object_precision, after_object_recall}]`。**新築の指標は入れない**（選んだ値でだけ計算する）
+  - `chosen`: `{scale, threshold, selected_by}`
+  - `overall` と `by_dep.{県}`: `{pairs, years:[{before,after,pairs}], extraction:{before,after}, new_building, excluded:{before,after}}`
+    - `extraction.*`: `{f1, precision, recall, tp, fp, fn, n_ref, n_pred}`
+    - `new_building`: `{recall, precision, tp, n_ref, n_pred, with_uncertain:{recall, tp, n_pred}}`。割れない値は `null`
+    - `excluded.*`: `{reference:{edge, small, overlap}, prediction:{edge, small, overlap}}`。両方に当たるものは `edge` に数える
+  - `notes`
 
 以下は、正解の建物データがあるとき（`--fixed` を付けないとき）の評価と `eval.json` の形。
 
