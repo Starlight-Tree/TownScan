@@ -7,7 +7,6 @@ import {
   clearSelection,
   comparePhotos,
   detailLoaded,
-  figureKinds,
   planAnswer,
   initialAnswerView,
   NO_IDS,
@@ -327,12 +326,13 @@ describe('planAnswer（回答の本文の下に出す表示は 1 つ。順位は
   });
 
   it('図にできない結果（比べる地区が無い比較・範囲や候補の並びが壊れた地図の表示）は、図を出さない', () => {
-    expect(figureKinds([{ ...compare, items: [] }])).toEqual([]);
-    expect(figureKinds([{ ...mapFocus, bbox: undefined } as unknown as ToolResult])).toEqual([]);
-    expect(figureKinds([{ ...mapFocus, candidate_ids: undefined } as unknown as ToolResult])).toEqual([]);
-    expect(figureKinds([{ ...mapFocus, candidate_ids: [] }])).toEqual(['map']);
-    expect(figureKinds([count])).toEqual([]);
-    expect(figureKinds(ALL_RESULTS)).toEqual(['map']);
+    const figure = (results: ToolResult[]) => planAnswer(results).figure;
+    expect(figure([{ ...compare, items: [] }])).toBeNull();
+    expect(figure([{ ...mapFocus, bbox: undefined } as unknown as ToolResult])).toBeNull();
+    expect(figure([{ ...mapFocus, candidate_ids: undefined } as unknown as ToolResult])).toBeNull();
+    expect(figure([{ ...mapFocus, candidate_ids: [] }])).toBe('map');
+    expect(figure([count])).toBeNull();
+    expect(figure(ALL_RESULTS)).toBe('map');
   });
 });
 

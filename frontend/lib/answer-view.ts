@@ -290,12 +290,6 @@ export function planAnswer(results: readonly ToolResult[]): AnswerPlan {
   return { primary: first.index, hidden: new Set(rest.map((x) => x.index)), figure, switches: switches.slice(0, MAX_SWITCHES) };
 }
 
-/** 回答の中に出す図（多くても 1 つ） */
-export function figureKinds(results: readonly ToolResult[]): FigureKind[] {
-  const { figure } = planAnswer(results);
-  return figure ? [figure] : [];
-}
-
 // ---- 地図・グラフ・写真の比較の中の操作（回答の中の図でも、拡大ビューの中でも、その回答の状態へ当てる）----
 
 /** 地図の印・形を選んだ: 地図に留まり、その候補を選ぶ（フォーカスは地図に残す）。絞り込みの外なら広げる */
