@@ -12,7 +12,7 @@
 
 ## 機能
 
-- **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけの回答の本文は、コードが組み立てます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
+- **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけ・写真 1 件だけの回答の本文は、コードが決めます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
 - **新築候補の 3 分類。** 2023 年の建物の外形のうち 2018 年の建物データに無いものを、2018 年の写真で確かめます: `confirmed_new`・`existing_omission`・`uncertain`。
 - **地図と写真の見比べ。** 候補を地理院タイルの上に描き、1 棟の 2018 年と 2023 年の写真を並べます。
 - **限界を隠さない精度ページ。** 評価用の物体単位 F1 は約 0.16 です。新築の再現率は「未測定」と明示しています。
@@ -32,7 +32,7 @@ flowchart LR
     B -->|"地図タイル"| G["地理院タイル"]
 ```
 
-質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、カードはツールの結果から作ります。返答の本文は、その結果をもとに Gemini が書きます（件数だけの回答はコードが組み立てます）。数字の検査が、結果に無い数字を含む返答を、安全な文に差し替えます。
+質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、カードはツールの結果から作ります。返答の本文は、その結果をもとに Gemini が書きます（件数だけ・写真 1 件だけの回答はコードが決めます）。数字の検査が、結果に無い数字を含む返答を、安全な文に差し替えます。
 
 `compose.yaml` は、Go の API を Gemini（既定が `LLM_PROVIDER=gemini`）で動かします。API は契約の検査（`contract/`）で確かめます。データの読み込みは Python です（`docker compose run --rm loader python -m pipeline.load …`）。
 
@@ -65,7 +65,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 
 - 画面: <http://127.0.0.1:3500>
 - `data/` は Git に入れていない（写真と建物データは再配布しない）ので、クローンしただけでは候補は空です。実行に必要なファイルは [docs/spec-prototype.md](docs/spec-prototype.md) §4.1 にあります。
-- 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`。
+- 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`。実 Gemini のツール選択の評価は [evals/](evals/README.md) です。
 - Gemini の API キー（`GEMINI_API_KEY`）は必須です（既定の設定では、無いと API が起動しません）。Google ログインは任意です。どちらも Infisical（`dev-up.sh` には `TOWNSCAN_INFISICAL_PROJECT_ID` を設定）か `.env` に置きます（[ADR 0004](docs/decisions/0004-secrets-infisical.md)）。ログインは <http://localhost:3500> で試します（`127.0.0.1` では戻れません）。`BETTER_AUTH_SECRET` は、一度決めたら変えないでください。
 
 ## 文書
