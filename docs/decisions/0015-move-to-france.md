@@ -23,7 +23,7 @@
 |---|---|
 | [FOTBCD 全体版](https://huggingface.co/datasets/abdevd/FOTBCD)（版 `92b677c881f0d973d76460204431c711ccbac25b`） | CC BY 4.0。申請なしで取得できる設定。223,675 組・28 県・512×512 px・0.2 m/px・座標は Lambert-93（EPSG:2154）。建物の枠は `UNCHANGED`・`DEMOLISHED`・`NEW`。前は 2014〜2017 年、後は 2021〜2024 年 |
 | [配布元の GitHub](https://github.com/abdelpy/FOTBCD-datasets) の README | コードは MIT、データは CC BY 4.0 |
-| 元データ | IGN の BD ORTHO・BD TOPO。配布ページは Etalab Open Licence 2.0 と記し、[data.gouv.fr の BD ORTHO のページ](https://www.data.gouv.fr/datasets/bd-ortho-r) の表示も Licence Ouverte 2.0（**ライセンスの本文は読んでいない**） |
+| 元データ | IGN の BD ORTHO・BD TOPO。配布ページは Etalab Open Licence 2.0 と記し、[data.gouv.fr の BD ORTHO のページ](https://www.data.gouv.fr/datasets/bd-ortho-r) の表示も Licence Ouverte 2.0。[Plan IGN のページ](https://www.data.gouv.fr/datasets/plan-ign) も同じ（2026-11-27 に data.gouv.fr の API で確認）。[ライセンスの本文](https://github.com/etalab/licence-ouverte/blob/master/LO.md)（フランス語。2026-11-27 に取得用の担当の要約で確認し、原文の逐語の照合はしていない）は、複製・公開・再配布・改変・商用を認める。条件は、提供者の名前と最終更新日を示すこと。提供者の公認と思わせない。README の画面の写しは、この条件で載せる |
 | IGN の公開タイル配信 | [利用規約](https://cartes.gouv.fr/cgu/)（2024-10-15 版）: データには提供元が定めたライセンスが付く（定めが無ければ Licence Ouverte）。公開の口はキーも登録も不要。WMTS は回数の上限の対象外。機械学習の利用と、画面の写しの再配布の記載は無い。配信の説明は、料金なし |
 
 - **論文と食い違う。** [論文の初版](https://arxiv.org/abs/2601.22596)（2026-01-30）は、公開版を CC BY-NC-SA 4.0、約 22 万組の版を非公開と書く。配布ページは、その後の公開（2026-10）で CC BY 4.0・全体版の公開になっている。取得した版の配布ページの条件に従う。

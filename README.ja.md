@@ -8,6 +8,12 @@
 
 **今の検出の出来は悪いです。** 目で見ると、大きな新しい建物を見落とし、影を建物と判定します。フランスの写真での精度は測っていません。候補の件数は、建築の統計として読めません。
 
+| 地図の上の候補 | 1 件の 2014 年と 2024 年の写真 |
+|---|---|
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="地図のタブ。解析した 12 地区の候補の位置と、分類ごとの件数が出る。IGN の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="候補の詳細。1 件の候補の 2014 年・2024 年の写真（輪郭つき）と出典が出る" src="docs/images/compare.png"></picture></a> |
+
+右は「2014 年は未検出」の中で面積がいちばん大きい候補で、検出の出来を代表する例とは限りません。画像の地図と写真の出典: IGN（フランス国土地理院）の [Plan IGN](https://www.data.gouv.fr/datasets/plan-ign)（最終更新 2026-10-08）と [BD ORTHO](https://www.data.gouv.fr/datasets/bd-ortho-r)（最終更新 2026-11-18）、Licence Ouverte 2.0。
+
 ## 機能
 
 - **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけ・写真 1 件だけの回答の本文は、コードが決めます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。

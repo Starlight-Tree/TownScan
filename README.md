@@ -8,6 +8,12 @@ A chat app that finds candidates for new buildings in the south-western suburbs 
 
 **Detection quality is poor so far:** by eye, the current model misses large new buildings and reports shadows as buildings. Its accuracy on the French photos has not been measured. Do not read the candidate counts as construction statistics.
 
+| Candidates on the map | Photos of one candidate, 2014 and 2024 |
+|---|---|
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="Map tab: where the candidates are in the 12 analysed areas, with counts per class and the IGN attribution" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="Candidate detail: the 2014 and 2024 photos of one candidate, its outline and the source attribution" src="docs/images/compare.png"></picture></a> |
+
+The one on the right is the largest "not detected in 2014" candidate; it is not necessarily typical of the detection quality. Map and photos in these images: [Plan IGN](https://www.data.gouv.fr/datasets/plan-ign) (last updated 2026-10-08) and [BD ORTHO](https://www.data.gouv.fr/datasets/bd-ortho-r) (last updated 2026-11-18) by IGN, Licence Ouverte 2.0.
+
 ## Features
 
 - **A chat grounded in tool results.** Cards, charts and maps are drawn from the tool results as they are. A reply that is only a count, or only one candidate's photos, is worded by code ([ADR 0013](docs/decisions/0013-one-view-per-answer.md)). Other replies are written by the model, and one with a number that is not in the results is replaced with a fixed text ([ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)); other claims are not checked. Out-of-scope questions are declined. The model is Gemini (an API key is needed).
