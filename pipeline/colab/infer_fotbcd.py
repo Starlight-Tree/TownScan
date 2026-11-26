@@ -186,13 +186,17 @@ def write_meta(out_dir, environment, total):
     Path(out_dir, "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def pack(out_dir, pack_dir, *, max_bytes=PART_BYTES):
-    """推論の出力を、max_bytes ごとの tar に分ける（1 つのファイルは分けない）。推論が終わっていなければ止める。"""
+def pack(out_dir, pack_dir, *, max_bytes=PART_BYTES, output_re=_OUTPUT_RE, expected=None):
+    """推論の出力を、max_bytes ごとの tar に分ける（1 つのファイルは分けない）。推論が終わっていなければ止める。
+
+    output_re は詰めるファイル名の決まり、expected はそのファイルの数（省けば meta.json の arrays と meta.json の分）。
+    """
     out, dest = Path(out_dir), Path(pack_dir)
     if not (out / "meta.json").is_file():
         raise ValueError("meta.json が無い。推論（PART=infer）が remaining 0 になっていない")
-    names = sorted(p.name for p in out.iterdir() if _OUTPUT_RE.match(p.name))
-    expected = json.loads((out / "meta.json").read_text(encoding="utf-8"))["arrays"] + 1
+    names = sorted(p.name for p in out.iterdir() if output_re.match(p.name))
+    if expected is None:
+        expected = json.loads((out / "meta.json").read_text(encoding="utf-8"))["arrays"] + 1
     if len(names) != expected:
         raise ValueError(f"出力の数が違う: {len(names)}（期待 {expected}）")
     groups, size = [[]], 0
@@ -216,7 +220,7 @@ def pack(out_dir, pack_dir, *, max_bytes=PART_BYTES):
     return manifest
 
 
-def unpack(pack_dir, dest_dir):
+def unpack(pack_dir, dest_dir, *, output_re=_OUTPUT_RE):
     """取り出した tar を、一覧の大きさ・ハッシュと照合してから展開する。展開した数を返す。
 
     照合は、全部の tar が済んでから展開を始める。想定した名前の通常のファイルだけを書き、前の出力があれば止める。
@@ -229,12 +233,12 @@ def unpack(pack_dir, dest_dir):
             raise ValueError(f"tar の名前・大きさ・ハッシュが、一覧と違う: {part['name']!r}")
         with tarfile.open(src / part["name"], "r:") as tf:
             for member in tf:
-                if not member.isfile() or not _OUTPUT_RE.match(member.name) or member.name in names:
+                if not member.isfile() or not output_re.match(member.name) or member.name in names:
                     raise ValueError(f"tar に、想定しないものがある: {member.name!r}")
                 names.add(member.name)
     if len(names) != manifest["files_total"]:
         raise ValueError(f"ファイルの数が違う: {len(names)}（一覧は {manifest['files_total']}）")
-    if dest.is_dir() and any(_OUTPUT_RE.match(p.name) for p in dest.iterdir()):
+    if dest.is_dir() and any(output_re.match(p.name) for p in dest.iterdir()):
         raise FileExistsError(f"展開先に、前の出力がある（上書きしない）: {dest}")
     dest.mkdir(parents=True, exist_ok=True)
     for part in manifest["parts"]:

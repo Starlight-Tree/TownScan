@@ -278,6 +278,7 @@ data/townscan/
     eval.json                         評価（§6）
 ```
 
+- **FLAIR-HUB の推論（`pipeline/colab/infer_flairhub_app.py`。Colab の T4。解析結果 `fr2` から）:** モデル・組み立て・正規化は §6.1 の比較（`infer_flairhub.py`）と同じ。地区の z18 タイル（256 px）を IGN の公開タイル配信から取得し（1 枚ごとに 0.5 秒あける。User-Agent は `research-client/1.0`）、PIL の双三次で 512 px にして建物の確率を出す。出力は `prob_{year}_{x}_{y}_s200.npy`・`tile_{year}_{x}_{y}.png`・`meta.json`（`model`・版・正規化・`layers`・`tiles`。`tiles` の順は、渡した地区の順。地区名の「その2」の番号がこの順で決まる）。**1 枚でも取得できないか、大きさが 256 px でなければ止める。** 後処理は `--fixed 2.0,0.6`。値は FOTBCD の val で選んだもの（§6.1 の比較の条件 `lowres`・倍率 1.0・閾値 0.6 に当たる。ここの「倍率」は 256 px に対する比で、§6.1 は 512 px に対する比）。`lowres` は FOTBCD の画像を縮小して作った条件で、IGN の配信タイルでの精度は測っていない。
 - 地区 = z18 タイル 1 枚。`id` = `z18-{x}-{y}`。範囲は Web メルカトルのタイル境界を lon/lat にしたもの。
 - 地区名 = IGN の逆ジオコーダ（`https://data.geopf.fr/geocodage/reverse`）の応答から作る。`name` は通り名（`'` は `’` にする）、`ward` は市町村（県 92 の選んだ市町村はカタカナ。表に無ければ応答の名前）。同じ通り名の地区は、2 つ目から「その2」を付ける。**pipeline のコードは外部へ通信しない**（`geocode.py` は、取得済みの応答を受けて名前を作る関数と、メインが実行する取得用の関数に分ける。取得は承認済みの範囲外なのでメインが行う）。
 - 面積 `area_m2` は、フランス本土では EPSG:2154（Lambert-93）で計算する（本土の外＝合成データでは EPSG:6670。`geo.metric_crs`）。
