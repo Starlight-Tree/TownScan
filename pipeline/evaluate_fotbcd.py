@@ -325,6 +325,13 @@ def evaluate_split(tar_path, probs_dir, split: str, *, fixed=None, log: Callable
     missing = missing_probs(probs_dir, pairs, sizes)
     if missing:
         raise FileNotFoundError(f"推論の出力が {len(missing)} 個足りない（例: {', '.join(missing[:3])}）: {probs_dir}")
+    meta_path = Path(probs_dir) / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else None
+    sha256 = _sha256(tar_path)
+    made_from = ((meta or {}).get("dataset") or {}).get("sha256")
+    if made_from is not None and made_from != sha256:
+        # 組の番号は分割ごとに 0 から始まるので、別の tar の出力でも、ファイル名はそろってしまう
+        raise ValueError(f"推論の出力は、別の tar から作られている（meta.json の dataset.sha256 が違う）: {probs_dir}")
     footprints = Counter(f.label for p in pairs for f in p.footprints)
     log(f"{split}: {len(pairs)} 組・枠 {sum(footprints.values())}")
     result = {
@@ -332,7 +339,7 @@ def evaluate_split(tar_path, probs_dir, split: str, *, fixed=None, log: Callable
             "name": "FOTBCD",
             "split": split,
             "file": tar_path.name,
-            "sha256": _sha256(tar_path),
+            "sha256": sha256,
             "pairs": len(pairs),
             "footprints": {label: footprints[label] for label in fotbcd.LABELS},
         },
@@ -340,9 +347,8 @@ def evaluate_split(tar_path, probs_dir, split: str, *, fixed=None, log: Callable
         **run_evaluation(pairs, lambda k, s, n: load_prob_file(probs_dir, k, s, n), fixed=fixed, log=log),
         "notes": _notes(split),
     }
-    meta = Path(probs_dir) / "meta.json"
-    if meta.is_file():
-        result["inference"] = json.loads(meta.read_text(encoding="utf-8"))
+    if meta is not None:
+        result["inference"] = meta
     return result
 
 

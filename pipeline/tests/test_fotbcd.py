@@ -374,6 +374,13 @@ def test_command_writes_the_same_result_twice(tmp_path, capsys):
     assert "併記（端の建物も含む）: 新築の再現率" in capsys.readouterr().out
 
 
+def test_outputs_made_from_another_tar_are_rejected(tmp_path):
+    tar, probs_dir = _write_inputs(tmp_path)
+    (probs_dir / "meta.json").write_text(json.dumps({"dataset": {"sha256": "0" * 64}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="別の tar"):
+        ev.evaluate_split(tar, probs_dir, "val", log=lambda _: None)
+
+
 def test_test_split_requires_fixed_setting(tmp_path):
     tar, probs_dir = _write_inputs(tmp_path, "test")
     with pytest.raises(ValueError, match="--fixed"):

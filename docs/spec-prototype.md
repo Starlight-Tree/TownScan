@@ -446,7 +446,8 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
 ```
 
 - **正解（tar。展開せずに読む）:** 1 組 = `{番号 9 桁}.before.png`・`.after.png`・`.json`。JSON は `image`（`dep`・`before_year`・`after_year`・`width`・`height`＝512・`epsg`＝2154・`patch_bounds`＝102.4 m 四方）、`categories`（`id` と `name`。`name` は `UNCHANGED`・`DEMOLISHED`・`NEW`）、`annotations`（`category_id` と `segmentation`＝画素座標の輪 1 本）。**形が違えば、組の番号を示して止める**（読み飛ばさない）。座標は 0〜512 の外を認めない（誤差 1e-6）。画像の中身は読まない。
-- **推論の出力（`--probs` のフォルダ）:** `{番号}_{before|after}_{256|320|512}.npy`（建物の確率。float16、一辺は名前の数）。倍率 0.5・0.625・1.0 が、順に 256・320・512。`meta.json` があれば、出力の `inference` にそのまま写す。**必要なファイルが 1 つでも無ければ、計算を始めずに止める。**
+- **推論の出力（`--probs` のフォルダ）:** `{番号}_{before|after}_{256|320|512}.npy`（建物の確率。float16、一辺は名前の数）。倍率 0.5・0.625・1.0 が、順に 256・320・512。`meta.json` があれば、出力の `inference` にそのまま写す。`meta.json` の `dataset.sha256` が `--tar` と違えば止める（組の番号は分割ごとに 0 から始まり、別の tar の出力でもファイル名がそろうため）。**必要なファイルが 1 つでも無ければ、計算を始めずに止める。**
+- **推論（`pipeline/colab/infer_fotbcd.py`。Colab の T4。val だけ）:** モデル・重み・正規化（÷255 のみ）はアプリの推論と同じで、重みと val の tar は、版を固定して大きさとハッシュを照合する。512 px の画像を、そのままと、PIL の双三次で縮小した 256・320 px にする。実行役が先頭に `PART="setup"`・`"data"`・`"infer"`・`"pack"` を差し込む。`infer` は、1 回の実行の時間の上限で区切るので、`remaining` が 0 になるまで繰り返す（0 になったときに `meta.json` を書く）。`pack` は、出力を 400 MB ごとの tar と、大きさ・ハッシュの一覧（`manifest.json`）にする。手元では `python -I pipeline/colab/infer_fotbcd.py unpack <取り出したフォルダ> data/fr/val/probs` で展開する。全部の tar を照合してから書き、想定しない名前があるか、前の出力があれば止める。
 - **`--split`:** `val` か `test`。tar の名前がその分割で始まらなければ止める。`test` は `--fixed 倍率,閾値` が必須（test の結果で設定を選ばない）。
 - **出力（`--out`。既定 `data/fr/eval_{split}.json`）:**
   - `dataset`: `{name:"FOTBCD", split, file, sha256, pairs, footprints:{UNCHANGED,DEMOLISHED,NEW}}`（`footprints` は除外の前の数）
