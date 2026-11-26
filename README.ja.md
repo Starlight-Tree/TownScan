@@ -4,19 +4,19 @@
 
 [English](README.md) | 日本語
 
-熊本市の中心部で、2018 年と 2023 年の空中写真から新築の候補を見つけ、件数・地図・写真を根拠に、会話で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、Go の API（[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。
+熊本市の中心部で、2018 年と 2023 年の空中写真から新築の候補を見つけ、質問に、短い文と 1 つの表示（写真・グラフ・地図）で答えるアプリです。ローカルで動くたたき台（公開はしていません）。Next.js、Go の API（[ADR 0005](docs/decisions/0005-api-in-go.md)）、Postgres 17、建物の抽出モデルは Google Colab で実行します。
 
 | 地図の上の候補 | 1 件の 2018 年と 2023 年の写真 |
 |---|---|
-| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="ホーム画面。チャットの回答の中に、分類ごとの件数つきの地図が出る。国土地理院の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="写真の比較。チャットの回答の中に、1 件の候補の 2018 年・2023 年の写真（輪郭つき）が出る" src="docs/images/compare.png"></picture></a> |
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="地図のタブ。解析した地区の候補と、分類ごとの件数が出る。国土地理院の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="写真の比較。チャットの回答の中に、1 件の候補の 2018 年・2023 年の写真（輪郭つき）と出典が出る" src="docs/images/compare.png"></picture></a> |
 
 ## 機能
 
-- **ツールの結果だけを根拠にするチャット。** 件数・面積・座標は、ツールの結果だけから出し、モデルの文章では書きません。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
+- **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけの回答の本文は、コードが組み立てます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
 - **新築候補の 3 分類。** 2023 年の建物の外形のうち 2018 年の建物データに無いものを、2018 年の写真で確かめます: `confirmed_new`・`existing_omission`・`uncertain`。
 - **地図と写真の見比べ。** 候補を地理院タイルの上に描き、1 棟の 2018 年と 2023 年の写真を並べます。
 - **限界を隠さない精度ページ。** 評価用の物体単位 F1 は約 0.16 です。新築の再現率は「未測定」と明示しています。
-- **任意の Google ログイン。** ログインしなくても、すべての機能を使えます。
+- **任意の Google ログイン。** ログインしなくても使えます。ログインが要るのは、会話の履歴の保存だけです。
 
 ## 構成
 
@@ -32,9 +32,9 @@ flowchart LR
     B -->|"地図タイル"| G["地理院タイル"]
 ```
 
-質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、返答はツールの結果から作ります。数字の検査が、その結果に無い数字を含む返答を、安全な文に差し替えます。
+質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、カードはツールの結果から作ります。返答の本文は、その結果をもとに Gemini が書きます（件数だけの回答はコードが組み立てます）。数字の検査が、結果に無い数字を含む返答を、安全な文に差し替えます。
 
-`compose.yaml` は Go の API を動かします。Gemini（`LLM_PROVIDER=gemini`）にも対応しています。API は契約の検査（`contract/`）で確かめます。データの読み込みは Python です（`docker compose run --rm loader python -m pipeline.load …`）。
+`compose.yaml` は、Go の API を Gemini（既定が `LLM_PROVIDER=gemini`）で動かします。API は契約の検査（`contract/`）で確かめます。データの読み込みは Python です（`docker compose run --rm loader python -m pipeline.load …`）。
 
 データは、必要なときに流すオフラインの処理で作ります。
 
@@ -63,10 +63,10 @@ Docker と Node 24 が要ります。
 scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動する
 ```
 
-- 画面: <http://127.0.0.1:3500> ・ API の仕様（FastAPI 版だけ）: <http://127.0.0.1:8500/api/docs>
+- 画面: <http://127.0.0.1:3500>
 - `data/` は Git に入れていない（写真と建物データは再配布しない）ので、クローンしただけでは候補は空です。実行に必要なファイルは [docs/spec-prototype.md](docs/spec-prototype.md) §4.1 にあります。
 - 止める: `docker compose down`（DB ごと消すときは `-v`）。検査: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`。
-- Google ログインと Gemini のキーは任意で、Infisical に置きます（[ADR 0004](docs/decisions/0004-secrets-infisical.md)）。ログインは <http://localhost:3500> で試します（`127.0.0.1` では戻れません）。`BETTER_AUTH_SECRET` は、一度決めたら変えないでください。
+- Gemini の API キー（`GEMINI_API_KEY`）は必須です（既定の設定では、無いと API が起動しません）。Google ログインは任意です。どちらも Infisical（`dev-up.sh` には `TOWNSCAN_INFISICAL_PROJECT_ID` を設定）か `.env` に置きます（[ADR 0004](docs/decisions/0004-secrets-infisical.md)）。ログインは <http://localhost:3500> で試します（`127.0.0.1` では戻れません）。`BETTER_AUTH_SECRET` は、一度決めたら変えないでください。
 
 ## 文書
 
@@ -76,13 +76,13 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 |---|---|
 | [docs/plan.md](docs/plan.md) | 計画・段階・出口条件・決定待ち |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | 契約: データのファイル・DB・API・3 分類・評価・画面 |
-| [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005） |
+| [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005）、会話の履歴・画面・呼び名（0006〜0013） |
 | [frontend/README.md](frontend/README.md) ・ [api/README.md](api/README.md) | 各部分の動かし方・検査・詳細 |
 | [CLAUDE.md](CLAUDE.md) | 開発の規約（AI エージェント向け） |
 
 ## このリポジトリについて
 
-ポートフォリオとして公開している個人のプロジェクトです。限界を隠さずに評価する画像認識、数字を自分では書けないチャット、検出を写真で確かめる地図の画面を試すために作りました。秘密は含みません（`.env` は Git の管理外）。
+ポートフォリオとして公開している個人のプロジェクトです。限界を隠さずに評価する画像認識、返答の数字をツールの結果と照合するチャット、検出を写真で確かめる地図の画面を試すために作りました。秘密は含みません（`.env` は Git の管理外）。
 
 データ: 写真は国土地理院のタイル（出典は画面に表示）、参照の建物は国土地理院の基盤地図情報、モデルは `giswqs/whu-building-unetplusplus-efficientnet-b4`（Apache-2.0。学習データ WHU の利用条件は未確認）です。どれも、このリポジトリでは再配布しません。詳細は [ADR 0001](docs/decisions/0001-data-candidates.md) です。
 

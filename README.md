@@ -4,19 +4,19 @@
 
 English | [日本語](README.ja.md)
 
-A chat app that finds candidates for new buildings in central Kumamoto City from 2018 and 2023 aerial photos, and answers with counts, a map and the photos as evidence. A local prototype (not deployed): Next.js, an API in Go ([ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab.
+A chat app that finds candidates for new buildings in central Kumamoto City from 2018 and 2023 aerial photos, and answers each question with a short text and one view: photos, a chart or a map. A local prototype (not deployed): Next.js, an API in Go ([ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab.
 
 | Candidates on the map | Photos of one candidate, 2018 and 2023 |
 |---|---|
-| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="Home screen: an answer in the chat with its map of candidates, counts per class and the Geospatial Information Authority of Japan attribution" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="Photo comparison: an answer in the chat with the 2018 and 2023 photos of one candidate and its outline" src="docs/images/compare.png"></picture></a> |
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="Map tab: the candidates in the analysed areas, with counts per class and the Geospatial Information Authority of Japan attribution" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="Photo comparison: an answer in the chat with the 2018 and 2023 photos of one candidate, its outline and the source attribution" src="docs/images/compare.png"></picture></a> |
 
 ## Features
 
-- **Chat that cites its tools.** Counts, areas and coordinates come only from tool results, never from the model's text. Out-of-scope questions are declined. The model is Gemini (an API key is needed).
+- **A chat grounded in tool results.** Cards, charts and maps are drawn from the tool results as they are. A count-only reply is worded by code ([ADR 0013](docs/decisions/0013-one-view-per-answer.md)). Other replies are written by the model, and one with a number that is not in the results is replaced with a fixed text ([ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)); other claims are not checked. Out-of-scope questions are declined. The model is Gemini (an API key is needed).
 - **Three classes of candidates.** A 2023 building outline missing from the 2018 building data is checked against the 2018 photo: `confirmed_new`, `existing_omission` or `uncertain`.
 - **Map and photo comparison.** Candidates on GSI tiles, and the 2018 and 2023 crops of one building side by side.
 - **An accuracy page that shows its limits.** Held-out object F1 is about 0.16; recall for new buildings is "not measured".
-- **Optional Google sign-in.** Everything works without it.
+- **Optional Google sign-in.** The app works without it; only saved conversation history needs it.
 
 ## Architecture
 
@@ -32,9 +32,9 @@ flowchart LR
     B -->|"map tiles"| G["GSI tile server"]
 ```
 
-A question goes through the API's chat: Gemini picks a tool (counts, comparison, list, detection image), and the answer is built from the tool's result. A number check replaces any answer that contains a figure that is not in that result.
+A question goes through the API's chat: Gemini picks a tool (counts, comparison, list, detection image), and the cards are built from the tool's result. Gemini writes the reply text from that result (a count-only reply is worded by code). A number check replaces any reply that contains a figure that is not in the result.
 
-`compose.yaml` runs the Go API. Gemini (`LLM_PROVIDER=gemini`) is supported too. The API is checked by the contract tests (`contract/`). Loading data is done in Python (`docker compose run --rm loader python -m pipeline.load …`).
+`compose.yaml` runs the Go API with Gemini (`LLM_PROVIDER=gemini` by default). The API is checked by the contract tests (`contract/`). Loading data is done in Python (`docker compose run --rm loader python -m pipeline.load …`).
 
 The data comes from an offline pipeline, run on demand:
 
@@ -63,10 +63,10 @@ Needs Docker and Node 24.
 scripts/dev-up.sh    # builds the frontend and starts db, api and web
 ```
 
-- App: <http://127.0.0.1:3500> · API docs (FastAPI version only): <http://127.0.0.1:8500/api/docs>
+- App: <http://127.0.0.1:3500>
 - `data/` is not in Git (the photos and building data are not redistributed), so a fresh clone starts with no candidates. The files a run needs are in [docs/spec-prototype.md](docs/spec-prototype.md) §4.1.
 - Stop: `docker compose down` (add `-v` to delete the DB). Checks: `scripts/verify.sh [repo|pipeline|loader|contract|frontend|all]`.
-- Google sign-in and a Gemini key are optional and live in Infisical: see [ADR 0004](docs/decisions/0004-secrets-infisical.md). Sign in at <http://localhost:3500>, not `127.0.0.1`, and never change `BETTER_AUTH_SECRET` once it is set.
+- A Gemini API key (`GEMINI_API_KEY`) is required: with the default settings the API does not start without it. Google sign-in is optional. Keep both in Infisical (set `TOWNSCAN_INFISICAL_PROJECT_ID` for `dev-up.sh`) or in `.env`: see [ADR 0004](docs/decisions/0004-secrets-infisical.md). Sign in at <http://localhost:3500>, not `127.0.0.1`, and never change `BETTER_AUTH_SECRET` once it is set.
 
 ## Documentation
 
@@ -76,13 +76,13 @@ The documents are written in Japanese.
 |---|---|
 | [docs/plan.md](docs/plan.md) | Plan, stages, exit criteria, pending decisions |
 | [docs/spec-prototype.md](docs/spec-prototype.md) | The contract: data files, DB, API, classes, evaluation, UI |
-| [docs/decisions/](docs/decisions/) | Decisions and reasons: data and terms (0001), direction (0002), chat LLM (0003), secrets (0004), Go API (0005) |
+| [docs/decisions/](docs/decisions/) | Decisions and reasons: data and terms (0001), direction (0002), chat LLM (0003), secrets (0004), Go API (0005), conversation history, screens and wording (0006–0013) |
 | [frontend/README.md](frontend/README.md) · [api/README.md](api/README.md) | Running, checks and details of each part |
 | [CLAUDE.md](CLAUDE.md) | Development conventions (for AI agents) |
 
 ## About
 
-A personal portfolio project, built to explore image recognition whose evaluation is honest about its limits, a chat that cannot write numbers by itself, and a map UI for checking detections against photos. It contains no secrets (`.env` is outside Git).
+A personal portfolio project, built to explore image recognition whose evaluation is honest about its limits, a chat whose numbers are checked against tool results, and a map UI for checking detections against photos. It contains no secrets (`.env` is outside Git).
 
 Data: photos are GSI tiles (the source is shown in the app), reference buildings are GSI Fundamental Geospatial Data, and the model is `giswqs/whu-building-unetplusplus-efficientnet-b4` (Apache-2.0; the terms of its training data, WHU, are unverified). None is redistributed here; see [ADR 0001](docs/decisions/0001-data-candidates.md).
 
