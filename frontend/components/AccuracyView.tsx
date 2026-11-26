@@ -103,7 +103,7 @@ function Unmeasured({ m }: { m: MetricsResponse }) {
       </ul>
       <section className="panel" aria-labelledby="h-thresholds">
         <h2 id="h-thresholds" className="panel__title">分類の閾値は、未検証の初期値です</h2>
-        <p className="page__p">「2014 年は未検出」と「未判定」を分ける閾値は、正解データで確かめていません。分類の当たり率は、まだ出せません。</p>
+        <p className="page__p">「2014 年は未検出」と「未判定」を分ける閾値は、このアプリの写真では正解データで確かめていません。このアプリの分類の当たり率は、まだ出せません。</p>
       </section>
     </>
   );
@@ -259,7 +259,7 @@ function MetricsDetails({ m }: { m: MetricsResponse }) {
                 <p className="page__p">
                   推論の倍率 <b>{cell(m.chosen.scale)}</b>・建物とみなす確率の閾値 <b>{cell(m.chosen.threshold)}</b>
                   {m.chosen.selected_by === 'fixed'
-                    ? '（固定の値。写真に重ねた図を目で見て選んだもので、検証していません）。'
+                    ? '（固定の値。このアプリの写真では、確かめていません）。'
                     : '（調整用の地区の物体単位 F1 がいちばん高かった組）。'}
                 </p>
               )}
@@ -499,7 +499,7 @@ function Sources() {
       <ul className="plain-list">
         <li><b>地図・写真</b>: IGN（フランス国土地理院）の公開タイル配信（地図 Plan IGN、航空写真 BD ORTHO の 2014 年・2024 年）。ライセンスは Licence Ouverte 2.0。出典を地図に表示しています。</li>
         <li>
-          <b>建物抽出モデル</b>: <code>giswqs/whu-building-unetplusplus-efficientnet-b4</code>（Apache-2.0）。学習に使われたデータセット（WHU）の利用条件は、確認できていません。
+          <b>建物抽出モデル</b>: IGN の <a href="https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet" target="_blank" rel="noopener noreferrer"><code>IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet</code></a>（Licence Ouverte 2.0〔Etalab 2.0〕。最終更新 2026-04-28）。土地の種類を分けるモデルの、建物の出力を使っています。
         </li>
         <li>
           <b>地区の選び方</b>: 公開データ <a href="https://huggingface.co/datasets/abdevd/FOTBCD" target="_blank" rel="noopener noreferrer">FOTBCD</a>（作者: Abdelrrahman Moubane。<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>。IGN の BD ORTHO・BD TOPO が元）の検証用データを使い、新築の多い場所を選びました。FOTBCD の画像と建物の枠は、このアプリに入れていません。
@@ -533,12 +533,12 @@ function Limits({ m }: { m?: MetricsResponse }) {
         <div>
           <b>タイルの縁</b>
           <br />
-          地区の縁で切れた建物は、分類しない（端のため未判定）か、評価から外しています。
+          地区の縁で切れた建物は、見えている部分だけで分類します。面積は、実際より小さい場合があります。{m?.holdout && '精度の測定では、縁に接する建物を外しています。'}
         </div>
         <div>
           <b>誤検出の可能性</b>
           <br />
-          今のモデルは、大きな建物を見落としたり、影を建物と判定したりします。駐車場の屋根や仮設の建物も混ざります。
+          モデルの判定には、誤りがあります。目で見た確認では、道路の上を建物と判定した例がありました。隣り合う建物が、1 つの大きな形にまとまることもあります。見落としもあります。
         </div>
         {m && !m.holdout && (
           <div>

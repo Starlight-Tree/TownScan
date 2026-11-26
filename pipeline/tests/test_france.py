@@ -48,6 +48,17 @@ def test_ign_unsafe_street_name_is_dropped():
     assert got["name"] is None and got["ward"] == "ナンテール"
 
 
+def test_fixed_notes_state_the_selection_only_for_the_recorded_model_and_values():
+    flair = "IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet"
+    recorded = run_postprocess.unmeasured_eval(2.0, 0.6, model=flair)["notes"]
+    assert len(recorded) == 3 and "FOTBCD の val" in recorded[2]
+    assert "このアプリの写真では確かめていない" in recorded[1]
+    # モデル・倍率・閾値のどれか 1 つでも違えば、選び方は書かない
+    for scale, threshold, model in ((2.0, 0.5, flair), (1.0, 0.6, flair), (2.0, 0.6, "other/model"), (2.0, 0.6, None)):
+        notes = run_postprocess.unmeasured_eval(scale, threshold, model=model)["notes"]
+        assert len(notes) == 2 and not any("FOTBCD" in n for n in notes)
+
+
 def test_fixed_run_uses_no_reference_and_reports_unmeasured(tmp_path):
     make_synthetic_run.make_synthetic_run(tmp_path, created="2026-01-01T00:00:00+00:00")
     out = tmp_path / "fixed_out"

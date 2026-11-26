@@ -179,7 +179,7 @@ function DetailBody({ detail, onShowOnMap }: { detail: CandidateDetail; onShowOn
           })}
         </dl>
         <p className="drawer__small">
-          分類の閾値は未検証の初期値です（正解データで確かめていません）。数字は、ツールの結果をそのまま出しています。
+          分類の閾値は未検証の初期値です（このアプリの写真では、正解データで確かめていません）。数字は、ツールの結果をそのまま出しています。
         </p>
       </section>
 

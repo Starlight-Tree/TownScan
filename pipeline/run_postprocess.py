@@ -27,6 +27,13 @@ DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "townscan"
 KINDS = ("real", "synthetic")
 REFERENCE_PAD_DEG = 0.002  # タイルの外の建物も、縁の判定のために少し読む
 COMPARE_YEAR = next(y for y in colabio.YEARS if y != evaluate.EVAL_YEAR)  # year_compare で、同じ参照・設定で測るもう一方の年
+# 固定の倍率・閾値の、選び方の記録。モデル・倍率・閾値がそろって一致するときだけ eval.json の注記に書く（ほかの値に、この選び方を付けない。ADR 0016）
+FIXED_BASIS = {
+    ("IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet", 2.0, 0.6): (
+        "この倍率と閾値は、別の検証用データ（FOTBCD の val。画像を縮小して、このアプリの写真の細かさに近づけた条件）で、"
+        "後の写真の建物抽出の物体単位 F1 がいちばん高かった組。"
+    ),
+}
 
 
 def _write_json(path: Path, obj, *, compact: bool = False) -> None:
@@ -75,17 +82,21 @@ def _read_geocode(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def unmeasured_eval(scale: float, threshold: float) -> dict:
+def unmeasured_eval(scale: float, threshold: float, model: str | None = None) -> dict:
     """精度を測っていない解析結果の eval.json。数字の項目は書かない（画面と回答は「未測定」を出す）。"""
+    notes = [
+        "建物の抽出と新築の精度は、まだ測っていない。",
+        f"倍率 {scale}・閾値 {threshold} は固定の値で、このアプリの写真では確かめていない。",
+    ]
+    basis = FIXED_BASIS.get((model, scale, threshold))
+    if basis:
+        notes.append(basis)
     return {
         "reference": None,
         "chosen": {"scale": scale, "threshold": threshold, "selected_by": "fixed"},
         "protocol": {"year": colabio.YEARS[-1]},
         "new_building_recall": None,
-        "notes": [
-            "建物の抽出と新築の精度は、まだ測っていない。",
-            f"倍率 {scale}・閾値 {threshold} は、写真に重ねた図を目で見て選んだ、検証していない値。",
-        ],
+        "notes": notes,
     }
 
 
@@ -142,9 +153,9 @@ def run_postprocess(
         # 2・3. 正解の建物データは使わない。倍率と閾値は固定で、精度は未測定
         reference_in = {t: [] for t in tiles}
         ref_stats = None
-        eval_json = unmeasured_eval(*fixed)
+        eval_json = unmeasured_eval(*fixed, model=colabio.model_name(meta))
         scale, threshold = fixed
-        log(f"正解の建物データなし。倍率 {scale} 閾値 {threshold}（固定。検証していない値）。精度は未測定")
+        log(f"正解の建物データなし。倍率 {scale} 閾値 {threshold}（固定の値）。精度は未測定")
     else:
         # 2. 正解の建物データ（全タイルの範囲だけを使う）
         reference_path = Path(reference_path)
@@ -297,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
     d = diff.DiffParams()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT), help="既定 data/townscan")
-    ap.add_argument("--run", default="fr1")
+    ap.add_argument("--run", default="fr2")
     ap.add_argument("--reference", default=None, help="評価の正解にする建物の GeoJSON（経度・緯度）。--fixed を付けないときは必須")
     ap.add_argument("--out", default=None, help="出力先。既定 <data-root>/<run>/out")
     ap.add_argument("--kind", choices=KINDS, default=None, help="meta の kind を上書きはできない（食い違えばエラー）")

@@ -49,7 +49,7 @@ export const CLASS_INFO: Record<CandidateClass, ClassInfo> = {
     dash: '1.5 5',
     shape: 'triangle',
     fillOpacity: 0.1,
-    summary: '写真の端で切れているもの（端のため未判定）と、どちらとも言えないもの（要確認）です。',
+    summary: '2014 年の写真で検出したとも、していないとも言い切れないもの（要確認）です。',
     description:
       '2024 年の写真で建物らしい塊が見つかりましたが、2014 年の写真で検出したかどうかを分けていない候補です。目で確かめてください。',
   },
@@ -92,7 +92,7 @@ export const EVIDENCE_FIELDS = [
   { key: 'prob_2024_mean', label: '2024 年の建物らしさ（平均）', kind: 'prob', hint: '高いほど、2024 年の写真で建物らしい' },
   { key: 'ov_2014', label: '2014 年の抽出が覆う割合', kind: 'ratio', hint: '0.5 以上なら、2014 年の写真にもある建物（候補にしない）' },
   { key: 'prob_2014_p90', label: '2014 年の建物らしさ（上位 10% の値）', kind: 'prob', hint: '低いほど、2014 年の写真で何も見えていない' },
-  { key: 'edge_touch', label: 'タイルの縁に接する', kind: 'bool', hint: '切れた建物の可能性' },
+  { key: 'edge_touch', label: 'タイルの縁に接する', kind: 'bool', hint: '接していると、建物が切れて、面積が実際より小さい場合がある' },
 ] as const;
 
 export const REFUSAL_TITLE: Record<RefusalReason, string> = {

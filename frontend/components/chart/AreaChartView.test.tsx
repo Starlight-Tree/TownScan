@@ -328,7 +328,7 @@ describe('グラフの操作が地図とつながっていることの案内', (
   it('凡例の近くに、未判定の意味を 1 行で出す（「分類の意味」を開かなくても読める）。未判定をグラフから外したときは出さない', () => {
     const first = view(ALL_FILTER);
     const gloss = document.querySelector('.area-chart__gloss')!;
-    expect(gloss).toHaveTextContent('未判定は、写真の端で切れているもの（端のため未判定）と、どちらとも言えないもの（要確認）です。目で確かめる候補です。');
+    expect(gloss).toHaveTextContent('未判定は、2014 年の写真で検出したとも、していないとも言い切れないもの（要確認）です。目で確かめる候補です。');
     // チップの群れの直後
     expect(screen.getByRole('group', { name: /グラフに出す分類/ }).nextElementSibling).toBe(gloss);
     first.unmount();

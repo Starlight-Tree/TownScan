@@ -665,7 +665,7 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 			v := pyjson.Float(f)
 			note := "調整用の地区だけで選んだ値"
 			if chosen["selected_by"] == "fixed" {
-				note = "固定の値（写真に重ねた図を目で見て選んだ。検証していない）"
+				note = "固定の値（このアプリの写真では確かめていない）"
 			}
 			metrics = append(metrics, Metric{Key: "chosen_" + c.k, Label: c.label, Value: &v, Note: note})
 		}

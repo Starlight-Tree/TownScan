@@ -27,6 +27,7 @@
 改訂 2026-11-27（24）: **熊本向けのデータと処理を消した**（ユーザー指示 2026-11-27。[ADR 0015](decisions/0015-move-to-france.md) の追記）。評価の正解の建物データの入力を、基盤地図情報の XML から GeoJSON（`--reference`）に替えた。地理院の逆ジオコーダの読み取りと、試作スクリプト（`scripts/spike/`）を消した。§4.1・§6 を直した。API・DB の形は変えない。
 改訂 2026-11-27（25）: 候補の一覧 1 件だけの回答の本文は、実 LLM の文を使わず、コードが組み立てる（§4.5。[ADR 0013](decisions/0013-one-view-per-answer.md) の追記）。
 改訂 2026-11-27（26）: **タイルの縁に接する建物も、2014 年の写真と比べて分類する**（§5。ユーザー承認 2026-11-27）。それまでは、比べる前に「端のため未判定」にしていた。建物が大きくまとまって取れるモデル（FLAIR-HUB）にすると、候補の大半がこれになった（`fr2` で 54 件中 46 件。うち 21 件は 2014 年の抽出が半分以上を覆う）。理由 `edge` は、前の決まりで作った解析結果（`fr1`）のために、型・DB・API・画面に残す。
+改訂 2026-11-27（27）: **アプリの抽出モデルを FLAIR-HUB にする（解析結果 `fr2`。plan の F3b の段 2。ユーザー承認 2026-11-27。[ADR 0016](decisions/0016-flair-hub-model.md)）。** API と画面は、固定の倍率・閾値の選び方を決め打ちで言わず、「このアプリの写真では確かめていない」と言う（選び方は `eval.json` の注記と ADR 0016）。分類の閾値は「未検証の初期値」のままで、精度の画面と候補の詳細の「正解データで確かめていない」には「このアプリの写真では」を添える。未判定の説明（画面・Gemini の指示）から、写真の端の話を外す。候補の詳細の「タイルの縁に接する」に、面積が小さく出る場合があることを添える。精度の画面の限界（タイルの縁・誤検出）と、出典のモデルを直す。API・DB の形は変えない。
 位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）を、薄く一通り通す。GEE 層（P5）・パネル（P6）・公開（P7）は対象外。
 
 ## 1. 何ができれば「たたき台」か
@@ -268,10 +269,10 @@ TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`fro
 ```
 data/townscan/
   tiles/{year}/{x}_{y}.png            写真タイル 256×256 RGB（z18。IGN の公開タイル配信の BD ORTHO（2014 年・2024 年）。Colab が取得したものを持ち帰る）
-  fr1/colab/                          Colab の出力（メインが置く。fr1 は run のフォルダ名）
+  fr2/colab/                          Colab の出力（メインが置く。fr2 は run のフォルダ名）
     meta.json                         モデル・版・正規化・タイル一覧・取得結果
-    prob_{year}_{x}_{y}_s{100|150|200}.npy   建物の確率 float16 (H,W)。H=W=256×倍率（1.0/1.5/2.0 倍に双三次で拡大して推論）
-  fr1/out/                            後処理の出力（pipeline が作る。backend のローダーが読む）
+    prob_{year}_{x}_{y}_s{100|150|200}.npy   建物の確率 float16 (H,W)。H=W=256×倍率（双三次で拡大して推論。fr2 は 2.0 倍だけ）
+  fr2/out/                            後処理の出力（pipeline が作る。backend のローダーが読む）
     run.json                          {run_id, kind:"real"|"synthetic", created, model, params, tiles:[...], notes}
     areas.json                        [{id, z, x, y, bbox:[w,s,e,n], centroid:[lon,lat], name, ward, municipality, name_source}]
     buildings_2014.geojson / buildings_2024.geojson   建物ポリゴン（lon/lat）。properties: area_id, area_m2, prob_mean
@@ -439,7 +440,7 @@ ToolResult =
 
 ## 6. 評価（`pipeline/evaluate.py` → `eval.json`）
 
-**アプリの表示は、フランス版が未測定のまま**（2026-11-27。FOTBCD の val の値は [ADR 0015](decisions/0015-move-to-france.md) にあり、アプリへはまだ載せていない）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は、写真に重ねた図を目で見て選んだ、検証していない値。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。結果をアプリ（`eval.json`・精度の画面）へ載せる形は、val の推論のあとに決める。
+**アプリの表示は、フランス版が未測定のまま**（2026-11-27。FOTBCD の val の値は [ADR 0015](decisions/0015-move-to-france.md) にあり、アプリへはまだ載せていない）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は固定の値で、このアプリの写真（IGN の配信タイル）では確かめていない。注記（`notes`）には、モデル・倍率・閾値が、選び方の記録がある組（`pipeline/run_postprocess.py` の `FIXED_BASIS`。今は FLAIR-HUB の倍率 2.0・閾値 0.6 だけ）とそろって一致するときに限り、選び方を書く。API と画面は、固定の値の選び方を決め打ちで言わない（改訂 27）。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。結果をアプリ（`eval.json`・精度の画面）へ載せる形は、val の推論のあとに決める。
 
 ### 6.1 FOTBCD の評価（`pipeline/fotbcd.py`・`pipeline/evaluate_fotbcd.py`）
 
@@ -565,7 +566,7 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
   - `year_compare` があれば、もう一方の年の写真での値と、年で比べる表を出す。無い・形が違うときは、その部分を出さず、画面は落ちない。
   - 限界欄に、`existing_absent_in_2014` から描く「2014 年の写真での見落とし」（既存の建物のうち、2014 年の抽出が何も見ていない割合。正解データの代わりにならない）、参照と写真の時期のずれと物体単位の適合率が合成値であること、年ごとの再現率の違い（数字だけ。原因は書かない）を載せる。数字はデータから描き、手書きにしない。
   - 評価の内部のキー名（`pixel_iou` など）は、日本語の見出しにする。
-- `/accuracy` の末尾: 既知の限界（写真が無い期間・写真は 2 時点・地区は新築の多い場所・タイルの縁・誤検出の可能性・対象範囲・未実装のもの＝衛星の「変化の当たり」・パネル・人による確認・公開。精度を測っていないときは「正解が無い」も）と、出典と規約（IGN の公開タイル配信と BD ORTHO＝Licence Ouverte 2.0、地区の選び方に使った FOTBCD の作者と CC BY 4.0、モデル `giswqs/whu-building-unetplusplus-efficientnet-b4`＝Apache-2.0・学習データ WHU の利用条件は不明・写真を機械学習に使うことは利用規約に記載が無い）。最初のチャット画面は、見出し・1 行の説明（候補であり新築と断定しない）・地図のボタン・質問の例だけを出し、対象・地区の名前・比較・出典・分類・範囲外の質問は「くわしく」（閉じた状態）に入れる。入力欄の下にモデル名の注記は出さない（モデルの印は、サイドパネル・上の横帯に 1 か所）。
+- `/accuracy` の末尾: 既知の限界（写真が無い期間・写真は 2 時点・地区は新築の多い場所・タイルの縁・誤検出の可能性・対象範囲・未実装のもの＝衛星の「変化の当たり」・パネル・人による確認・公開。精度を測っていないときは「正解が無い」も）と、出典と規約（IGN の公開タイル配信と BD ORTHO＝Licence Ouverte 2.0、地区の選び方に使った FOTBCD の作者と CC BY 4.0、モデル `IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet`＝提供者 IGN・Licence Ouverte 2.0（Etalab 2.0）・最終更新 2026-04-28・写真を機械学習に使うことは利用規約に記載が無い）。限界の「タイルの縁」は、地区の縁で切れた建物を見えている部分だけで分類し、面積が実際より小さい場合があること（精度を測っているときは、測定で縁の建物を外すことも）。「誤検出の可能性」は、目で見て確かめた誤りの例（道路の上を建物と判定・隣り合う建物が 1 つの形にまとまる）と、見落としもあること。最初のチャット画面は、見出し・1 行の説明（候補であり新築と断定しない）・地図のボタン・質問の例だけを出し、対象・地区の名前・比較・出典・分類・範囲外の質問は「くわしく」（閉じた状態）に入れる。入力欄の下にモデル名の注記は出さない（モデルの印は、サイドパネル・上の横帯に 1 か所）。
 - ブラウザから API へは、同じオリジンの `/api/*`（Next の rewrites。転送先は実行時の環境変数 `API_URL`）。ただし `/api/auth/*`（ログイン・JWKS）は web 自身の Route Handler が受け、api へは転送しない（§2.1）。
 - ログインの依存: `better-auth` 1.7.18 と `pg`（版を固定し、ロックファイルに含める）。ほかの新しいサービス・言語・DB は足さない。
 - 技術: Next.js（最新の安定版を、版を固定して）、React、TypeScript strict、Node 24、`output: "standalone"`。地図は Leaflet か MapLibre GL JS（版を固定。選んだ理由を 1 行）。`npm ci` で入れる（ロックファイルをコミット対象に含める）。

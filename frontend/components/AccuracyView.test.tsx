@@ -28,8 +28,9 @@ describe('/accuracy', () => {
     expect(sources).toHaveTextContent('IGN（フランス国土地理院）の公開タイル配信');
     expect(sources).toHaveTextContent('Licence Ouverte 2.0');
     expect(sources).toHaveTextContent('FOTBCD（作者: Abdelrrahman Moubane。CC BY 4.0');
-    expect(sources).toHaveTextContent('giswqs/whu-building-unetplusplus-efficientnet-b4');
-    expect(sources).toHaveTextContent('Apache-2.0');
+    expect(sources).toHaveTextContent('IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet');
+    expect(sources).toHaveTextContent('Licence Ouverte 2.0〔Etalab 2.0〕。最終更新 2026-04-28');
+    expect(limits).toHaveTextContent('地区の縁で切れた建物は、見えている部分だけで分類します');
     expect(sources).toHaveTextContent('機械学習に使うことは、利用規約に記載がありません');
   });
 
@@ -122,7 +123,9 @@ describe('/accuracy', () => {
     fetchMock.mockResolvedValue(jsonResponse({ reference: null, new_building_recall: null, chosen: { scale: 1, threshold: 0.4, selected_by: 'fixed' } }));
     render(<AccuracyView />);
     await screen.findByTestId('unmeasured');
-    expect(document.body).toHaveTextContent('固定の値。写真に重ねた図を目で見て選んだもので、検証していません');
+    expect(document.body).toHaveTextContent('固定の値。このアプリの写真では、確かめていません');
+    // 精度を測っていないときは、限界の「タイルの縁」で、測定の除外の話をしない
+    expect(document.body).not.toHaveTextContent('精度の測定では、縁に接する建物を外しています');
     expect(document.body).not.toHaveTextContent('調整用の地区の物体単位 F1 がいちばん高かった組');
   });
 
