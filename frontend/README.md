@@ -4,8 +4,9 @@ Next.js 16（App Router・TypeScript strict・Node 24）。仕様は [../docs/sp
 
 - 画面: `/`（チャットの 1 列）・`/accuracy`（精度・既知の限界・出典と規約）・`/login`（任意のログイン）・`/healthz`（コンテナのヘルスチェック）
   結果のうち、グラフ・地図は、回答の中の**図**として、結果カードの並びの下に出る（件数＝地図、比較＝グラフ、地図の表示＝地図。件数のカードの表は、地図と同じ候補データから作る〔`lib/candidates-context.ts`〕。`components/AnswerFigure.tsx`・`lib/answer-view.ts` の `figureKinds`。地図は画面に近づくまでマウントしない）。
-  図の「拡大」、結果カードの「詳細」「詳細を開く」「地図で見る」（地図の表示）、最初の画面の「解析した地区を地図で見る」を押したときだけ、拡大ビュー（`components/ExpandedView.tsx`。ダイアログ）が開く。回答が届いただけでは開かない。
-  拡大ビューの中身は `components/ResultArea.tsx`（地図・グラフ・写真の比較のタブ。候補の詳細は `components/CandidateDrawer.tsx`）。状態の単位は回答 1 件で、タブ・絞り込み・選んだ候補は回答ごとに保ち、回答の中の図と拡大ビューが共有する（`lib/answer-view.ts`・`components/HomeClient.tsx`）。
+  拡大ビュー（`components/ExpandedView.tsx`）が開くのは、図の「拡大」、地図の図の「写真を比べる」、グラフの図の「地図で見る」、結果カードの「詳細」（件数のカードの表の行を含む）「詳細を開く」「地図で見る」（地図の表示）、最初の画面の「解析した地区を地図で見る」を押したときと、開いていないときにタブの「地図」「グラフ」「画像」を押したとき（回答を持たない、全地区の拡大ビュー）。回答が届いただけでは開かない。
+  拡大ビューはダイアログではなく、全幅のタブ「回答｜地図｜グラフ｜画像」の画面（ADR 0008）。タブの帯（`components/ResultArea.tsx` の `ResultTabs`）は、`components/HomeClient.tsx` がメインの枠の上端にいつも置く。「閉じる」ボタンは無い。「回答」のタブで会話へ戻る（拡大ビューは開いたまま）。地図・グラフ・画像のタブか拡大ビューの中で Esc を押すと閉じる。
+  3 つの画面の中身は `ResultArea`（候補の詳細は `components/CandidateDrawer.tsx`）。状態の単位は回答 1 件で、タブ・絞り込み・選んだ候補は回答ごとに保ち、回答の中の図と拡大ビューが共有する（`lib/answer-view.ts`・`components/HomeClient.tsx`）。
 - 枠: 幅 1024px 以上は左のサイドパネル（`AppSidebar`。JobNavi・DocuNavi と同じ。開いた表示と細い帯をボタンで切り替える。はじめは開いた状態で、保存しない）。1023px 以下は、はじめは閉じていて、上の細い 1 行のボタンで、サイドパネルを重ねて開く（背景・Esc・閉じるボタン・ページの移動で閉じる）。上の横帯は無い。状態の印（模擬モデルなど）も出さない。合成データ・API 不通のバナー（`AppBanners`）は、どちらの幅でも本文の上に出る。`/login` はサイドパネルなし。
   `app/(site)/` が枠つきの 3 ページ、`app/(auth)/` がログイン。
 - API: ブラウザからは同じオリジンの `/api/*` だけを呼ぶ。転送は `proxy.ts`（実行時の環境変数 `API_URL`。既定 `http://127.0.0.1:8500`）。ただし `/api/auth/*`（ログイン）は転送せず、この画面のサーバー（`app/api/auth/[...all]/route.ts`）が受ける。
