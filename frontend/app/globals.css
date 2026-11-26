@@ -1391,6 +1391,30 @@ p.banner {
   min-width: 0;
 }
 
+/* 本文として読ませるカード（比較の要点）。枠も背景も付けない。回答の本文の続きに見える */
+.result-card--plain {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* 図のあとにまとめる補足（分類の意味・根拠を見る）。折りたたみを 1 行に並べる。開いたものだけ全幅 */
+.answer-notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 20px;
+}
+
+.answer-notes > .provenance {
+  flex: 0 0 auto;
+}
+
+.answer-notes > .provenance[open] {
+  flex: 1 1 100%;
+}
+
 .result-card--refusal {
   background: var(--warn-bg);
   border-color: var(--warn-border);

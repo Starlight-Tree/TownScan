@@ -188,10 +188,19 @@ export function TableCard({ result, actions, staleRun = false }: { result: Table
  * 比較のカード。地区ごとの数字の表は出さない（全地区の棒グラフが、回答の中の図に出る。分類ごとの件数は棒の中に書き、「表で見る」で表も読める）。
  * 同じ数字を表とグラフで 2 回見せず、カードは、いちばん知りたい要点（どこが多いか・全体の内訳）を言う（lib/compare-summary.ts）
  */
-export function CompareCard({ result }: { result: CompareResult }) {
+export function CompareCard({ result, part = 'all' }: { result: CompareResult; part?: 'all' | 'body' | 'notes' }) {
   const summary = compareSummary(result);
+  // 'notes': 図のあとにまとめて置く補足（分類の意味・根拠）。回答の並びは「本文 → 図 → 条件 → 補足」（ChatPanel）
+  if (part === 'notes') {
+    return (
+      <div className="answer-notes">
+        {summary !== null && <ClassGuide />}
+        <ProvenanceBox provenance={result.provenance} />
+      </div>
+    );
+  }
   return (
-    <section className="result-card" aria-label={result.title}>
+    <section className={part === 'body' ? 'result-card result-card--plain' : 'result-card'} aria-label={result.title}>
       <header className="result-card__head">
         <h3 className="result-card__title">{result.title}</h3>
         <SyntheticChip kind={result.provenance.run_kind} />
@@ -204,8 +213,8 @@ export function CompareCard({ result }: { result: CompareResult }) {
           {summary.sub && <p className="compare-summary__sub">{summary.sub}</p>}
         </div>
       )}
-      {summary !== null && <ClassGuide />}
-      <ProvenanceBox provenance={result.provenance} />
+      {part === 'all' && summary !== null && <ClassGuide />}
+      {part === 'all' && <ProvenanceBox provenance={result.provenance} />}
     </section>
   );
 }

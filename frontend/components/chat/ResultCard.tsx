@@ -14,14 +14,17 @@ import {
 } from './cards';
 import type { ResultActions } from './types';
 
-function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean) {
+/** 比較のカードだけ、本文（body）と補足（notes）に分けて置ける。ほかの種類は、いつも全部（all）を 1 か所に出す */
+export type ResultPart = 'all' | 'body' | 'notes';
+
+function renderResult(result: ToolResult, actions: ResultActions, answerText: string | undefined, staleRun: boolean, part: ResultPart) {
   switch (result.type) {
     case 'count':
       return <CountCard result={result} />;
     case 'table':
       return <TableCard result={result} actions={actions} staleRun={staleRun} />;
     case 'compare':
-      return <CompareCard result={result} />;
+      return <CompareCard result={result} part={part} />;
     case 'map_focus':
       return <MapFocusCard result={result} actions={actions} staleRun={staleRun} />;
     case 'detection_image':
@@ -50,11 +53,13 @@ export function ResultCard({
   actions,
   answerText,
   staleRun = false,
+  part = 'all',
 }: {
   result: ToolResult;
   actions: ResultActions;
   answerText?: string;
   staleRun?: boolean;
+  part?: ResultPart;
 }) {
   if (!result || typeof result !== 'object' || typeof (result as { type?: unknown }).type !== 'string') {
     return <UnknownResultCard raw={result} reason="結果の形が正しくありません。" />;
@@ -63,7 +68,7 @@ export function ResultCard({
     <ErrorBoundary
       fallback={(error) => <UnknownResultCard raw={result} reason={`表示中にエラーが起きました（${error.message}）。`} />}
     >
-      {renderResult(result, actions, answerText, staleRun)}
+      {renderResult(result, actions, answerText, staleRun, part)}
     </ErrorBoundary>
   );
 }

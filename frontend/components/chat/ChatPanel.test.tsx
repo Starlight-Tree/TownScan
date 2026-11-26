@@ -459,7 +459,7 @@ describe('回答が届いても、拡大ビューは開かず、何も頼まな�
 describe('回答の対象・条件の行', () => {
   const scopeName = 'この回答の対象・条件';
 
-  it('件数の回答の文とカードのあいだに、地区・分類・写真の年を出す（地区名は地区の一覧から）', async () => {
+  it('件数の回答の文とカードのあと（図があれば図のあと）に、地区・分類・写真の年を出す（地区名は地区の一覧から）', async () => {
     const filtered = { ...count, filter: { area_id: 'z18-1-2', cls: 'uncertain' as const } };
     fetchMock.mockResolvedValue(jsonResponse(reply('件数です。', [filtered])));
     const { input } = setup({ areas });
@@ -471,7 +471,7 @@ describe('回答の対象・条件の行', () => {
     const text = screen.getByText('件数です。');
     const card = screen.getByRole('region', { name: count.title });
     expect(text.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(scope.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(scope) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // 前提の帯は、本文とカードのあと（2026-11-26）
   });
 
   it('比較の回答には、比べる地区を出す', async () => {
@@ -718,6 +718,29 @@ describe('チャットのスクロール位置（開いた直後は説明の見�
     await userEvent.click(screen.getByRole('button', { name: '新しい会話' }));
     expect(screen.getByRole('heading', { name: /写真と会話で調べる/ })).toBeInTheDocument();
     expect(log().scrollTop).toBe(0);
+  });
+});
+
+describe('比較の回答の並び（本文 → 要点 → 条件 → 補足。2026-11-26）', () => {
+  it('比較の要点は本文のすぐ下（枠なし）。分類の意味・根拠を見るは、条件の帯のあとに 1 かたまりで置く', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(reply('比較です。', [compare])));
+    const { input } = setup({ areas });
+    await userEvent.type(input(), '比べて{Enter}');
+    const card = await screen.findByRole('region', { name: compare.title });
+    const scope = screen.getByRole('group', { name: 'この回答の対象・条件' });
+    const guide = screen.getByText('分類の意味', { selector: 'summary' });
+    const provenance = screen.getByText('根拠を見る', { selector: 'summary' });
+    const text = screen.getByText('比較です。');
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(card).toHaveClass('result-card--plain');
+    expect(follows(text, card)).toBe(true);
+    expect(follows(card, scope)).toBe(true);
+    expect(follows(scope, guide)).toBe(true);
+    expect(follows(guide, provenance)).toBe(true);
+    // 補足は、要点のカードの外（同じ折りたたみが 2 回出ない）
+    expect(card.contains(guide)).toBe(false);
+    expect(card.contains(provenance)).toBe(false);
+    expect(guide.closest('.answer-notes')).toBe(provenance.closest('.answer-notes'));
   });
 });
 

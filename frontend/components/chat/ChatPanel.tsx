@@ -519,16 +519,11 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
             <div key={entry.id} data-entry="assistant" className="msg msg--assistant">
               <span className="visually-hidden">TownScan: </span>
               {entry.content && <p className="msg__text">{entry.content}</p>}
-              {entry.results && entry.results.length > 0 && (
-                // 条件の行が壊れても、回答とカードは出す
-                <ErrorBoundary fallback={() => null}>
-                  <AnswerScope results={entry.results} />
-                </ErrorBoundary>
-              )}
               {entry.results?.map((r, i) => (
-                // 使ったツールは、同じ順番の結果カードの「根拠を見る」の中で見せる（数が合わないときは出さない）
+                // 使ったツールは、同じ順番の結果カードの「根拠を見る」の中で見せる（数が合わないときは出さない）。
+                // 比較のカードだけ、本文（要点）をここに出し、補足（分類の意味・根拠）は図と条件のあとへ回す
                 <ToolCallContext.Provider key={i} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
-                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} />
+                  <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part={r?.type === 'compare' ? 'body' : 'all'} />
                 </ToolCallContext.Provider>
               ))}
               {/* 図（地図・グラフ）は、結果カードの並びの下。出る種類は、回答の結果で決まる（件数: 地図とグラフ・比較: グラフ・地図の表示: 地図） */}
@@ -537,6 +532,19 @@ export function ChatPanel({ actions, renderFigure, onNewConversation, onAnswer }
                 figureKinds(entry.results ?? []).map((kind) => (
                   <Fragment key={kind}>{renderFigure(refFor(entry), kind)}</Fragment>
                 ))}
+              {entry.results && entry.results.length > 0 && (
+                // 条件の行が壊れても、回答とカードは出す。前提（対象・条件）は、本文と図のあとに置く
+                <ErrorBoundary fallback={() => null}>
+                  <AnswerScope results={entry.results} />
+                </ErrorBoundary>
+              )}
+              {entry.results?.map((r, i) =>
+                r?.type === 'compare' ? (
+                  <ToolCallContext.Provider key={`notes-${i}`} value={entry.tool_calls?.length === entry.results?.length ? (entry.tool_calls?.[i] ?? null) : null}>
+                    <ResultCard result={r} actions={actionsFor(entry)} answerText={entry.content} staleRun={staleRun} part="notes" />
+                  </ToolCallContext.Provider>
+                ) : null,
+              )}
               {entry.notice && (
                 // 保存を飛ばして送り直した回答にだけ、1 回出す（以降の回答には繰り返さない。仕様 §7.1.7）
                 <p className="msg__notice" role="note">
