@@ -8,11 +8,11 @@
 
 **今の検出の出来は悪いです。** 目で見ると、大きな新しい建物を見落とし、影を建物と判定します。フランスの写真での精度は測っていません。候補の件数は、建築の統計として読めません。
 
-| 地図の上の候補 | 1 件の 2014 年と 2024 年の写真 |
+| 地図の上の候補 | 2014 年と 2024 年の写真つきの回答 |
 |---|---|
-| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="地図のタブ。解析した 12 地区の候補の位置と、分類ごとの件数が出る。IGN の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="候補の詳細。1 件の候補の 2014 年・2024 年の写真（輪郭つき）と出典が出る" src="docs/images/compare.png"></picture></a> |
+| <a href="docs/images/map.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.png"><img alt="地図のタブ。解析した 12 地区の候補の位置と、分類ごとの件数が出る。IGN の出典が見える" src="docs/images/map.png"></picture></a> | <a href="docs/images/compare.png"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/compare-dark.png"><img alt="チャットの回答。候補の件数を聞く質問、短い回答文、4 件の候補の 2014 年・2024 年の写真（輪郭つき）、次の質問の例が出る" src="docs/images/compare.png"></picture></a> |
 
-右は「2014 年は未検出」の中で面積がいちばん大きい候補で、検出の出来を代表する例とは限りません。画像の地図と写真の出典: IGN（フランス国土地理院）の [Plan IGN](https://www.data.gouv.fr/datasets/plan-ign)（最終更新 2026-10-08）と [BD ORTHO](https://www.data.gouv.fr/datasets/bd-ortho-r)（最終更新 2026-11-18）、Licence Ouverte 2.0。
+右の写真は「2014 年は未検出」の中で面積が大きい上位 4 件で、検出の出来を代表する例とは限りません。画像の地図と写真の出典: IGN（フランス国土地理院）の [Plan IGN](https://www.data.gouv.fr/datasets/plan-ign)（最終更新 2026-10-08）と [BD ORTHO](https://www.data.gouv.fr/datasets/bd-ortho-r)（最終更新 2026-11-18）、Licence Ouverte 2.0。
 
 ## 機能
 
