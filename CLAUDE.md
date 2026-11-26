@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-TownScan。パリ南西の近郊（県 92 の 12 地区）の IGN の空中写真（2014 年と 2024 年）から新築の候補を棟ごとに検出し、会話で聞けるアプリ（熊本から置き換えた。[ADR 0015](docs/decisions/0015-move-to-france.md)）。回答は、短い本文と表示 1 つ（地図・グラフ・写真など）で返す（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。衛星（Google Earth Engine）で広域の変化の当たりをつける層と、屋根の太陽光パネルは後の拡張で、やるかは未決。AI スクールの制作課題。
+TownScan。パリ南西の近郊（県 92 の 12 地区）の IGN の空中写真（2014 年と 2024 年）から新築の候補を棟ごとに検出し、会話で聞けるアプリ（[ADR 0015](docs/decisions/0015-move-to-france.md)）。回答は、短い本文と表示 1 つ（地図・グラフ・写真など）で返す（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。衛星（Google Earth Engine）で広域の変化の当たりをつける層と、屋根の太陽光パネルは後の拡張で、やるかは未決。AI スクールの制作課題。
 計画の正本は [docs/plan.md](docs/plan.md)（段階・出口条件・決定待ち。今の段は §4.1 で、§1・§2 の熊本の記述は記録）。決定は `docs/decisions/` に 1 件 1 ファイル。
 
 ## 構成と検査

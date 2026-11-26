@@ -4,7 +4,7 @@
 
 English | [日本語](README.ja.md)
 
-A chat app that finds candidates for new buildings in the south-western suburbs of Paris from 2014 and 2024 aerial photos, and answers each question with a short text and one view: photos, a chart or a map. The app's screens and answers are in Japanese. A local prototype (not deployed): Next.js, an API in Go ([ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab. It started with Kumamoto City, Japan, and moved to France ([ADR 0015](docs/decisions/0015-move-to-france.md)).
+A chat app that finds candidates for new buildings in the south-western suburbs of Paris from 2014 and 2024 aerial photos, and answers each question with a short text and one view: photos, a chart or a map. The app's screens and answers are in Japanese. A local prototype (not deployed): Next.js, an API in Go ([ADR 0005](docs/decisions/0005-api-in-go.md)), Postgres 17, and a building-extraction model run on Google Colab.
 
 **Detection quality is poor so far:** by eye, the current model misses large new buildings and reports shadows as buildings. Its accuracy on the French photos has not been measured. Do not read the candidate counts as construction statistics.
 
