@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -306,8 +307,43 @@ func countCandidates(ctx context.Context, tc *ToolContext, args Args) (Result, e
 	}
 	return CountResult{
 		Type: "count", Title: title, Total: total, Breakdown: breakdown, Held: held, Overall: overall,
-		Filter: filterInfo(ids, cls, scope), Provenance: provenance(tc),
+		Filter: filterInfo(ids, cls, scope), Provenance: provenance(tc), Ranking: rankAreas(tc.Areas, ids, cls), TileSideM: tileSideM,
 	}, nil
+}
+
+// rankAreas は、対象の地区（ids が nil なら全地区）を、件数（cls があればその分類の件数）の多い順（同数は名前順）に並べる。
+// 対象が 2 地区未満か、候補が 1 件も無いときは nil。
+func rankAreas(areas []store.Area, ids []string, cls string) *AreaRanking {
+	searched := 0
+	var items []AreaCount
+	for _, a := range areas {
+		if ids != nil && !slices.Contains(ids, a.ID) {
+			continue
+		}
+		searched++
+		if n := countOf(a.Counts, cls); n > 0 {
+			items = append(items, AreaCount{Name: a.Name, Count: n})
+		}
+	}
+	if searched < 2 || len(items) == 0 {
+		return nil
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Count != items[j].Count {
+			return items[i].Count > items[j].Count
+		}
+		return items[i].Name < items[j].Name
+	})
+	end, ranks := len(items), 0
+	for i := range items {
+		if i == 0 || items[i].Count != items[i-1].Count {
+			if ranks++; ranks > 2 {
+				end = i
+				break
+			}
+		}
+	}
+	return &AreaRanking{Searched: searched, WithCandidates: len(items), Top: items[:end]}
 }
 
 // listLimit は、一覧の件数の引数。無ければ 10、あれば 1〜maxListLimit に丸める。
@@ -444,7 +480,7 @@ func showCandidate(ctx context.Context, tc *ToolContext, args Args) (Result, err
 	if cand.AreaName != nil && *cand.AreaName != "" {
 		areaName = *cand.AreaName
 	}
-	caption := fmt.Sprintf("%s・%s・面積 約 %s m²。", areaName, candidateLabel(cand.Class, cand.Reason), pyFixed(float64(cand.AreaM2), 0)) +
+	caption := fmt.Sprintf("%s・面積 約 %s m²。", areaName, pyFixed(float64(cand.AreaM2), 0)) +
 		"輪郭は機械が抽出した範囲で、確定ではありません。"
 	return DetectionImageResult{
 		Type: "detection_image", Title: "候補 " + cand.ID + " の写真（2018 年と 2023 年）", CandidateID: cand.ID, Class: cand.Class,
@@ -644,10 +680,10 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 
 func showHelp(_ context.Context, tc *ToolContext, _ Args) (Result, error) {
 	examples := []HelpRow{
-		{"候補は何件ありますか？", "件数と分類ごとの内訳"},
+		{"候補は何件ありますか？", "件数と候補の写真"},
 		{"地区ごとに候補数を比べてください", "地区の比較"},
 		{"面積の大きい候補を一覧で見せてください", "候補の一覧（表）"},
-		{"2018 年は未検出で一番大きい候補の写真を見せてください", "2018 年と 2023 年の写真の見比べ"},
+		{"いちばん大きい候補の写真を見せてください", "2018 年と 2023 年の写真の見比べ"},
 		{"その地図での位置は？", "地図で場所を示す"},
 		{"このアプリの精度は？", "実測した精度の数字"},
 	}

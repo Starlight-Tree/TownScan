@@ -150,7 +150,8 @@ func TestCountCandidates(t *testing.T) {
 		`{"key":"existing_omission","label":"2018 年も検出","value":3},` +
 		`{"key":"uncertain","label":"未判定","value":2}],"held":[{"key":"edge","label":"端のため未判定","value":2}],"filter":{"scope":"全地区"},` +
 		`"provenance":{"source":"国土地理院 空中写真（年度別 2018・2023 年）から建物を抽出し、2 時点を比較した結果","photo_years":[2018,2023],` +
-		`"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic","note":"合成データ（テスト用）です。実データではありません。"}}`
+		`"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic","note":"合成データ（テスト用）です。実データではありません。"},` +
+		`"area_ranking":{"areas_searched":3,"areas_with_candidates":3,"top":[{"name":"仮想町","count":3},{"name":"合成町","count":3},{"name":"試験町","count":3}]},"tile_side_m":130}`
 	if got != want {
 		t.Errorf("全地区の件数\n got  %s\n want %s", got, want)
 	}
@@ -328,7 +329,7 @@ func TestShowCandidate(t *testing.T) {
 	r := callTool(t, f, "show_candidate", Args{CandidateID: "c-226249-105759-2"}).(DetectionImageResult)
 	want := `{"type":"detection_image","title":"候補 c-226249-105759-2 の写真（2018 年と 2023 年）","candidate_id":"c-226249-105759-2","class":"confirmed_new",` +
 		`"images":[{"year":2018,"url":"/api/candidates/c-226249-105759-2/image?year=2018&size=512"},{"year":2023,"url":"/api/candidates/c-226249-105759-2/image?year=2023&size=512"}],` +
-		`"caption":"合成町・2018 年は未検出・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。","provenance":`
+		`"caption":"合成町・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。","provenance":`
 	if got := jsonOf(t, r); !strings.HasPrefix(got, want) {
 		t.Errorf("候補を指定\n got  %s\n want %s…", got, want)
 	}
@@ -616,7 +617,7 @@ func TestShowHelp(t *testing.T) {
 	if r.Total != 6 || r.Shown != 6 || len(rows) != 6 || r.Filter != nil || r.Title != "このアプリでできること（聞き方の例）" {
 		t.Errorf("使い方: %s", jsonOf(t, r))
 	}
-	if got := jsonOf(t, rows[0]); got != `{"example":"候補は何件ありますか？","result":"件数と分類ごとの内訳"}` {
+	if got := jsonOf(t, rows[0]); got != `{"example":"候補は何件ありますか？","result":"件数と候補の写真"}` {
 		t.Errorf("1 行目 = %s", got)
 	}
 	if got := jsonOf(t, r.Provenance); !strings.Contains(got, `"note":"合成データ（テスト用）です。実データではありません。 結果はすべて、写真から機械が見つけた候補です。"`) {

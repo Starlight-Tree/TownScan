@@ -63,7 +63,7 @@ def test_area_name_selects_the_area_and_a_ward_selects_its_areas(api):
 
 def test_zero_count_is_stated_not_hidden(api):
     m = ask(api, "仮想町の判定保留は何件？")
-    assert m["results"][0]["total"] == 0 and "該当する候補はありません" in m["content"]
+    assert m["results"][0]["total"] == 0 and "候補はありません" in m["content"]
 
 
 def test_show_candidate_images_can_be_fetched(api):

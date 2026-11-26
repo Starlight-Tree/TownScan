@@ -101,29 +101,97 @@ func joinCounts(rows []Breakdown) string {
 	return strings.Join(parts, "、")
 }
 
+// tileSideM は、1 区画（地区＝地理院タイル z18 の 1 枚）の一辺の長さ（m。画面の area-scale.ts の TILE_SIDE_TEXT と同じ）。
+// 地区の名前は丁目だが、数えたのは丁目の全体ではないので、件数の本文で言う。
+const tileSideM = 130
+
+// maxNamedAreas は、件数の本文で、同じ順位の地区の名前を並べる上限。
+const maxNamedAreas = 3
+
+// countSubjects は、分類を指定した件数の呼び名。分類の名前は本文に出さず、何の条件かは分かるように、モデルが確認した事実で言う。
+var countSubjects = map[string]string{
+	"confirmed_new":     "モデルが 2023 年の写真だけで見つけた候補",
+	"existing_omission": "モデルが 2018 年の写真でも見つけた候補",
+	"uncertain":         "判定できていない候補",
+}
+
+// renderCount は、件数の本文。件数だけの回答では、実 LLM の文も使わず、これを返す（毎回同じ形にする）。
 func renderCount(r CountResult) string {
-	scope := scopeOf(r.Filter)
+	subject := "建物データに載っていない建物の候補"
+	if named, ok := countSubjects[r.Filter.Cls]; ok {
+		subject = named
+	}
+	if scope := scopeOf(r.Filter); scope != "全地区" {
+		subject = scope + "で、" + subject
+	}
+	side := fmt.Sprintf("約 %d m 四方", tileSideM)
+	oneArea := r.Filter.AreaID != ""
 	if r.Total == 0 {
-		return scope + "には、該当する候補はありません。"
-	}
-	var body string
-	if r.Filter.Cls != "" {
-		body = fmt.Sprintf("%sの「%s」は %s 件です。", scope, r.Breakdown[0].Label, commas(r.Total))
-		if len(r.Held) > 0 {
-			body += fmt.Sprintf("内訳は、%s です。", joinCounts(r.Held))
+		if oneArea {
+			return subject + "はありません。対象は、" + side + "の区画です。"
 		}
+		return subject + "はありません。解析したのは、各" + side + "の区画だけです。"
+	}
+	head := fmt.Sprintf("%sは %s 件です。", subject, commas(r.Total))
+	if r.Overall != nil {
+		head = fmt.Sprintf("%sは %s 件です（候補は全部で %s 件）。", subject, commas(r.Total), commas(r.Overall.Total))
+	}
+	switch {
+	case r.Ranking != nil:
+		return head + rankingText(*r.Ranking, side)
+	case oneArea:
+		return head + "対象は、" + side + "の区画です。"
+	}
+	return head
+}
+
+// rankingText は、候補がある区画の数と、多い地区（2 番目の順位まで）の文。
+func rankingText(a AreaRanking, side string) string {
+	if a.WithCandidates == 1 {
+		return fmt.Sprintf("解析した %d 区画（各%s）のうち、%sの区画だけにあります。", a.Searched, side, a.Top[0].Name)
+	}
+	head := fmt.Sprintf("解析した %d 区画（各%s）のうち %d 区画にあり、", a.Searched, side, a.WithCandidates)
+	if a.WithCandidates == a.Searched {
+		head = fmt.Sprintf("解析した %d 区画（各%s）のすべてにあり、", a.Searched, side)
+	}
+	first := a.Top[:sameCount(a.Top)]
+	switch {
+	case len(first) == a.WithCandidates:
+		return head + fmt.Sprintf("どの区画も %s 件です。", commas(first[0].Count))
+	case len(first) > maxNamedAreas:
+		return head + fmt.Sprintf("最も多い区画は %s 件です。", commas(first[0].Count))
+	}
+	text := "最も多いのは" + namedCount(first)
+	if rest := a.Top[len(first):]; len(rest) > 0 {
+		if second := rest[:sameCount(rest)]; len(second) <= maxNamedAreas {
+			text += "、次が" + namedCount(second)
+		}
+	}
+	return head + text + "です。"
+}
+
+// sameCount は、先頭と同じ件数が続く数。
+func sameCount(items []AreaCount) int {
+	n := 0
+	for n < len(items) && items[n].Count == items[0].Count {
+		n++
+	}
+	return n
+}
+
+// namedCount は、同じ件数の地区を「A の 6 件」「A・B の各 3 件」の形にする。
+func namedCount(items []AreaCount) string {
+	names := make([]string, len(items))
+	for i, it := range items {
+		names[i] = it.Name
+	}
+	each := ""
+	if len(items) > 1 {
+		each = "各 "
 	} else {
-		var rows []Breakdown
-		for _, b := range r.Breakdown {
-			if b.Key == "uncertain" && len(r.Held) > 0 { // 未判定は、理由の呼び名で言う
-				rows = append(rows, r.Held...)
-				continue
-			}
-			rows = append(rows, b)
-		}
-		body = fmt.Sprintf("%sの候補は %s 件です。内訳は、%s です。", scope, commas(r.Total), joinCounts(rows))
+		each = " "
 	}
-	return body + "機械が写真から見つけた候補で、確定ではありません。"
+	return strings.Join(names, "・") + "の" + each + commas(items[0].Count) + " 件"
 }
 
 func renderTable(r TableResult) string {

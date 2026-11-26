@@ -122,7 +122,7 @@ func TestRunServesTheChatEndToEnd(t *testing.T) {
 
 	seed(t, url) // 起動（スキーマの適用）のあとに、行を入れる
 	status, body = post(`{"messages":[{"role":"user","content":"新規出現の候補は何件ありますか？"}]}`)
-	want := `{"message":{"role":"assistant","content":"全地区の「2018 年は未検出」は 1 件です。機械が写真から見つけた候補で、確定ではありません。","results":[{"type":"count",` +
+	want := `{"message":{"role":"assistant","content":"モデルが 2023 年の写真だけで見つけた候補は 1 件です（候補は全部で 2 件）。","results":[{"type":"count",` +
 		`"title":"「2018 年は未検出」の件数（全地区）","total":1,"breakdown":[{"key":"confirmed_new","label":"2018 年は未検出","value":1}],"overall":{"total":2,"uncertain":1},"filter":{"cls":"confirmed_new","scope":"全地区"},`
 	if status != 200 || !strings.HasPrefix(body, want) || !strings.HasSuffix(body, `"tool_calls":[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]}}`) {
 		t.Errorf("件数: %d\n%s", status, body)

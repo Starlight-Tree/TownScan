@@ -119,11 +119,18 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 			content = s.compose(results)
 		}
 	}
+	// 件数だけの回答の本文は、実 LLM の文も使わず、結果からコードで組み立てる（毎回同じ形にする）
+	composed := false
+	if len(results) == 1 {
+		if count, ok := results[0].(CountResult); ok {
+			content, composed = renderCount(count), true
+		}
+	}
 	// 返答文の数字は、結果の値だけから出ていること。満たさなければ返さず、安全なテンプレートにする。
-	// 実 LLM の文は、強い検査（地区名の漢数字は数として見ない）。模擬モデルの文は、Python と同じ範囲の検査
+	// 実 LLM が書いた文は、強い検査（地区名の漢数字は数として見ない）。コードで組み立てた文（模擬モデル・件数の本文）は、Python と同じ範囲の検査
 	var guarded string
 	var replaced bool
-	if s.gemini != nil {
+	if s.gemini != nil && !composed {
 		guarded, replaced = GuardNumbers(content, results, placeNames(areas)...)
 	} else {
 		guarded, replaced = guardTemplateNumbers(content, results)

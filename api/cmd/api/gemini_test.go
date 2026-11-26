@@ -129,14 +129,16 @@ func TestGeminiChatEndToEnd(t *testing.T) {
 		toolCall("count_candidates", map[string]any{"cls": "confirmed_new"}),
 		saying("新規出現の候補の件数は、下のカードのとおりです。"))
 	status, body := s.chat(t, "新規出現の候補は何件ありますか？")
-	if status != 200 || !strings.HasPrefix(body, `{"message":{"role":"assistant","content":"新規出現の候補の件数は、カードのとおりです。","results":[{"type":"count",`) || // 位置の語「下の」は検査が取り除く
+	// 件数だけの回答の本文は、LLM の文でなく、結果から組み立てた文
+	if status != 200 || !strings.HasPrefix(body, `{"message":{"role":"assistant","content":"モデルが 2023 年の写真だけで見つけた候補は 1 件です（候補は全部で 2 件）。`) || strings.Contains(body, "新規出現の候補の件数は") ||
+		!strings.Contains(body, `"results":[{"type":"count",`) ||
 		!strings.Contains(body, `"total":1,`) || !strings.HasSuffix(body, `"tool_calls":[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]}}`) {
 		t.Errorf("%d %s", status, body)
 	}
 	// 結果に無い数字を書いた文は、安全なテンプレートに替わる（結果は DB の値のまま）
-	s = newE2EServer(t, toolCall("count_candidates", nil), saying("候補は 9999 件です。"))
-	status, body = s.chat(t, "件数は？")
-	if status != 200 || !strings.Contains(body, `"content":"`+chat.SafeTemplate+`"`) || !strings.Contains(body, `"total":2,`) || strings.Contains(body, "9999") {
+	s = newE2EServer(t, toolCall("compare_areas", nil), saying("候補は 9999 件です。"))
+	status, body = s.chat(t, "地区ごとに比べて")
+	if status != 200 || !strings.Contains(body, `"content":"`+chat.SafeTemplate+`"`) || !strings.Contains(body, `"type":"compare"`) || strings.Contains(body, "9999") {
 		t.Errorf("%d %s", status, body)
 	}
 	if logs := s.logs.String(); !strings.Contains(logs, "安全なテンプレートに差し替えました") || strings.Contains(logs, "9999") {

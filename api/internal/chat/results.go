@@ -47,6 +47,19 @@ type Overall struct {
 	Uncertain int64 `json:"uncertain"` // うち未判定
 }
 
+// AreaCount は、地区の名前と、その件数。
+type AreaCount struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
+// AreaRanking は、件数の多い地区（返答のまとめに使う）。順位はコードで決め、LLM には書き写させる。
+type AreaRanking struct {
+	Searched       int         `json:"areas_searched"`
+	WithCandidates int         `json:"areas_with_candidates"`
+	Top            []AreaCount `json:"top"` // 件数の多い順。2 番目に多い件数の地区まで（同数は全部）
+}
+
 // CountResult は、件数（type: count）。
 type CountResult struct {
 	Type       string           `json:"type"`
@@ -57,6 +70,8 @@ type CountResult struct {
 	Overall    *Overall         `json:"overall,omitempty"` // 分類で絞ったときだけ
 	Filter     FilterInfo       `json:"filter"`
 	Provenance store.Provenance `json:"provenance"`
+	Ranking    *AreaRanking     `json:"area_ranking,omitempty"` // 2 地区以上を数えて、1 件以上あるときだけ
+	TileSideM  int              `json:"tile_side_m"`            // 1 区画の一辺（m）。本文の数字の検査が、結果の値として照合する
 }
 
 // Column は、表の列。
@@ -166,7 +181,7 @@ var refusalReasons = []string{"out_of_scope", "no_photo_period", "not_implemente
 var defaultSuggestions = []string{
 	"候補は何件ありますか？",
 	"地区ごとに候補数を比べてください",
-	"2018 年は未検出で一番大きい候補の写真を見せてください",
+	"いちばん大きい候補の写真を見せてください",
 	"このアプリの精度は？",
 }
 

@@ -64,7 +64,7 @@ func TestAnswerReturnsToolCallsResultsAndContent(t *testing.T) {
 	if got := jsonOf(t, r.ToolCalls); got != `[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]` {
 		t.Errorf("tool_calls = %s", got)
 	}
-	if want := "全地区の「2018 年は未検出」は 4 件です。機械が写真から見つけた候補で、確定ではありません。"; r.Content != want {
+	if want := "モデルが 2023 年の写真だけで見つけた候補は 4 件です（候補は全部で 9 件）。解析した 3 区画（各約 130 m 四方）のすべてにあり、最も多いのは試験町の 2 件、次が仮想町・合成町の各 1 件です。"; r.Content != want {
 		t.Errorf("content = %s", r.Content)
 	}
 	// 応答のキーの並び（Python の dict と同じ）
@@ -159,14 +159,14 @@ func TestALongConversationKeepsWorking(t *testing.T) {
 func TestFabricatedTextIsNeverReturned(t *testing.T) {
 	s, logs := newTestService(t, newFakeData())
 	s.compose = func([]Result) string { return "新築の候補は 424242 件です。" }
-	r := answer(t, s, user("新規出現の候補は何件ありますか？"))
+	r := answer(t, s, user("地区ごとに比べて")) // 件数だけの回答は本文を別に組み立てるので、比較の質問で確かめる
 	if r.Content != SafeTemplate || strings.Contains(r.Content, "424242") {
 		t.Errorf("content = %q", r.Content)
 	}
-	if r.Results[0].(CountResult).Total != 4 || len(r.ToolCalls) != 1 {
+	if len(r.Results[0].(CompareResult).Items) != 3 || len(r.ToolCalls) != 1 {
 		t.Errorf("結果は、そのまま返る: %s", jsonOf(t, r))
 	}
-	r = answer(t, s, user("候補は何件？"))
+	r = answer(t, s, user("このアプリの精度は？"))
 	if len(*logs) != 2 || !strings.Contains((*logs)[0], "通算 1 回") || !strings.Contains((*logs)[1], "通算 2 回") {
 		t.Errorf("差し替えの回数だけをログに出す: %v", *logs)
 	}

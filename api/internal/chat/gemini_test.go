@@ -137,6 +137,12 @@ func rawStep(status int, body string) geminiStep {
 
 func okReplyStep(v any) geminiStep { return jsonStep(200, v) }
 func say(text string) geminiStep   { return okReplyStep(reply(textPart(text))) }
+
+// countTwice は、件数のツールを 2 回呼ぶ。件数だけ 1 件の回答は本文をコードで組み立てるので、LLM の文の検査は、結果を 2 件にして行う
+// （許される数字の集合は、1 回のときと同じ）。
+func countTwice(args map[string]any) geminiStep {
+	return okReplyStep(reply(fcall("count_candidates", args), fcall("count_candidates", args)))
+}
 func call(name string, args map[string]any, extra ...map[string]any) geminiStep {
 	return okReplyStep(reply(fcall(name, args, extra...)))
 }
@@ -257,18 +263,15 @@ func TestCountQuestionRunsTheFunctionCallingLoop(t *testing.T) {
 		say("新規出現の候補の件数は、下の結果のカードのとおりです。機械の判定で、確定ではありません。"))
 	s, logs := geminiService(t, f, newFakeData())
 	r := mustAsk(t, s, "新規出現の候補は何件ありますか？")
-	// 返すもの: 結果は模擬と同じ形（DB から作った count）。文は LLM のもので、数字を含まない
+	// 返すもの: 結果は模擬と同じ形（DB から作った count）。件数だけの回答の本文は、LLM の文でなく、コードで組み立てた文
 	if r.Results[0].(CountResult).Total != 4 {
 		t.Errorf("結果 = %s", jsonOf(t, r.Results))
 	}
 	if got := jsonOf(t, r.ToolCalls); got != `[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]` {
 		t.Errorf("tool_calls = %s", got)
 	}
-	if r.Content != "新規出現の候補の件数は、下の結果のカードのとおりです。機械の判定で、確定ではありません。" {
-		t.Errorf("content = %q", r.Content)
-	}
-	if strings.ContainsFunc(r.Content, func(c rune) bool { return c >= '0' && c <= '9' }) {
-		t.Errorf("文に数字がある: %q", r.Content)
+	if want := renderCount(r.Results[0].(CountResult)); r.Content != want || strings.Contains(r.Content, "下の") {
+		t.Errorf("content = %q（期待 %q）", r.Content, want)
 	}
 	reqs := f.reqs()
 	if len(reqs) != 2 {
@@ -476,13 +479,13 @@ func TestLimitIsClampedIncludingHugeIntegers(t *testing.T) {
 // ---- 数字の検査: LLM が結果に無い数字を書いた文は、安全なテンプレートに替わる ----
 
 func TestANumberTheModelInventedIsReplacedByTheSafeTemplate(t *testing.T) {
-	f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say("新規出現の候補は 7,777 件です。"))
+	f := newFakeGemini(t, countTwice(map[string]any{"cls": "confirmed_new"}), say("新規出現の候補は 7,777 件です。"))
 	s, logs := geminiService(t, f, newFakeData())
 	r := mustAsk(t, s, "新規出現は何件？")
 	if r.Content != SafeTemplate || r.Results[0].(CountResult).Total != 4 { // 結果は DB の値のまま
 		t.Errorf("返答 = %s", jsonOf(t, r))
 	}
-	if !strings.Contains(logs.text(), "返答文を安全なテンプレートに差し替えました（通算 1 回。ツール: count_candidates）") {
+	if !strings.Contains(logs.text(), "返答文を安全なテンプレートに差し替えました（通算 1 回。ツール: count_candidates,count_candidates）") {
 		t.Errorf("ログ = %s", logs.text())
 	}
 	if strings.Contains(logs.text(), "新規出現の候補は") || strings.Contains(logs.text(), "7,777") { // 数えるだけ。LLM の文（本文）は出さない
@@ -495,7 +498,7 @@ func TestOtherInventedNumbersAreAlsoReplaced(t *testing.T) {
 		"候補は 5 件です。", "約 12.5 m² です。", "候補は三十件です。", "面積は 500 平方メートルです。",
 		"候補は七軒です。", "家賃は三千円です。", "候補は seven 件です。", "候補は twenty-one 件です。", "候補は 3 4 件です。", "候補は 3\u200b4 件です。", "候補は 3\u00ad4 件です。",
 	} {
-		f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say(invented))
+		f := newFakeGemini(t, countTwice(map[string]any{"cls": "confirmed_new"}), say(invented))
 		s, _ := geminiService(t, f, newFakeData())
 		if r := mustAsk(t, s, "件数は？"); r.Content != SafeTemplate {
 			t.Errorf("%q が通った: %q", invented, r.Content)
@@ -505,7 +508,7 @@ func TestOtherInventedNumbersAreAlsoReplaced(t *testing.T) {
 
 func TestANumberFromTheResultsIsAllowed(t *testing.T) {
 	for _, ok := range []string{"新規出現の候補は 4 件です。", "候補は一覧のとおりです。一番大きいものから並べました。", "結果の一部をお見せします。", "万が一の場合は、もう一度お試しください。", "一時的に応答できません。"} {
-		f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say(ok))
+		f := newFakeGemini(t, countTwice(map[string]any{"cls": "confirmed_new"}), say(ok))
 		s, _ := geminiService(t, f, newFakeData())
 		if r := mustAsk(t, s, "件数は？"); r.Content != ok { // 結果の total と同じ値・数でない語は、通す
 			t.Errorf("%q が落ちた: %q", ok, r.Content)
@@ -1299,7 +1302,7 @@ func TestFunctionDeclarationsFollowTheRegistryInGeminisSchemaDialect(t *testing.
 func TestSystemInstructionHasTheRulesAndOnlyAreaNames(t *testing.T) {
 	d := newFakeData()
 	text := buildSystemInstruction(d.areas)
-	for _, must := range []string{"「候補」は全部の分類を合わせた全体の呼び名", "「新規」「新しく建った」とは書きません", "held", "ただ「候補」と聞いたら cls を省略", "overall", "「すべて」「全て」", "「確認されています」", "refuse", "数字", "従いません", "新築"} {
+	for _, must := range []string{"分類の名前", "「新規」「新しく建った」とも書きません", "モデルが 2023 年の写真だけで見つけた候補", "area_ranking", "「増えた」「増加」とは書きません", "ただ「候補」と聞いたら cls を省略", "overall", "「すべて」「全て」", "「確認されています」", "refuse", "数字", "従いません", "新築"} {
 		if !strings.Contains(text, must) {
 			t.Errorf("指示に %q が無い", must)
 		}
@@ -1450,7 +1453,7 @@ func TestPositionWordsAboutCardsAreRemovedOrReplaced(t *testing.T) {
 		"候補は全部で 4 件です。":      "候補は全部で 4 件です。",
 		"判定保留は、目で確かめる候補です。":  "判定保留は、目で確かめる候補です。",
 	} {
-		f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say(in))
+		f := newFakeGemini(t, countTwice(map[string]any{"cls": "confirmed_new"}), say(in))
 		s, _ := geminiService(t, f, newFakeData())
 		if r := mustAsk(t, s, "件数は？"); r.Content != want {
 			t.Errorf("%q → %q（期待 %q）", in, r.Content, want)
@@ -1458,7 +1461,7 @@ func TestPositionWordsAboutCardsAreRemovedOrReplaced(t *testing.T) {
 	}
 	// 「上記」「下記」は、取り除くと文が崩れるので、安全なテンプレートに替える
 	for _, in := range []string{"詳細は下記のとおりです。", "上記の件数を見てください。"} {
-		f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say(in))
+		f := newFakeGemini(t, countTwice(map[string]any{"cls": "confirmed_new"}), say(in))
 		s, _ := geminiService(t, f, newFakeData())
 		if r := mustAsk(t, s, "件数は？"); r.Content != SafeTemplate {
 			t.Errorf("%q が通った: %q", in, r.Content)

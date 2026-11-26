@@ -115,7 +115,17 @@ def check_result(r: dict) -> None:
         # 分類で絞った件数にだけ、同じ地区の絞り込み前の全体と、うち未判定（overall）が付く。未判定を数えて 1 件以上あれば、理由の内訳（held）が付く
         counted_held = any(b["key"] == "uncertain" and b["value"] > 0 for b in r["breakdown"])
         optional = ({"overall"} if "cls" in r["filter"] else set()) | ({"held"} if counted_held else set())
-        assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance"} | optional, r
+        # 2 地区以上を数えて 1 件以上あれば、地区の順位（area_ranking）が付く。1 区画の一辺（tile_side_m）は、いつも付く
+        optional |= {"area_ranking"} if "area_ranking" in r else set()
+        assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance", "tile_side_m"} | optional, r
+        assert r["tile_side_m"] == 130, r
+        if "area_ranking" in r:
+            ranking = r["area_ranking"]
+            assert set(ranking) == {"areas_searched", "areas_with_candidates", "top"}, r
+            assert 1 <= ranking["areas_with_candidates"] <= ranking["areas_searched"] and ranking["areas_searched"] >= 2, r
+            counts = [t["count"] for t in ranking["top"]]
+            assert all(set(t) == {"name", "count"} for t in ranking["top"]) and counts == sorted(counts, reverse=True), r
+            assert len(set(counts)) <= 2 and sum(counts) <= r["total"], r
         if counted_held:
             assert all(set(h) == {"key", "label", "value"} and h["value"] > 0 for h in r["held"]), r
             assert sum(h["value"] for h in r["held"]) == next(b["value"] for b in r["breakdown"] if b["key"] == "uncertain"), r

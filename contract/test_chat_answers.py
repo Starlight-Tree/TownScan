@@ -26,8 +26,13 @@ PROV = {
 CONFIRMED = CLASS_LABELS["confirmed_new"]
 OMISSION = CLASS_LABELS["existing_omission"]
 UNCERTAIN = CLASS_LABELS["uncertain"]
-NOTICE = "機械が写真から見つけた候補で、確定ではありません。"
-SUGGESTIONS = ["候補は何件ありますか？", "地区ごとに候補数を比べてください", "2018 年は未検出で一番大きい候補の写真を見せてください", "このアプリの精度は？"]
+TILE_SIDE_M = 100 + 30  # 1 区画（地区）の一辺（m）
+SIDE = f"約 {TILE_SIDE_M} m 四方"
+ONLY_NEW = "モデルが 2023 年の写真だけで見つけた候補"
+# 件数の本文は、API が結果から組み立てる（件数だけの回答では、実モデルでも同じ文）
+NEW_BY_AREA = f"解析した 3 区画（各{SIDE}）のすべてにあり、最も多いのは試験町の 2 件、次が仮想町・合成町の各 1 件です。"
+NEW_ALL = f"{ONLY_NEW}は 4 件です（候補は全部で 9 件）。{NEW_BY_AREA}"
+SUGGESTIONS = ["候補は何件ありますか？", "地区ごとに候補数を比べてください", "いちばん大きい候補の写真を見せてください", "このアプリの精度は？"]
 LISTED = [  # 面積の大きい順の表の行（id・地区名・分類の名前・面積）
     {"id": c.id, "area": c.area.name, "class": expected.row_label(c.cls, c.reason), "area_m2": c.area_m2} for c in CANDIDATES
 ]
@@ -51,7 +56,20 @@ def count(title: str, total: int, breakdown: list[dict], flt: dict) -> dict:
         out["held"] = [{"key": k, "label": expected.HELD_LABELS[k], "value": n} for k, n in held.items() if n]
     if "cls" in flt:  # 分類で絞った件数には、同じ地区の全体と、うち未判定が付く。期待値は、地区ごとの件数（expected.py）から数える
         out["overall"] = {k: sum(expected.AREA_BY_ID[i].counts[k] for i in ids) for k in ("total", "uncertain")}
+    ranking = area_ranking(ids, flt.get("cls", "total"))
+    if ranking:
+        out["area_ranking"] = ranking
+    out["tile_side_m"] = TILE_SIDE_M
     return out
+
+
+def area_ranking(ids: list[str], key: str) -> dict | None:
+    """件数の多い地区（多い順・同数は名前順で、2 番目に多い件数の地区まで）。対象が 2 地区未満か、1 件も無ければ無し。期待値は、地区ごとの件数（expected.py）から数える。"""
+    rows = sorted(((expected.AREA_BY_ID[i].name, expected.AREA_BY_ID[i].counts[key]) for i in ids if expected.AREA_BY_ID[i].counts[key] > 0), key=lambda r: (-r[1], r[0]))
+    if len(ids) < 2 or not rows:
+        return None
+    top_counts = sorted({n for _, n in rows}, reverse=True)[:2]
+    return {"areas_searched": len(ids), "areas_with_candidates": len(rows), "top": [{"name": name, "count": n} for name, n in rows if n in top_counts]}
 
 
 def table(title: str, rows: list[dict], total: int, flt: dict) -> dict:
@@ -122,10 +140,10 @@ ACCURACY_PROV = {
 }
 
 HELP_ROWS = [
-    {"example": "候補は何件ありますか？", "result": "件数と分類ごとの内訳"},
+    {"example": "候補は何件ありますか？", "result": "件数と候補の写真"},
     {"example": "地区ごとに候補数を比べてください", "result": "地区の比較"},
     {"example": "面積の大きい候補を一覧で見せてください", "result": "候補の一覧（表）"},
-    {"example": "2018 年は未検出で一番大きい候補の写真を見せてください", "result": "2018 年と 2023 年の写真の見比べ"},
+    {"example": "いちばん大きい候補の写真を見せてください", "result": "2018 年と 2023 年の写真の見比べ"},
     {"example": "その地図での位置は？", "result": "地図で場所を示す"},
     {"example": "このアプリの精度は？", "result": "実測した精度の数字"},
 ]
@@ -136,28 +154,28 @@ ANSWERS = [
         "新規出現の候補は何件ありますか？",
         [call("count_candidates", cls="confirmed_new")],
         [count("「2018 年は未検出」の件数（全地区）", 4, BREAKDOWN_ALL[:1], {"cls": "confirmed_new", "scope": "全地区"})],
-        f"全地区の「{CONFIRMED}」は 4 件です。{NOTICE}",
+        NEW_ALL,
         id="count-new",
     ),
     pytest.param(
         "候補は全部で何件ですか",
         [call("count_candidates")],
         [count("候補の件数（全地区）", 9, BREAKDOWN_ALL, {"scope": "全地区"})],
-        f"全地区の候補は 9 件です。内訳は、{CONFIRMED} 4 件、{OMISSION} 3 件、端のため未判定 2 件 です。{NOTICE}",
+        f"建物データに載っていない建物の候補は 9 件です。解析した 3 区画（各{SIDE}）のすべてにあり、どの区画も 3 件です。",
         id="count-all",
     ),
     pytest.param(
         "合成町の新規出現は何件？",
         [call("count_candidates", area_ids=[A1], cls="confirmed_new")],
         [count("「2018 年は未検出」の件数（合成町）", 1, [{"key": "confirmed_new", "label": CONFIRMED, "value": 1}], {"area_id": A1, "cls": "confirmed_new", "scope": "合成町"})],
-        f"合成町の「{CONFIRMED}」は 1 件です。{NOTICE}",
+        f"合成町で、{ONLY_NEW}は 1 件です（候補は全部で 3 件）。対象は、{SIDE}の区画です。",
         id="count-area-class",
     ),
     pytest.param(
         "仮想町の判定保留は何件？",
         [call("count_candidates", area_ids=[A3], cls="uncertain")],
         [count("「未判定」の件数（仮想町）", 0, [{"key": "uncertain", "label": UNCERTAIN, "value": 0}], {"area_id": A3, "cls": "uncertain", "scope": "仮想町"})],
-        "仮想町には、該当する候補はありません。",
+        f"仮想町で、判定できていない候補はありません。対象は、{SIDE}の区画です。",
         id="count-zero",
     ),
     pytest.param(
@@ -168,7 +186,7 @@ ANSWERS = [
             [{"key": "confirmed_new", "label": CONFIRMED, "value": 3}, {"key": "existing_omission", "label": OMISSION, "value": 1}, {"key": "uncertain", "label": UNCERTAIN, "value": 2}],
             {"area_ids": [A1, A2], "scope": "中央区"},
         )],
-        f"中央区の候補は 6 件です。内訳は、{CONFIRMED} 3 件、{OMISSION} 1 件、端のため未判定 2 件 です。{NOTICE}",
+        f"中央区で、建物データに載っていない建物の候補は 6 件です。解析した 2 区画（各{SIDE}）のすべてにあり、どの区画も 3 件です。",
         id="count-ward",
     ),
     pytest.param(
@@ -176,7 +194,7 @@ ANSWERS = [
         [call("count_candidates", wards=["中央区", "東区"], cls="confirmed_new")],
         # 区が複数なら、その区の地区の和集合。area_ids は文字列の昇順（z18-226249-105759 < …-105760 < z18-226250-…）
         [count("「2018 年は未検出」の件数（中央区・東区）", 4, BREAKDOWN_ALL[:1], {"area_ids": [A1, A3, A2], "cls": "confirmed_new", "scope": "中央区・東区"})],
-        f"中央区・東区の「{CONFIRMED}」は 4 件です。{NOTICE}",
+        f"中央区・東区で、{NEW_ALL}",
         id="count-two-wards",
     ),
     pytest.param(
@@ -200,7 +218,7 @@ ANSWERS = [
             count("「2018 年は未検出」の件数（全地区）", 4, BREAKDOWN_ALL[:1], {"cls": "confirmed_new", "scope": "全地区"}),
             table("「2018 年は未検出」の一覧（全地区・面積の大きい順）", [r for r in LISTED if r["class"] == CONFIRMED], 4, {"cls": "confirmed_new", "scope": "全地区"}),
         ],
-        f"全地区の「{CONFIRMED}」は 4 件です。{NOTICE}全地区の候補を、面積の大きい順に 4 件表示します（該当は全部で 4 件）。候補の ID を使って、その写真を見せて、と聞けます。",
+        f"{NEW_ALL}全地区の候補を、面積の大きい順に 4 件表示します（該当は全部で 4 件）。候補の ID を使って、その写真を見せて、と聞けます。",
         id="count-and-list",
     ),
     pytest.param(
@@ -228,15 +246,15 @@ ANSWERS = [
     pytest.param(
         "c-226249-105759-2 の写真を見せて",
         [call("show_candidate", candidate_id="c-226249-105759-2")],
-        [detection_image("c-226249-105759-2", "confirmed_new", f"合成町・{CONFIRMED}・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。")],
-        f"候補 c-226249-105759-2 の写真を、2018 年と 2023 年で並べます。合成町・{CONFIRMED}・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。",
+        [detection_image("c-226249-105759-2", "confirmed_new", f"合成町・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。")],
+        f"候補 c-226249-105759-2 の写真を、2018 年と 2023 年で並べます。合成町・面積 約 302 m²。輪郭は機械が抽出した範囲で、確定ではありません。",
         id="photo-by-id",
     ),
     pytest.param(
         "一番大きい新規出現の写真を見せてください",
         [call("show_candidate", cls="confirmed_new")],
-        [detection_image(expected.BIGGEST_NEW, "confirmed_new", f"試験町・{CONFIRMED}・面積 約 504 m²。輪郭は機械が抽出した範囲で、確定ではありません。")],
-        f"候補 {expected.BIGGEST_NEW} の写真を、2018 年と 2023 年で並べます。試験町・{CONFIRMED}・面積 約 504 m²。輪郭は機械が抽出した範囲で、確定ではありません。",
+        [detection_image(expected.BIGGEST_NEW, "confirmed_new", f"試験町・面積 約 504 m²。輪郭は機械が抽出した範囲で、確定ではありません。")],
+        f"候補 {expected.BIGGEST_NEW} の写真を、2018 年と 2023 年で並べます。試験町・面積 約 504 m²。輪郭は機械が抽出した範囲で、確定ではありません。",
         id="photo-biggest-new",
     ),
     pytest.param(
