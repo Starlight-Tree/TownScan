@@ -214,7 +214,7 @@ func (m *MockModel) refusal(text string, s *slots) *Call {
 			}
 			var sug []string
 			if len(names) > 0 {
-				sug = []string{names[0] + "の新規出現候補は何件ですか？"}
+				sug = []string{names[0] + "の候補は何件ですか？"}
 			}
 			return refuse("out_of_scope", msg, sug)
 		}

@@ -27,7 +27,7 @@ CONFIRMED = CLASS_LABELS["confirmed_new"]
 OMISSION = CLASS_LABELS["existing_omission"]
 UNCERTAIN = CLASS_LABELS["uncertain"]
 NOTICE = "機械が写真から見つけた候補で、確定ではありません。"
-SUGGESTIONS = ["新規出現の候補は何件ありますか？", "地区ごとに候補数を比べてください", "一番大きい新規出現の写真を見せてください", "このアプリの精度は？"]
+SUGGESTIONS = ["候補は何件ありますか？", "地区ごとに候補数を比べてください", "一番大きい新規出現の写真を見せてください", "このアプリの精度は？"]
 LISTED = [  # 面積の大きい順の表の行（id・地区名・分類の名前・面積）
     {"id": c.id, "area": c.area.name, "class": CLASS_LABELS[c.cls], "area_m2": c.area_m2} for c in CANDIDATES
 ]
@@ -44,7 +44,11 @@ def call(name: str, **args) -> dict:
 
 
 def count(title: str, total: int, breakdown: list[dict], flt: dict) -> dict:
-    return {"type": "count", "title": title, "total": total, "breakdown": breakdown, "filter": flt, "provenance": PROV}
+    out = {"type": "count", "title": title, "total": total, "breakdown": breakdown, "filter": flt, "provenance": PROV}
+    if "cls" in flt:  # 分類で絞った件数には、同じ地区の全体と、うち判定保留が付く。期待値は、地区ごとの件数（expected.py）から数える
+        ids = flt.get("area_ids") or ([flt["area_id"]] if "area_id" in flt else [a.id for a in expected.AREAS])
+        out["overall"] = {k: sum(expected.AREA_BY_ID[i].counts[k] for i in ids) for k in ("total", "uncertain")}
+    return out
 
 
 def table(title: str, rows: list[dict], total: int, flt: dict) -> dict:
@@ -66,7 +70,7 @@ MSG_PANEL = "屋根の太陽光パネルの検出は未実装です。いま答�
 MSG_DISAPPEAR = "取り壊し・減少（2018 年にあって 2023 年に無い建物）は調べていません。このアプリが答えるのは、2018 年の写真に無く 2023 年の写真に新しく現れた建物（新築の候補）だけです。"
 MSG_YEAR = "写真があるのは 2018 年と 2023 年だけです。それ以外の年（2024 年以降を含む）の棟の確認はできません。"
 LISTING = "解析した地区は、合成町、試験町、仮想町 です。"
-SUGGEST_AREA = ["合成町の新規出現候補は何件ですか？"]
+SUGGEST_AREA = ["合成町の候補は何件ですか？"]
 
 
 def detection_image(cid: str, cls: str, caption: str) -> dict:
@@ -115,7 +119,7 @@ ACCURACY_PROV = {
 }
 
 HELP_ROWS = [
-    {"example": "新規出現の候補は何件ありますか？", "result": "件数と分類ごとの内訳"},
+    {"example": "候補は何件ありますか？", "result": "件数と分類ごとの内訳"},
     {"example": "地区ごとに候補数を比べてください", "result": "地区の比較"},
     {"example": "面積の大きい候補を一覧で見せてください", "result": "候補の一覧（表）"},
     {"example": "一番大きい新規出現の写真を見せてください", "result": "2018 年と 2023 年の写真の見比べ"},
@@ -135,8 +139,8 @@ ANSWERS = [
     pytest.param(
         "候補は全部で何件ですか",
         [call("count_candidates")],
-        [count("新規出現候補の件数（全地区）", 9, BREAKDOWN_ALL, {"scope": "全地区"})],
-        f"全地区の新規出現候補は 9 件です。内訳は、{CONFIRMED} 4 件、{OMISSION} 3 件、{UNCERTAIN} 2 件 です。{NOTICE}",
+        [count("候補の件数（全地区）", 9, BREAKDOWN_ALL, {"scope": "全地区"})],
+        f"全地区の候補は 9 件です。内訳は、{CONFIRMED} 4 件、{OMISSION} 3 件、{UNCERTAIN} 2 件 です。{NOTICE}",
         id="count-all",
     ),
     pytest.param(
@@ -157,11 +161,11 @@ ANSWERS = [
         "中央区の候補は何件？",
         [call("count_candidates", ward="中央区")],
         [count(
-            "新規出現候補の件数（中央区）", 6,
+            "候補の件数（中央区）", 6,
             [{"key": "confirmed_new", "label": CONFIRMED, "value": 3}, {"key": "existing_omission", "label": OMISSION, "value": 1}, {"key": "uncertain", "label": UNCERTAIN, "value": 2}],
             {"area_ids": [A1, A2], "scope": "中央区"},
         )],
-        f"中央区の新規出現候補は 6 件です。内訳は、{CONFIRMED} 3 件、{OMISSION} 1 件、{UNCERTAIN} 2 件 です。{NOTICE}",
+        f"中央区の候補は 6 件です。内訳は、{CONFIRMED} 3 件、{OMISSION} 1 件、{UNCERTAIN} 2 件 です。{NOTICE}",
         id="count-ward",
     ),
     pytest.param(
@@ -175,14 +179,14 @@ ANSWERS = [
     pytest.param(
         "面積の大きい候補を一覧で見せてください",
         [call("list_candidates")],
-        [table("新規出現候補の一覧（全地区・面積の大きい順）", LISTED, 9, {"scope": "全地区"})],
+        [table("候補の一覧（全地区・面積の大きい順）", LISTED, 9, {"scope": "全地区"})],
         "全地区の候補を、面積の大きい順に 9 件表示します（該当は全部で 9 件）。候補の ID を使って、その写真を見せて、と聞けます。",
         id="list-all",
     ),
     pytest.param(
         "上位3件を一覧で",
         [call("list_candidates", limit=3)],
-        [table("新規出現候補の一覧（全地区・面積の大きい順）", LISTED[:3], 9, {"scope": "全地区"})],
+        [table("候補の一覧（全地区・面積の大きい順）", LISTED[:3], 9, {"scope": "全地区"})],
         "全地区の候補を、面積の大きい順に 3 件表示します（該当は全部で 9 件）。候補の ID を使って、その写真を見せて、と聞けます。",
         id="list-limit",
     ),

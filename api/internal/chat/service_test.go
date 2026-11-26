@@ -74,11 +74,11 @@ func TestAnswerReturnsToolCallsResultsAndContent(t *testing.T) {
 	if len(*logs) != 0 {
 		t.Errorf("ログ = %v", *logs)
 	}
-	// 結果を作るときに DB へ聞くのは、run・地区と、ツールの問い合わせだけ
+	// 結果を作るときに DB へ聞くのは、run・地区と、ツールの問い合わせだけ（分類で絞った件数は、全体の件数も数える）
 	f := newFakeData()
 	s, _ = newTestService(t, f)
 	answer(t, s, user("新規出現の候補は何件ありますか？"))
-	if got := strings.Join(f.calls, " "); got != "CurrentRun ListAreas CountByClass" {
+	if got := strings.Join(f.calls, " "); got != "CurrentRun ListAreas CountByClass CountByClass" {
 		t.Errorf("DB の呼び出し = %s", got)
 	}
 }

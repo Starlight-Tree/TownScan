@@ -136,7 +136,7 @@ func TestPlanRefusalsComeInPriorityOrder(t *testing.T) {
 	if m := calls[0].Args.Message; !strings.HasPrefix(m, "「福岡」は、解析した地区に含まれていません。対象は熊本市中心部の、解析した地区だけです。解析した地区は、合成町、試験町、仮想町 です。") {
 		t.Errorf("福岡 = %s", m)
 	}
-	if got := calls[0].Args.Suggestions; len(got) != 1 || got[0] != "合成町の新規出現候補は何件ですか？" {
+	if got := calls[0].Args.Suggestions; len(got) != 1 || got[0] != "合成町の候補は何件ですか？" {
 		t.Errorf("提案 = %v", got)
 	}
 	many := make([]store.Area, 15)

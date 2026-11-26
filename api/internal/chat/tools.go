@@ -290,12 +290,18 @@ func countCandidates(ctx context.Context, tc *ToolContext, args Args) (Result, e
 		breakdown = append(breakdown, Breakdown{Key: k, Label: classLabels[k], Value: counts.Of(k)})
 		total += counts.Of(k)
 	}
-	title := "新規出現候補の件数（" + scope + "）"
+	title := "候補の件数（" + scope + "）"
+	var overall *Overall
 	if cls != "" {
 		title = "「" + classLabels[cls] + "」の件数（" + scope + "）"
+		all, err := tc.Data.CountByClass(ctx, tc.Run.RunID, store.Filter{AreaIDs: ids})
+		if err != nil {
+			return nil, err
+		}
+		overall = &Overall{Total: all.Sum(), Uncertain: all.Uncertain}
 	}
 	return CountResult{
-		Type: "count", Title: title, Total: total, Breakdown: breakdown,
+		Type: "count", Title: title, Total: total, Breakdown: breakdown, Overall: overall,
 		Filter: filterInfo(ids, cls, scope), Provenance: provenance(tc),
 	}, nil
 }
@@ -329,7 +335,7 @@ func listCandidates(ctx context.Context, tc *ToolContext, args Args) (Result, er
 		}
 		rows = append(rows, CandidateRow{ID: c.ID, Area: area, Class: classLabels[c.Class], AreaM2: c.AreaM2})
 	}
-	what := "新規出現候補"
+	what := "候補"
 	if cls != "" {
 		what = "「" + classLabels[cls] + "」"
 	}
@@ -634,7 +640,7 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 
 func showHelp(_ context.Context, tc *ToolContext, _ Args) (Result, error) {
 	examples := []HelpRow{
-		{"新規出現の候補は何件ありますか？", "件数と分類ごとの内訳"},
+		{"候補は何件ありますか？", "件数と分類ごとの内訳"},
 		{"地区ごとに候補数を比べてください", "地区の比較"},
 		{"面積の大きい候補を一覧で見せてください", "候補の一覧（表）"},
 		{"一番大きい新規出現の写真を見せてください", "2018 年と 2023 年の写真の見比べ"},
@@ -707,7 +713,7 @@ func DefaultRegistry(maxFocusIDs int) *Registry {
 		}
 	}
 	area, cls := areaProps(), clsProp()
-	must(Tool{"count_candidates", "新規出現候補の件数（分類ごとの内訳つき）を返す",
+	must(Tool{"count_candidates", "候補の件数を返す（cls が無ければ全体と分類ごとの内訳、あればその分類の件数と全体の件数）",
 		objectSchema(withProps(area, map[string]any{"cls": cls})), countCandidates})
 	must(Tool{"list_candidates", "候補を面積の大きい順に表で返す",
 		objectSchema(withProps(area, map[string]any{"cls": cls, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxListLimit}})), listCandidates})

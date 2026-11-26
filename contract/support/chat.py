@@ -111,9 +111,13 @@ def check_result(r: dict) -> None:
     assert isinstance(r["title"], str) and r["title"]
     check_provenance(r["provenance"])
     if t == "count":
-        assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance"}, r
-        assert isinstance(r["total"], int) and not isinstance(r["total"], bool)
         check_filter(r["filter"])
+        # 分類で絞った件数にだけ、同じ地区の絞り込み前の全体と、うち判定保留（overall）が付く
+        assert set(r) == {"type", "title", "total", "breakdown", "filter", "provenance"} | ({"overall"} if "cls" in r["filter"] else set()), r
+        assert isinstance(r["total"], int) and not isinstance(r["total"], bool)
+        if "overall" in r:
+            assert set(r["overall"]) == {"total", "uncertain"} and all(isinstance(v, int) for v in r["overall"].values()), r
+            assert r["total"] <= r["overall"]["total"] and 0 <= r["overall"]["uncertain"] <= r["overall"]["total"], r
         assert all(set(b) == {"key", "label", "value"} and isinstance(b["value"], int) for b in r["breakdown"])
         assert r["total"] == sum(b["value"] for b in r["breakdown"])
     elif t == "table":

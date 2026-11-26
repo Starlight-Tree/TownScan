@@ -129,7 +129,7 @@ func TestGeminiChatEndToEnd(t *testing.T) {
 		toolCall("count_candidates", map[string]any{"cls": "confirmed_new"}),
 		saying("新規出現の候補の件数は、下のカードのとおりです。"))
 	status, body := s.chat(t, "新規出現の候補は何件ありますか？")
-	if status != 200 || !strings.HasPrefix(body, `{"message":{"role":"assistant","content":"新規出現の候補の件数は、下のカードのとおりです。","results":[{"type":"count",`) ||
+	if status != 200 || !strings.HasPrefix(body, `{"message":{"role":"assistant","content":"新規出現の候補の件数は、カードのとおりです。","results":[{"type":"count",`) || // 位置の語「下の」は検査が取り除く
 		!strings.Contains(body, `"total":1,`) || !strings.HasSuffix(body, `"tool_calls":[{"name":"count_candidates","args":{"cls":"confirmed_new"}}]}}`) {
 		t.Errorf("%d %s", status, body)
 	}

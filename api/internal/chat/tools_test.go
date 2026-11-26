@@ -116,7 +116,7 @@ func TestCleanCls(t *testing.T) {
 func TestCountCandidates(t *testing.T) {
 	f := newFakeData()
 	got := jsonOf(t, callTool(t, f, "count_candidates", Args{}))
-	want := `{"type":"count","title":"新規出現候補の件数（全地区）","total":9,"breakdown":[` +
+	want := `{"type":"count","title":"候補の件数（全地区）","total":9,"breakdown":[` +
 		`{"key":"confirmed_new","label":"新規出現（旧写真に無い）","value":4},` +
 		`{"key":"existing_omission","label":"既存の描き漏れ（旧写真に既にある）","value":3},` +
 		`{"key":"uncertain","label":"判定保留","value":2}],"filter":{"scope":"全地区"},` +
@@ -132,6 +132,20 @@ func TestCountCandidates(t *testing.T) {
 	}
 	if r.Filter.AreaID != a1 || r.Filter.AreaIDs != nil || r.Filter.Cls != "confirmed_new" || r.Filter.Scope != "合成町" {
 		t.Errorf("filter = %+v", r.Filter)
+	}
+	// 分類で絞った件数には、同じ地区の絞り込み前の全体と、うち判定保留を添える（分類を絞らなければ添えない）
+	same := callTool(t, f, "count_candidates", Args{AreaIDs: []string{a1}}).(CountResult)
+	var held int64
+	for _, b := range same.Breakdown {
+		if b.Key == "uncertain" {
+			held = b.Value
+		}
+	}
+	if same.Overall != nil || r.Overall == nil || *r.Overall != (Overall{Total: same.Total, Uncertain: held}) || same.Total <= r.Total {
+		t.Errorf("全体の件数: 絞り込み %s / 絞らない %s", jsonOf(t, r), jsonOf(t, same))
+	}
+	if got := jsonOf(t, r); !strings.Contains(got, fmt.Sprintf(`],"overall":{"total":%d,"uncertain":%d},"filter":`, same.Total, held)) {
+		t.Errorf("overall の JSON = %s", got)
 	}
 	// 2 地区以上は area_ids
 	r = callTool(t, f, "count_candidates", Args{Ward: "中央区"}).(CountResult)
@@ -177,7 +191,7 @@ func TestToolArgumentsAreValidated(t *testing.T) {
 		wantRefusal(t, callTool(t, f, c.tool, c.args), c.reason, c.message)
 	}
 	// 既定の聞き方の例が付く
-	if r := callTool(t, f, "count_candidates", Args{Cls: "x"}).(RefusalResult); len(r.Suggestions) != 4 || r.Suggestions[0] != "新規出現の候補は何件ありますか？" {
+	if r := callTool(t, f, "count_candidates", Args{Cls: "x"}).(RefusalResult); len(r.Suggestions) != 4 || r.Suggestions[0] != "候補は何件ありますか？" {
 		t.Errorf("suggestions = %v", r.Suggestions)
 	}
 }
@@ -209,7 +223,7 @@ func TestListCandidatesRowsAndOrder(t *testing.T) {
 	f := newFakeData()
 	r := callTool(t, f, "list_candidates", Args{}).(TableResult)
 	rows := r.Rows.([]CandidateRow)
-	if r.Title != "新規出現候補の一覧（全地区・面積の大きい順）" || r.Total != 9 || r.Shown != 9 {
+	if r.Title != "候補の一覧（全地区・面積の大きい順）" || r.Total != 9 || r.Shown != 9 {
 		t.Errorf("表: %s", jsonOf(t, r))
 	}
 	// 面積の降順、同じ面積（75.6 が 3 件）は id の昇順
@@ -573,7 +587,7 @@ func TestShowHelp(t *testing.T) {
 	if r.Total != 6 || r.Shown != 6 || len(rows) != 6 || r.Filter != nil || r.Title != "このアプリでできること（聞き方の例）" {
 		t.Errorf("使い方: %s", jsonOf(t, r))
 	}
-	if got := jsonOf(t, rows[0]); got != `{"example":"新規出現の候補は何件ありますか？","result":"件数と分類ごとの内訳"}` {
+	if got := jsonOf(t, rows[0]); got != `{"example":"候補は何件ありますか？","result":"件数と分類ごとの内訳"}` {
 		t.Errorf("1 行目 = %s", got)
 	}
 	if got := jsonOf(t, r.Provenance); !strings.Contains(got, `"note":"合成データ（テスト用）です。実データではありません。 結果はすべて、写真から機械が見つけた候補です。"`) {

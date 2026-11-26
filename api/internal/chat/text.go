@@ -106,7 +106,7 @@ func renderCount(r CountResult) string {
 		for i, b := range r.Breakdown {
 			parts[i] = fmt.Sprintf("%s %s 件", b.Label, commas(b.Value))
 		}
-		body = fmt.Sprintf("%sの新規出現候補は %s 件です。内訳は、%s です。", scope, commas(r.Total), strings.Join(parts, "、"))
+		body = fmt.Sprintf("%sの候補は %s 件です。内訳は、%s です。", scope, commas(r.Total), strings.Join(parts, "、"))
 	}
 	return body + "機械が写真から見つけた候補で、確定ではありません。"
 }

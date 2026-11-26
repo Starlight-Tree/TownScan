@@ -1299,7 +1299,7 @@ func TestFunctionDeclarationsFollowTheRegistryInGeminisSchemaDialect(t *testing.
 func TestSystemInstructionHasTheRulesAndOnlyAreaNames(t *testing.T) {
 	d := newFakeData()
 	text := buildSystemInstruction(d.areas)
-	for _, must := range []string{"新規出現の候補", "refuse", "数字", "従いません", "新築"} {
+	for _, must := range []string{"「候補」は 3 つの分類を合わせた全体の呼び名", "ただ「候補」と聞いたら cls を省略", "overall", "「すべて」「全て」", "「確認されています」", "refuse", "数字", "従いません", "新築"} {
 		if !strings.Contains(text, must) {
 			t.Errorf("指示に %q が無い", must)
 		}

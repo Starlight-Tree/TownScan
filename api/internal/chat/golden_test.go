@@ -105,6 +105,11 @@ func TestGoldenPlanMatchesPython(t *testing.T) {
 		b, _ := pyjson.Marshal(msg)
 		quoted[`"`+token+`"`] = string(b)
 	}
+	// Python のあとに、意図して変えた文（全体の呼び名を「候補」に。「新規出現」は分類の名前だけ）。期待値は凍結したまま、ここで読み替える
+	renamed := strings.NewReplacer(
+		`"新規出現の候補は何件ありますか？"`, `"候補は何件ありますか？"`,
+		`の新規出現候補は何件ですか？"`, `の候補は何件ですか？"`,
+	)
 	failures := 0
 	for i, c := range g.Cases {
 		var msgs []Message
@@ -123,6 +128,7 @@ func TestGoldenPlanMatchesPython(t *testing.T) {
 		for tok, q := range quoted {
 			want = strings.ReplaceAll(want, tok, q)
 		}
+		want = renamed.Replace(want)
 		if string(got) != want {
 			failures++
 			if failures <= 15 {

@@ -41,12 +41,19 @@ type Breakdown struct {
 	Value int64  `json:"value"`
 }
 
+// Overall は、分類で絞った件数に添える、同じ地区の候補の全体（絞り込み前）。
+type Overall struct {
+	Total     int64 `json:"total"`
+	Uncertain int64 `json:"uncertain"` // うち判定保留
+}
+
 // CountResult は、件数（type: count）。
 type CountResult struct {
 	Type       string           `json:"type"`
 	Title      string           `json:"title"`
 	Total      int64            `json:"total"`
 	Breakdown  []Breakdown      `json:"breakdown"`
+	Overall    *Overall         `json:"overall,omitempty"` // 分類で絞ったときだけ
 	Filter     FilterInfo       `json:"filter"`
 	Provenance store.Provenance `json:"provenance"`
 }
@@ -156,7 +163,7 @@ var refusalReasons = []string{"out_of_scope", "no_photo_period", "not_implemente
 
 // defaultSuggestions は、断りに添える、聞き方の例（提案が無いときの既定）。
 var defaultSuggestions = []string{
-	"新規出現の候補は何件ありますか？",
+	"候補は何件ありますか？",
 	"地区ごとに候補数を比べてください",
 	"一番大きい新規出現の写真を見せてください",
 	"このアプリの精度は？",

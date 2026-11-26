@@ -33,7 +33,7 @@ func TestRatioRoundsLikePython(t *testing.T) {
 func TestRenderCount(t *testing.T) {
 	f := newFakeData()
 	all := callTool(t, f, "count_candidates", Args{})
-	if got, want := Render(all), "全地区の新規出現候補は 9 件です。内訳は、新規出現（旧写真に無い） 4 件、既存の描き漏れ（旧写真に既にある） 3 件、判定保留 2 件 です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
+	if got, want := Render(all), "全地区の候補は 9 件です。内訳は、新規出現（旧写真に無い） 4 件、既存の描き漏れ（旧写真に既にある） 3 件、判定保留 2 件 です。機械が写真から見つけた候補で、確定ではありません。"; got != want {
 		t.Errorf("全分類\n got  %s\n want %s", got, want)
 	}
 	one := callTool(t, f, "count_candidates", Args{AreaIDs: []string{a1}, Cls: "confirmed_new"})
