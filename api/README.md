@@ -51,7 +51,7 @@ Python との意図した違い（応答の外から見える規則は同じ。�
 仕様は `docs/spec-prototype.md` §4.5、契約は `contract/test_chat_*.py`。模擬モデルの規則・ツール・返答文・数字の検査（結果に無い数字を返答に書かせない）は、Python と同じ応答になるよう移してある。照合の元は、`internal/chat/testdata/golden.json.gz` と `internal/httpx/testdata/jsonpos.json.gz`（どちらも Python が作った期待値。後者の作り方は `gen_jsonpos.py`）。
 
 - **Gemini（`LLM_PROVIDER=gemini`）**: `GEMINI_API_KEY`（必須。`LLM_PROVIDER=gemini` のときだけ読む）・`GEMINI_MODEL`（既定 `gemini-3.5-flash-lite`）。キーが無い・形が不正なときは、黙って模擬に落とさず、`config.Validate` と `chat.New` が起動を止める（DB を待つ前。キーは文に入れない）。Go の API 自体は、環境変数が無いときは模擬（契約の検査・テストはこれ）。開発の既定の gemini は `compose.yaml` が `LLM_PROVIDER` を渡して選ぶ（2026-11-25）。`mock` のときは Gemini の設定を読みもしない。
-  - 役割は「どのツールを呼ぶか」と「結果の説明文」だけ（`gemini_model.go`）。数字・件数・座標は書かせない。結果（`results`）は、模擬と同じく `Registry` が DB から作り、返答文は `GuardNumbers` を通る。モデルへの往復は最大 4 回・ツール呼び出しは最大 6 件・返答文は 1000 文字まで。
+  - 役割は「どのツールを呼ぶか」と「結果の説明文」だけ（`gemini_model.go`）。座標・ID は書かせない。数字は結果に書かれている値だけ書いてよく、返答文は `GuardNumbers` が結果と照合して検査する（止めるのは数字とカードの位置の語だけ。数字以外の主張は検査の外。ADR 0009）。結果（`results`）は、模擬と同じく `Registry` が DB から作る。モデルへの往復は最大 4 回・ツール呼び出しは最大 6 件・返答文は 1000 文字まで。
   - 失敗（キーが無効・429・5xx・タイムアウト・壊れた応答・候補が無い／拒否・往復やツール呼び出しの上限超過）は、`*chat.LLMError` になり、`POST /api/chat` は **502** `{"error":{"code":"llm_unavailable","message":"いまは LLM が応答できません。少し待ってからもう一度お試しください"}}`（模擬には切り替えない。本文は Python と同じ）。**再試行は 1 回**（要求ごと。HTTP 5xx・タイムアウト・接続エラーだけを、1 秒待ってやり直す。4xx〔429 を含む〕・壊れた応答は、やり直さない。残りの期限が 5 秒を切るときも、やり直さない）。**1 回の呼び出しの待ちは 20 秒、チャット 1 回の要求の全体の期限は 27 秒**（`chat.RequestDeadline`）。frontend の Next.js が `/api/*` を転送するときの待ち（既定 30 秒）より前に、502 を返せる。
   - **キー・URL・質問や返答の本文・Google のエラー本文は、ログにも応答にも出さない。** ログと 502 に出すのは、失敗の種類（`rate_limit`・`server`・`timeout` など）・HTTP の状態・Google の理由の定数（`INVALID_ARGUMENT` など。定数の形のものだけ）まで。キーは URL に付けず、ヘッダー `x-goog-api-key` で送る（Python と同じ）。リダイレクト（3xx）は追わない（キーを別のホストへ送らないため。失敗 `http_error`）。`GeminiConfig`・`geminiClient` は、`%v`・`%+v`・`%#v`・JSON のどれで書いても、キーを出さない。
   - エンドポイント（`chat.GeminiConfig.BaseURL`）・待ち・期限は、テストが偽のサーバーへ向け、短い値に差し替えるための設定で、**環境変数では変えられない**（キーを別の宛先へ送る設定を、環境に持たせないため）。テストは `net/http/httptest` の偽サーバーだけを使い、実 Gemini には、つながない。
@@ -81,7 +81,7 @@ Python との意図した違い:
    - 英語の数詞（seven・twenty-one・hundred・dozen など。大文字・小文字・全角を問わない）。漢数字と同じく、結果と照合せずに落とす。
    - 空白・不可視の書式文字（ゼロ幅スペース U+200B・ソフトハイフン U+00AD・U+2060・BOM・ZWJ など）で区切った数。読み手に見えない文字は、先に取り除いてから数える（「3〈U+200B〉4」は 34。結果の側の文字列も同じ）。空白で区切った整数の並び（「3 4」「1 234」）は、1 つずつの数に加えて、つなげた数（34・1234）も、結果に無ければ落とす（小数のあと・数のあいだに文字がある並びは、つなげない。「1 234」は、1 と 234 が結果に無いと落ちる。慎重な側）。
    - Python との照合（`golden_test.go`）: 数字の連なりと漢数字+助数詞は、すべての入力で Python と完全に同じ。Python が見逃す書き方（上の 3 つ。`numberScan.extra`）を含む入力は、その分だけ Go が多く落とす。
-   - 見ないもの（残りの穴）: ひらがなの数（ひとつ・ふたつ）・ローマ数字（Ⅶ・VII）・大字（壱・弐・参）・単位の無い言い回し（半ダース）。システムの指示で、数を書かせない。
+   - 見ないもの（残りの穴）: ひらがなの数（ひとつ・ふたつ）・ローマ数字（Ⅶ・VII）・大字（壱・弐・参）・単位の無い言い回し（半ダース）。システムの指示で、結果に無い数を書かないよう言う。
 2. **要求全体の期限（`httpx.Timeout`）と DB の `statement_timeout`（`store.WithStatementTimeout`）**: どちらも 27 秒（`chat.RequestDeadline`。`cmd/api` の `requestDeadline`）。DB の問い合わせと Gemini への通信は、期限で打ち切られる（DB は 503 `db_unavailable`、Gemini は 502 `llm_unavailable`）。期限は、context を見ない処理を止めはしない。`DATABASE_URL` に `statement_timeout` があれば、そちらを優先する。
 3. **正規化したあとの長さの上限（`handlers/chat.go`）**: 2000 文字の上限を、NFKC のあとでも数える（正規化の前の数え方は残す）。
 
