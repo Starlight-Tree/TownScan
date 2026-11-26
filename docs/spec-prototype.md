@@ -435,7 +435,7 @@ ToolResult =
 
 ## 6. 評価（`pipeline/evaluate.py` → `eval.json`）
 
-**フランス版は未測定**（2026-11-27）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は、写真に重ねた図を目で見て選んだ、検証していない値。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。結果をアプリ（`eval.json`・精度の画面）へ載せる形は、val の推論のあとに決める。
+**アプリの表示は、フランス版が未測定のまま**（2026-11-27。FOTBCD の val の値は [ADR 0015](decisions/0015-move-to-france.md) にあり、アプリへはまだ載せていない）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は、写真に重ねた図を目で見て選んだ、検証していない値。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。結果をアプリ（`eval.json`・精度の画面）へ載せる形は、val の推論のあとに決める。
 
 ### 6.1 FOTBCD の評価（`pipeline/fotbcd.py`・`pipeline/evaluate_fotbcd.py`）
 
