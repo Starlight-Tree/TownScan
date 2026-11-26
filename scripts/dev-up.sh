@@ -64,7 +64,7 @@ pgdata_hint() {
   次のどちらかにしてください。
   - 元の .env（元の POSTGRES_PASSWORD）を戻す
   - DB の中身を捨ててよいなら、docker compose down -v でボリュームごと消してから、もう一度このスクリプトを実行する
-    （DB の中身も消えます。実データは data/townscan/run1/out から、このスクリプトが読み込み直します）
+    （DB の中身も消えます。実データは data/townscan/fr1/out から、このスクリプトが読み込み直します）
 EOF
 }
 if [ ! -f .env ]; then
@@ -162,13 +162,13 @@ for svc in "${SERVICES[@]}"; do
 done
 
 # 5. 実データがあれば読み込む（Python の loader で。api が Go でも、読み込みは Python の仕事。データは読み取り専用でマウント済み）
-if [ -f data/townscan/run1/out/run.json ]; then
+if [ -f data/townscan/fr1/out/run.json ]; then
   echo "== 実データを読み込む（同じ run_id なら置き換え）"
   docker compose build loader
-  docker compose run --rm -T loader python -m pipeline.load --run /data/townscan/run1/out
+  docker compose run --rm -T loader python -m pipeline.load --run /data/townscan/fr1/out
 else
-  echo "== 実データ（data/townscan/run1/out/run.json）がまだ無いので、読み込みは飛ばします。"
-  echo "   pipeline の出力を置いたあとで: docker compose run --rm -T loader python -m pipeline.load --run /data/townscan/run1/out"
+  echo "== 実データ（data/townscan/fr1/out/run.json）がまだ無いので、読み込みは飛ばします。"
+  echo "   pipeline の出力を置いたあとで: docker compose run --rm -T loader python -m pipeline.load --run /data/townscan/fr1/out"
 fi
 
 # 6. 結果
