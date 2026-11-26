@@ -6,7 +6,7 @@
     existing_omission : ov_2018 >= omission_ov_2018_min（旧写真に既にある。建物データの描き漏れ。モデルが両年で同じ誤検出をした場合も入る）
     confirmed_new     : ov_2018 <= new_ov_2018_max かつ prob_2018_p90 < new_p90_max（2018 のモデルが c の範囲に何も見ていない）
     uncertain         : 上のどちらでもない（reason=ambiguous）
-閾値は未検証の初期値（手ラベルが無い）。run.json の params に残す。
+閾値は未検証の初期値（正解データで確かめていない）。run.json の params に残す。
 根拠の数字は丸めた値で分類する（出力した evidence から分類を再現できるように）。
 """
 

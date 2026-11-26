@@ -358,7 +358,7 @@ def test_run_evaluation_reports_existing_absent_in_2018_by_split():
         assert set(e[part]) == {"n_buildings", "absent", "absent_share", "present", "present_share"}
     assert e["overall"] == {"n_buildings": 4, "absent": 0, "absent_share": 0.0, "present": 4, "present_share": 1.0}
     assert e["tune"]["n_buildings"] == e["holdout"]["n_buildings"] == 2
-    assert any("existing_absent_in_2018" in n and "手ラベルの代わりにはならない" in n for n in out["notes"])
+    assert any("existing_absent_in_2018" in n and "正解データの代わりにはならない" in n for n in out["notes"])
     # 抽出が何も無ければ、既存の建物はすべて「何も見ていない」
     none = evaluate.run_evaluation(tiles, lambda k, s: np.zeros((int(256 * s),) * 2), refs, thresholds=(0.5,), scales=(1.0,))
     assert none["existing_absent_in_2018"]["overall"] == {"n_buildings": 4, "absent": 4, "absent_share": 1.0, "present": 0, "present_share": 0.0}

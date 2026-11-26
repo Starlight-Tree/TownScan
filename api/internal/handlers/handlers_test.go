@@ -428,7 +428,7 @@ func TestMetricsAppendsProvenanceAndKeepsKeyOrder(t *testing.T) {
 	tt.wantJSON(tt.get("/api/metrics"), 200, jsonCT,
 		`{"reference":"合成データ","new_building_recall":null,"holdout":{"object":{"f1":0.58}},"notes":["a"],`+
 			`"provenance":{"source":"基盤地図情報（2018-10 版）を参照にした、2018 年の写真での建物抽出の評価","photo_years":[2018],"model":"synthetic-fixture（モデルなし。合成データ）","run_id":"synthetic-test","run_kind":"synthetic",`+
-			`"metric":"物体単位 F1・画素 IoU","note":"合成データ（テスト用）です。実データではありません。 数字は 2018 年の写真で測った値。新築の再現率は手ラベルが無く未測定。分類の閾値は未検証の初期値。"}}`)
+			`"metric":"物体単位 F1・画素 IoU","note":"合成データ（テスト用）です。実データではありません。 数字は 2018 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。"}}`)
 }
 
 func TestMetricsReplacesAnExistingProvenanceInPlace(t *testing.T) {

@@ -487,7 +487,7 @@ func TestGetAccuracy(t *testing.T) {
 	if v := by["holdout_object_recall"]; !strings.HasPrefix(v.Label, "建物の抽出の再現率") || v.Note != "評価用 2 地区" {
 		t.Errorf("再現率 = %+v", v)
 	}
-	if v := by["new_building_recall"]; v.Value != nil || v.Note != "未測定（手ラベルが無いため）。建物の抽出の再現率とは別の値" {
+	if v := by["new_building_recall"]; v.Value != nil || v.Note != "未測定（正解になる新築のデータが無いため）。建物の抽出の再現率とは別の値" {
 		t.Errorf("新築の再現率 = %+v", v)
 	}
 	if v := by["chosen_scale"]; v.Value == nil || *v.Value != 1.5 || v.Note != "調整用の地区だけで選んだ値" || v.Label != "選んだ倍率" {
@@ -555,8 +555,8 @@ func TestGetAccuracyVariants(t *testing.T) {
 	if got := jsonOf(t, by["holdout_object_precision"]); !strings.Contains(got, `"value":0.0,`) {
 		t.Errorf("整数 0 = %s", got)
 	}
-	// 新築の再現率: null 以外（0 を含む）なら「手ラベルによる値」
-	if v := by["new_building_recall"]; v.Value == nil || *v.Value != 0 || v.Note != "手ラベルによる値" {
+	// 新築の再現率: null 以外（0 を含む）なら「新築の正解データで測った値」
+	if v := by["new_building_recall"]; v.Value == nil || *v.Value != 0 || v.Note != "新築の正解データで測った値" {
 		t.Errorf("新築の再現率 = %+v", v)
 	}
 	if _, ok := by["chosen_scale"]; !ok {

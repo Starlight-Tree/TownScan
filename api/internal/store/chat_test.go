@@ -207,7 +207,7 @@ func TestChatProvenance(t *testing.T) {
 	// 年は、評価ファイルにある年（2018 以外もありうる）。書き換えても、元の表（photoYears）は変わらない
 	p = AccuracyProvenanceForYear(real, 2023)
 	if p.Source != sourceAccuracy || !slices.Equal(p.PhotoYears, []int{2023}) || p.Metric != "物体単位 F1・画素 IoU" ||
-		p.Note != "数字は 2023 年の写真で測った値。新築の再現率は手ラベルが無く未測定。分類の閾値は未検証の初期値。" {
+		p.Note != "数字は 2023 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。" {
 		t.Errorf("精度 = %+v", p)
 	}
 	// 2018 年なら、/api/metrics の出どころ（AccuracyProvenance）と同じ

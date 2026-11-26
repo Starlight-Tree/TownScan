@@ -128,6 +128,6 @@ func CandidateProvenanceWithNote(run Run, note string) Provenance {
 // AccuracyProvenanceForYear は、精度の出どころ。year は、精度を測った写真の年（評価ファイルにある年。無ければ 2018）。
 // /api/metrics の出どころ（AccuracyProvenance）は、年が 2018 に決まっている版。
 func AccuracyProvenanceForYear(run Run, year int) Provenance {
-	note := fmt.Sprintf("数字は %d 年の写真で測った値。新築の再現率は手ラベルが無く未測定。分類の閾値は未検証の初期値。", year)
+	note := fmt.Sprintf("数字は %d 年の写真で測った値。新築の再現率は正解になる新築のデータが無く未測定。分類の閾値は未検証の初期値。", year)
 	return newProvenance(run, sourceAccuracy, []int{year}, metricsMetric, note)
 }

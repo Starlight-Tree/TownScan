@@ -244,7 +244,7 @@ def run_postprocess(
     n_fallback = sum(a["name_source"] == geocode.FALLBACK_SOURCE for a in areas)
     if n_fallback:
         notes.append(f"地区名を取得できず、代わりの名前（地区 x-y）を入れた地区: {n_fallback}/{len(areas)}（geocode.json が無い・応答が想定外・名前が安全でない、のどれか）")
-    notes.append("差分の閾値（kiban_ov_max・min_area_m2・omission_ov_2018_min・new_ov_2018_max・new_p90_max）は、手ラベルが無い未検証の初期値。")
+    notes.append("差分の閾値（kiban_ov_max・min_area_m2・omission_ov_2018_min・new_ov_2018_max・new_p90_max）は、正解データで確かめていない未検証の初期値。")
     total_by_class = {c: sum(s[c] for s in per_area_stats.values()) for c in diff.CLASSES}
     run_json = {
         "run_id": run_id,

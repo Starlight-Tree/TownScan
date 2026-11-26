@@ -22,13 +22,14 @@
 改訂 2026-11-26（19）: **回答を、短い本文と表示 1 つにした**（ユーザーが実画面を見て順に指示・承認。決定・理由は [ADR 0013](decisions/0013-one-view-per-answer.md)）。①本文の下の表示は、順位で 1 つ。ほかは、最新の回答の下の「表示を切り替える」に出す。②件数だけの回答の本文は、LLM でなくコードが組み立てる（§4.5。件数の結果に `area_ranking`・`tile_side_m`）。③回答から、分類の名前・内訳・凡例・色分け、「対象・条件」の行、「根拠を見る」を外し、写真の下に出典の 1 行を置く。④「詳細」の文字のリンクをやめ、写真を押して詳細を開く。⑤拡大ビューを閉じる手段は、右上の ✕ と Esc の 1 通りにした（「チャットへ戻る」と詳細の「閉じる」を外した）。拡大ビューの地図・グラフ・候補の詳細・精度の画面の分類の表示は、変えていない。
 改訂 2026-11-26（20）: （[ADR 0013](decisions/0013-one-view-per-answer.md) の追記。ユーザー承認）①写真 1 件だけの回答の本文は、実 LLM の文を使わず、結果の説明にする（§4.5）。②写真の対象は、分類の指定が無ければ全分類で面積が最大の候補（それまでは「2018 年は未検出」を先に選んでいた）。③Gemini への指示に、断りの理由の使い分けを足した。④チャットのツール選択の評価 `evals/` を足した。
 改訂 2026-11-26（21）: 精度 1 件だけの回答の本文は、実 LLM の文を使わず、コードが組み立てる（§4.5。[ADR 0013](decisions/0013-one-view-per-answer.md) の追記）。
+改訂 2026-11-27（22）: 新築の再現率は「未測定」にする。理由の言い方を「正解になる新築のデータが無い」に改めた（[ADR 0014](decisions/0014-new-building-recall-unmeasured.md)）。
 位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）を、薄く一通り通す。GEE 層（P5）・パネル（P6）・公開（P7）は対象外。
 
 ## 1. 何ができれば「たたき台」か
 
 1. 熊本の 12 地区（z18 タイル 12 枚。2018・2023 年の写真が両方ある）で、事前学習モデルの建物抽出 → 2 時点の差分 → 建物の「候補」（3 分類）が、**実データで**出る（Colab の T4 で推論）。
 2. `docker compose up` で db・api・web が立ち上がり、ブラウザ（`http://127.0.0.1:3500`）で、チャットで質問でき、地図に候補が出て、1 棟ずつ 2018 / 2023 の写真を見比べられる。
-3. 「このアプリの精度」の画面に、**実測した数字**（基盤地図情報 2018-10 版を参照にした建物抽出の指標）が出る。新築の再現率は手ラベルが無いので「未測定」と明示する。
+3. 「このアプリの精度」の画面に、**実測した数字**（基盤地図情報 2018-10 版を参照にした建物抽出の指標）が出る。新築の再現率は、正解になる新築のデータが無いので「未測定」と明示する（[ADR 0014](decisions/0014-new-building-recall-unmeasured.md)）。
 4. 数字・件数・座標は、ツールの結果だけから出る（LLM の説明文に書かれる数字は、結果の値と照合して検査する。座標・ID は書かせない。[ADR 0009](decisions/0009-llm-writes-result-numbers.md)。開発の既定は Gemini で、模擬モデルはテストと Claude Code の内部の検証用（利用者は使わない）。LLM の役割はツールの選択と説明文だけ。§2.2・§4.5）。範囲外は断る。
 5. 合成データ（テスト用）と実データを取り違えない（§4 の `run.kind`、UI のバナー）。
 
@@ -405,7 +406,7 @@ ToolResult =
   - 1 地区の指定は「対象は、約 130 m 四方の区画です。」を添える（地区の名前は丁目だが、数えたのは丁目の全体ではない）。0 件は「…はありません。」と、数えた範囲の 1 文。
   - `tile_side_m`（130）は、本文の数字の検査が結果の値として照合するための項目で、LLM へは送らない。「四方」は、数の検査で数と見なさない語に足した。
 - **写真 1 件だけの回答の本文**（結果が `detection_image` 1 件で、`LLM_PROVIDER=gemini` のとき。[ADR 0013](decisions/0013-one-view-per-answer.md)）: LLM の文は使わず、結果の `caption`（地区・面積・輪郭の注記）を本文にする。どう選んだか（いちばん大きい、など）は言わない。画面は、本文にある説明をカードで繰り返さない。模擬モデルの本文は、候補の ID を書く（模擬の振り分けは、前の本文の ID で対象を引き継ぐ）。
-- **精度 1 件だけの回答の本文**（結果が `accuracy` 1 件で、`LLM_PROVIDER=gemini` のとき。[ADR 0013](decisions/0013-one-view-per-answer.md)）: LLM の文は使わず、コードが組み立てる（`renderAccuracyBrief`）。評価用の地区の物体単位 F1（参照と写真の年を添える）と、新築の再現率（値が無ければ「手ラベルが無いため未測定」）を必ず言う。合成データは、その旨を添える。ほかの数字はカードが出す。模擬モデルの本文は変えない。
+- **精度 1 件だけの回答の本文**（結果が `accuracy` 1 件で、`LLM_PROVIDER=gemini` のとき。[ADR 0013](decisions/0013-one-view-per-answer.md)）: LLM の文は使わず、コードが組み立てる（`renderAccuracyBrief`）。評価用の地区の物体単位 F1（参照と写真の年を添える）と、新築の再現率（値が無ければ「正解になる新築のデータが無いため未測定」）を必ず言う。合成データは、その旨を添える。ほかの数字はカードが出す。模擬モデルの本文は変えない。
 - **写真の対象の選び方**（`show_candidate` で `candidate_id` が無いとき）: 地区・分類の条件に合う候補のうち、面積が最大のもの（同じ面積は ID の昇順）。分類の指定が無ければ、全分類から選ぶ（誤検出が出ることもある）。
 - 模擬モデルは、日本語の規則で意図を決める（件数・一覧・比較・詳細／写真・精度・使い方・範囲外）。地区名は DB の `areas.name`・`ward` との部分一致。意図は `tool_calls` に出す。
 - 範囲外の例: 天気・雑談、2024 年以降の棟の確認（写真が無い → `no_photo_period`）、衛星の「変化の当たり」・屋根の太陽光パネル・取り壊しや減少（`not_implemented`: 未実装と言う）、対象地区の外。
@@ -426,7 +427,7 @@ ToolResult =
 - `confirmed_new`: `ov_2018 ≤ 0.10` かつ `prob_2018_p90 < 0.20`（2018 のモデルが c の範囲に何も見ていない）。
 - `uncertain`: 上のどちらでもない、またはタイルの縁に接する（`edge_touch`。`reason: "edge"`）。
 
-閾値は `run.json.params` に入れる。**この閾値は未検証の初期値**（手ラベルが無い）と、UI の「このアプリの精度」に書く。名前に「確定」を使わない UI 文言は「2018 年は未検出」「2018 年も検出」「未判定」。未判定の 1 件ごとの呼び名は「端のため未判定」（`edge`）「要確認」（`ambiguous`）。まとめて数える所（地図の切り替え・グラフ・比較）は「未判定」の 1 つ（[ADR 0011](decisions/0011-class-labels-by-observation.md)）。
+閾値は `run.json.params` に入れる。**この閾値は未検証の初期値**（正解データで確かめていない）と、UI の「このアプリの精度」に書く。名前に「確定」を使わない UI 文言は「2018 年は未検出」「2018 年も検出」「未判定」。未判定の 1 件ごとの呼び名は「端のため未判定」（`edge`）「要確認」（`ambiguous`）。まとめて数える所（地図の切り替え・グラフ・比較）は「未判定」の 1 つ（[ADR 0011](decisions/0011-class-labels-by-observation.md)）。
 
 ## 6. 評価（`pipeline/evaluate.py` → `eval.json`）
 
@@ -438,11 +439,11 @@ ToolResult =
   3. 画素の指標では、外した物体の画素を、その物体の側の配列から除く（棟と画素は同じ決定で扱う）。
   4. 外した数を出す（`excluded_edge_objects` = 縁に接する数 + 重なりで外した数。内訳は `excluded_edge_detail`）。
 - 分割: 12 枚を、`tiles` の並び順の前半 6 枚（調整用）と後半 6 枚（評価用）に分ける。倍率（1.0/1.5/2.0）と閾値（0.3〜0.7）は**調整用だけ**で選び、評価用と全体を別に報告する。選んだ値は `run.json.params`。
-- `eval.json`: `{reference, split:{tune:[area_id], holdout:[area_id]}, sweep:[{scale,threshold,tune_object_f1,...}], chosen:{scale,threshold,selected_by}, holdout:{pixel:{...}, object:{...}}, tune:{...}, overall:{...}, per_area:[...], excluded_edge_objects:{reference,prediction}, excluded_edge_by_split:{...}, reference_detail:{...}, protocol:{year,...}, new_building_recall:null, notes:[...]}`。`overall` は 12 地区の合計の指標（`tune`・`holdout` と同じ形）、`excluded_edge_by_split` は縁の除外の数を調整用・評価用・全体に分けたもの、`protocol` は評価の取り決め（評価に使った写真の年 `year`、縁の除外の下限 `edge_overlap_min` など）、`reference_detail` は参照の素性。`new_building_recall` は手ラベルが無いので **null**（UI は「未測定」と表示）。
+- `eval.json`: `{reference, split:{tune:[area_id], holdout:[area_id]}, sweep:[{scale,threshold,tune_object_f1,...}], chosen:{scale,threshold,selected_by}, holdout:{pixel:{...}, object:{...}}, tune:{...}, overall:{...}, per_area:[...], excluded_edge_objects:{reference,prediction}, excluded_edge_by_split:{...}, reference_detail:{...}, protocol:{year,...}, new_building_recall:null, notes:[...]}`。`overall` は 12 地区の合計の指標（`tune`・`holdout` と同じ形）、`excluded_edge_by_split` は縁の除外の数を調整用・評価用・全体に分けたもの、`protocol` は評価の取り決め（評価に使った写真の年 `year`、縁の除外の下限 `edge_overlap_min` など）、`reference_detail` は参照の素性。`new_building_recall` は、正解になる新築のデータが無いので **null**（UI は「未測定」と表示）。
 - **任意項目**（追加のみ。既存の項目の形は変えない。読む側は、知らない項目を無視する）:
   - `excluded_edge_detail`: `{overall|tune|holdout: {reference:{touching_edge, overlapping_excluded_prediction}, prediction:{touching_edge, overlapping_excluded_reference}}}`。`excluded_edge_objects`・`excluded_edge_by_split` の内訳（足すと一致する）。
   - `year_compare`: 同じ参照・同じ設定（調整用で選んだ倍率・閾値）で、もう一方の年の写真の抽出を測った指標。`{selected_on_year:2018, compare_year:2023, setting:{scale,threshold}, by_year:{"2018":{tune,holdout,overall}, "2023":{tune,holdout,overall}}}`（各 `tune`・`holdout`・`overall` は `{pixel:{...}, object:{...}}`）。選択には使わない。評価の年 `protocol.year` は 2018 のまま、比べる年を `protocol.compare_year` に書く。
-  - `existing_absent_in_2018`: 基盤地図情報にある既存の建物（面積 20 m² 以上・縁に接しない）のうち、2018 年の抽出が「何も見ていない」（§5 の `confirmed_new` の 2018 側の条件。`diff` の関数と `DiffParams` をそのまま使う）棟数と割合 `absent`・`absent_share`、`ov_2018 ≥ 0.5` の棟数と割合 `present`・`present_share`。`{setting, params, overall|tune|holdout:{n_buildings, absent, absent_share, present, present_share}}`。**手ラベルの代わりにはならない**（absent には、モデルの見逃しと、写真の時点で取り壊し済みの参照の建物が混ざり、分けられない）。
+  - `existing_absent_in_2018`: 基盤地図情報にある既存の建物（面積 20 m² 以上・縁に接しない）のうち、2018 年の抽出が「何も見ていない」（§5 の `confirmed_new` の 2018 側の条件。`diff` の関数と `DiffParams` をそのまま使う）棟数と割合 `absent`・`absent_share`、`ov_2018 ≥ 0.5` の棟数と割合 `present`・`present_share`。`{setting, params, overall|tune|holdout:{n_buildings, absent, absent_share, present, present_share}}`。**正解データの代わりにはならない**（absent には、モデルの見逃しと、写真の時点で取り壊し済みの参照の建物が混ざり、分けられない）。
   - `reference_detail.vintage`: 読み込んだ建物の属性の集計 `{gml_id_prefix, lf_span_from, dev_date: {値: 棟数}}`。`protocol.edge_overlap_min`: 縁の除外の重なりの下限（0.5）。
 - `notes` には、**参照の時期**を、事実と推定を分けて書く。
   - 事実（読み込んだデータの集計。`reference_detail.vintage` から作る）: 読み込んだ建物は全棟が gml:id 接頭辞 K17・lfSpanFr 2018-10-01・devDate 2018-10-02 で、「2018-10」は配布の版の日付にすぎず、建物ごとの日付の違いは無い。
@@ -523,7 +524,7 @@ ToolResult =
 - `/accuracy`: `/api/metrics` の数字。調整用／評価用の区別、「新築の再現率: 未測定」、閾値は未検証の初期値であることを書く。**順は、要点（見出しの数字 3 つ・閾値の注意）→ 既知の限界 → 出典と規約 → 「詳しい測定を見る（開発者向け）」（はじめは畳む。調整用と評価用の表・写真の年の比較・選んだ設定・地区ごとの値・評価の注記・由来）**（2026-11-25、ユーザー決定。長い説明を最初に読ませない）。入口は、アカウントのメニューの「このアプリの精度」と、チャットの精度カードのリンク。
   - 見出しの数字（物体単位 F1・画素 IoU）には、**どの年の写真で測った値か**を明記する（`protocol.year`。無ければ 2018）。「再現率」は、「建物の抽出の再現率（基盤地図情報に対する値）」と「新築の再現率（未測定）」を、必ず修飾して書き分ける。
   - `year_compare` があれば、もう一方の年の写真での値と、年で比べる表を出す。無い・形が違うときは、その部分を出さず、画面は落ちない。
-  - 限界欄に、`existing_absent_in_2018` から描く「2018 年の写真での見落とし」（既存の建物のうち、2018 年の抽出が何も見ていない割合。手ラベルの代わりにならない）、参照が写真より古い可能性（推定）と物体単位の適合率が合成値であること、年ごとの再現率の違い（数字だけ。原因は書かない）を載せる。数字はデータから描き、手書きにしない。
+  - 限界欄に、`existing_absent_in_2018` から描く「2018 年の写真での見落とし」（既存の建物のうち、2018 年の抽出が何も見ていない割合。正解データの代わりにならない）、参照が写真より古い可能性（推定）と物体単位の適合率が合成値であること、年ごとの再現率の違い（数字だけ。原因は書かない）を載せる。数字はデータから描き、手書きにしない。
   - 評価の内部のキー名（`pixel_iou` など）は、日本語の見出しにする。
 - `/accuracy` の末尾: 既知の限界（写真が無い期間・2018 年は帯状の範囲だけ・タイルの縁・誤検出の可能性・撮影月が不明・正解が無い・未実装のもの＝衛星の「変化の当たり」・パネル・人による確認・公開）と、出典と規約（地理院タイル、基盤地図情報、モデル `giswqs/whu-building-unetplusplus-efficientnet-b4`＝Apache-2.0・学習データ WHU の利用条件は不明・地理院タイルの機械学習での大量利用は未確認）。最初のチャット画面は、見出し・1 行の説明（候補であり新築と断定しない）・地図のボタン・質問の例だけを出し、対象・地区の名前・比較・出典・3 分類・範囲外の質問は「くわしく」（閉じた状態）に入れる。入力欄の下にモデル名の注記は出さない（モデルの印は、サイドパネル・上の横帯に 1 か所）。
 - ブラウザから API へは、同じオリジンの `/api/*`（Next の rewrites。転送先は実行時の環境変数 `API_URL`）。ただし `/api/auth/*`（ログイン・JWKS）は web 自身の Route Handler が受け、api へは転送しない（§2.1）。

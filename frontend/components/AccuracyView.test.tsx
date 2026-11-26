@@ -272,14 +272,14 @@ describe('/accuracy', () => {
       expect(screen.queryByTestId('f1-basis')).not.toBeInTheDocument();
     });
 
-    it('限界欄: 2018 年の写真での見落としの実測の割合を、データから描く（手ラベルの代わりにはならない）', async () => {
+    it('限界欄: 2018 年の写真での見落としの実測の割合を、データから描く（正解データの代わりにはならない）', async () => {
       await renderReal();
       const limit = screen.getByTestId('limit-absent');
       expect(limit).toHaveTextContent('2018 年の写真での見落とし（既存の建物が「2018 年は未検出」に入る）');
       expect(limit).toHaveTextContent('基盤地図情報にある既存の建物（20 m² 以上・縁に接しない）200 棟のうち、約 3 割（66 棟）で、2018 年の抽出が何も見ていません');
       expect(limit).toHaveTextContent('半分以上を覆っているのは 約 5 割（102 棟）');
       expect(limit).toHaveTextContent('評価用の地区だけでは 110 棟のうち 34 棟（約 3 割）');
-      expect(limit).toHaveTextContent('手ラベルの代わりにはなりません');
+      expect(limit).toHaveTextContent('正解データの代わりにはなりません');
     });
 
     it('限界欄の見落としの割合は、データの値に従う（手書きの数字ではない）', async () => {
@@ -352,7 +352,7 @@ describe('/accuracy', () => {
     /** 評価ファイル（eval.json）の notes の書き方（開発者向けの文）を、実データから写した */
     const devNotes = [
       'タイルの縁に接する物体は、参照・予測の両方から外した。外した数は excluded_edge_objects（内訳は excluded_edge_detail）。',
-      '新築の再現率は、手ラベルが無いので未測定（new_building_recall = null）。',
+      '新築の再現率は、正解になる新築のデータが無いので未測定（new_building_recall = null）。',
       'year_compare: 同じ参照・同じ設定で、2023 年の写真の抽出も測った。',
       'existing_absent_in_2018: 2018 年の抽出が何も見ていない（ov_2018 <= 0.1 かつ prob_2018_p90 < 0.2）棟の数と割合。',
       'gml:id の接頭辞は K17、lfSpanFr は 2018-10-01、devDate は 2018-10-02。docs/decisions/0001-data-candidates.md の調査は、更新が止まっていたと記す。',

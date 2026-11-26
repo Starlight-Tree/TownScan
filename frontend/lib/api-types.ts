@@ -156,7 +156,7 @@ export interface MetricsResponse {
   existing_absent_in_2018?: unknown;
   excluded_edge_by_split?: unknown;
   excluded_edge_detail?: unknown;
-  /** 手ラベルが無いので null（画面は「未測定」と出す） */
+  /** 正解になる新築のデータが無いので null（画面は「未測定」と出す） */
   new_building_recall: number | null;
   notes?: string[];
   provenance?: Partial<Provenance>;

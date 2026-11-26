@@ -247,7 +247,7 @@ func renderAccuracyBrief(r AccuracyResult) string {
 		text = fmt.Sprintf("建物抽出の物体単位 F1 は、評価用の地区で %s です%s。", ratio(float64(*f1)), measured)
 	}
 	if recall := byKey["new_building_recall"].Value; recall == nil {
-		text += "新築の再現率（本当の新築のうち候補に出せた割合）は、手ラベルが無いため未測定です。"
+		text += "新築の再現率（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定です。"
 	} else {
 		text += fmt.Sprintf("新築の再現率（本当の新築のうち候補に出せた割合）は %s です。", ratio(float64(*recall)))
 	}
@@ -287,7 +287,7 @@ func renderAccuracy(r AccuracyResult) string {
 	if tune != nil {
 		head += fmt.Sprintf("調整用の地区の F1 は %s（倍率と閾値を選ぶのに使ったので、参考値）です。", ratio(*tune))
 	}
-	tail := "「新築の再現率」（本当の新築のうち候補に出せた割合）は、手ラベルが無いため未測定で、上の建物の抽出の再現率とは別の値です。分類の閾値は未検証の初期値です。"
+	tail := "「新築の再現率」（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定で、上の建物の抽出の再現率とは別の値です。分類の閾値は未検証の初期値です。"
 	if r.Provenance.RunKind == "synthetic" {
 		tail += "なお、これは合成データ（テスト用）の値です。"
 	}

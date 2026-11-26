@@ -100,7 +100,7 @@ export const accuracy: AccuracyResult = {
   title: 'このアプリの精度',
   metrics: [
     { key: 'f1', label: '建物の抽出（評価用・物体単位 F1）', value: 0.617, note: '基盤地図情報を正解にした値' },
-    { key: 'new_building_recall', label: '新築の再現率', value: null, note: '手ラベルが無いため未測定' },
+    { key: 'new_building_recall', label: '新築の再現率', value: null, note: '正解になる新築のデータが無いため未測定' },
   ],
   provenance,
 };

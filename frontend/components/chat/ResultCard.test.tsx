@@ -484,7 +484,7 @@ describe('結果カード: 精度（平易な一言）', () => {
       { key: 'holdout_object_f1', label: '物体単位 F1（評価用・2018 年の写真）', value: 0.123, note: '評価用 6 地区' },
       { key: 'holdout_object_precision', label: '建物の抽出の適合率・物体単位', value: 0.163, note: '評価用 6 地区' },
       { key: 'holdout_object_recall', label: '建物の抽出の再現率・物体単位', value: 0.098, note: '評価用 6 地区' },
-      { key: 'new_building_recall', label: '新築の再現率', value: null, note: '未測定（手ラベルが無いため）' },
+      { key: 'new_building_recall', label: '新築の再現率', value: null, note: '未測定（正解になる新築のデータが無いため）' },
     ],
   };
 

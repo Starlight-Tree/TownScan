@@ -654,9 +654,9 @@ func getAccuracy(ctx context.Context, tc *ToolContext, _ Args) (Result, error) {
 		metric("tune_object_f1", fmt.Sprintf("物体単位 F1（調整用・%s）", yr), []string{"tune", "object"}, "f1",
 			tuned+"。倍率と閾値を選ぶのに使ったので、参考値"),
 	}
-	recallNote := "手ラベルによる値"
+	recallNote := "新築の正解データで測った値"
 	if body["new_building_recall"] == nil {
-		recallNote = "未測定（手ラベルが無いため）。建物の抽出の再現率とは別の値"
+		recallNote = "未測定（正解になる新築のデータが無いため）。建物の抽出の再現率とは別の値"
 	}
 	metrics = append(metrics, Metric{Key: "new_building_recall", Label: "新築の再現率", Value: firstPresent(body, nil, "new_building_recall"), Note: recallNote})
 	chosen, _ := body["chosen"].(map[string]any)

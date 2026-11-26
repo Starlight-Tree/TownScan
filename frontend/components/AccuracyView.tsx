@@ -509,7 +509,7 @@ function Limits({ m }: { m?: MetricsResponse }) {
         <div>
           <b>正解が無い</b>
           <br />
-          新築の再現率は、手ラベルが無いので未測定です。
+          新築の再現率は、正解になる新築のデータが無いので未測定です。
         </div>
         <div>
           <b>対象範囲</b>
@@ -545,7 +545,7 @@ function AbsentLimit({ m }: { m?: MetricsResponse }) {
           <b>{formatTenths(all.absent / all.n)}（{formatNumber(all.absent)} 棟）</b>で、{year} 年の抽出が何も見ていません。
           {all.present !== undefined && <>半分以上を覆っているのは {formatTenths(all.present / all.n)}（{formatNumber(all.present)} 棟）です。</>}
           {holdout && <>評価用の地区だけでは {formatNumber(holdout.n)} 棟のうち {formatNumber(holdout.absent)} 棟（{formatTenths(holdout.absent / holdout.n)}）です。</>}
-          これは手ラベルの代わりにはなりません。「何も見ていない」には、モデルの見落としと、写真の時点で既に取り壊されていた参照の建物が混ざり、分けられないためです。
+          これは正解データの代わりにはなりません。「何も見ていない」には、モデルの見落としと、写真の時点で既に取り壊されていた参照の建物が混ざり、分けられないためです。
         </>
       ) : m ? (
         <>この割合は、評価ファイルに無く、測れていません。</>

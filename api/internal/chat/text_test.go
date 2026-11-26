@@ -136,12 +136,12 @@ func TestRenderCompare(t *testing.T) {
 	}
 }
 
-// 精度の短い本文: 値の有無・手ラベルの値（0 を含む）・合成データの印
+// 精度の短い本文: 値の有無・再現率の値（0 を含む）・合成データの印
 func TestRenderAccuracyBrief(t *testing.T) {
 	num := func(v float64) *pyjson.Float { f := pyjson.Float(v); return &f }
 	r := AccuracyResult{Metrics: []Metric{{Key: "holdout_object_f1", Value: num(0.16)}, {Key: "new_building_recall"}}}
 	r.Provenance.PhotoYears = []int{2018}
-	const unmeasured = "新築の再現率（本当の新築のうち候補に出せた割合）は、手ラベルが無いため未測定です。"
+	const unmeasured = "新築の再現率（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定です。"
 	const head = "建物抽出の物体単位 F1 は、評価用の地区で 0.16 です（基盤地図情報を参照にして、2018 年の写真で測った値）。"
 	if got, want := renderAccuracyBrief(r), head+unmeasured; got != want {
 		t.Errorf("%q（期待 %q）", got, want)
@@ -175,7 +175,7 @@ func TestRenderAccuracy(t *testing.T) {
 	want := "建物抽出の精度を、基盤地図情報を参照にして、2018 年の写真で実測しました。評価用の地区での物体単位 F1 は 0.58 です。" +
 		"建物の抽出の適合率は 0.62、建物の抽出の再現率（基盤地図情報に対する値）は 0.55 です。" +
 		"調整用の地区の F1 は 0.60（倍率と閾値を選ぶのに使ったので、参考値）です。" +
-		"「新築の再現率」（本当の新築のうち候補に出せた割合）は、手ラベルが無いため未測定で、上の建物の抽出の再現率とは別の値です。分類の閾値は未検証の初期値です。" +
+		"「新築の再現率」（本当の新築のうち候補に出せた割合）は、正解になる新築のデータが無いため未測定で、上の建物の抽出の再現率とは別の値です。分類の閾値は未検証の初期値です。" +
 		"なお、これは合成データ（テスト用）の値です。"
 	if got != want {
 		t.Errorf("精度\n got  %s\n want %s", got, want)
