@@ -427,10 +427,41 @@ func findUnsupportedNumbersLikePython(content string, results any) []string {
 // 強い検査（助数詞の無い漢数字・英語の数詞・区切った数も落とす）。known は、数として見ない地区名・区名（漢数字を含む名前を、返答文は書いてよい。省略可）。
 // 数字・本文は、ログに出さない（差し替えた回数だけ、呼び出し側が数える）。
 func GuardNumbers(content string, results []Result, known ...string) (out string, replaced bool) {
-	if len(findUnsupportedNumbers(content, genericOf(results), known...)) == 0 {
-		return content, false
+	if len(findUnsupportedNumbers(content, genericOf(results), known...)) != 0 {
+		return SafeTemplate, true
 	}
-	return SafeTemplate, true
+	return stripPositionWords(content)
+}
+
+// 回答の並び（本文 → カード → 図）は、画面の幅やタブで変わりうるので、返答文に、カードや図の位置（上・下・右・左・上記・下記）を書かせない。
+// 指示（gemini_model.go）でも言うが、モデルは確率的にしか守らないので、ここでも止める。
+//   - 「上の/下のカード」のように、方向の語が、カード・図などの名前の直前にあるとき: 方向の語だけを取り除く（「カードのとおり」）。replaced は false（文は残る）。
+//   - 「上記」「下記」: 取り除くと文が崩れるので、安全なテンプレートに替える（replaced は true）。
+//
+// 検査が止めるのは、数字と、この位置の語だけ。数字以外の主張（「最も多い」「過半」「確信度が分かれる」など）は、検査の外にある。
+var (
+	positionBeforeNounRE = regexp.MustCompile(`[上下右左](?:の|記の)(カード|図|表|グラフ|地図|一覧)`)
+	positionAnywhereRE   = regexp.MustCompile(`[上下]記`)
+)
+
+func stripPositionWords(content string) (out string, replaced bool) {
+	// 「以上の表」「以下の図」のような、位置ではない言い方（直前が「以」）は残す。RE2 に後読みは無いので、直前の文字を手で見る
+	var b strings.Builder
+	last := 0
+	for _, m := range positionBeforeNounRE.FindAllStringSubmatchIndex(content, -1) {
+		if r, _ := utf8.DecodeLastRuneInString(content[:m[0]]); r == '以' {
+			continue
+		}
+		b.WriteString(content[last:m[0]])
+		b.WriteString(content[m[2]:m[3]]) // 方向の語を除き、名前（カードなど）だけ残す
+		last = m[1]
+	}
+	b.WriteString(content[last:])
+	out = b.String()
+	if positionAnywhereRE.MatchString(out) {
+		return SafeTemplate, true
+	}
+	return out, false
 }
 
 // guardTemplateNumbers は、模擬モデルの返答文の検査。Python の guard_numbers と同じ範囲（findUnsupportedNumbersLikePython）。

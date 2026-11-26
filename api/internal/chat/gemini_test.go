@@ -482,7 +482,7 @@ func TestANumberTheModelInventedIsReplacedByTheSafeTemplate(t *testing.T) {
 	if r.Content != SafeTemplate || r.Results[0].(CountResult).Total != 4 { // 結果は DB の値のまま
 		t.Errorf("返答 = %s", jsonOf(t, r))
 	}
-	if !strings.Contains(logs.text(), "返答文を安全なテンプレートに差し替えました（通算 1 回）") {
+	if !strings.Contains(logs.text(), "返答文を安全なテンプレートに差し替えました（通算 1 回。ツール: count_candidates）") {
 		t.Errorf("ログ = %s", logs.text())
 	}
 	if strings.Contains(logs.text(), "新規出現の候補は") || strings.Contains(logs.text(), "7,777") { // 数えるだけ。LLM の文（本文）は出さない
@@ -1436,5 +1436,32 @@ func TestGeminiConfigDefaults(t *testing.T) {
 	}
 	if c.endpoint != "http://127.0.0.1:9/x/gemini-3.5-flash-lite:generateContent" {
 		t.Errorf("endpoint = %s", c.endpoint)
+	}
+}
+
+func TestPositionWordsAboutCardsAreRemovedOrReplaced(t *testing.T) {
+	// 方向の語だけ取り除く（文は残る）。「以上の」「以下の」は位置ではないので、そのまま
+	for in, want := range map[string]string{
+		"結果は下のカードのとおりです。":    "結果はカードのとおりです。",
+		"一覧を上のカードに示しました。":    "一覧をカードに示しました。",
+		"右のグラフと左の地図を見てください。": "グラフと地図を見てください。",
+		"以上の表をご覧ください。":       "以上の表をご覧ください。",
+		"以下の図は参考です。":         "以下の図は参考です。",
+		"候補は全部で 4 件です。":      "候補は全部で 4 件です。",
+		"判定保留は、目で確かめる候補です。":  "判定保留は、目で確かめる候補です。",
+	} {
+		f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say(in))
+		s, _ := geminiService(t, f, newFakeData())
+		if r := mustAsk(t, s, "件数は？"); r.Content != want {
+			t.Errorf("%q → %q（期待 %q）", in, r.Content, want)
+		}
+	}
+	// 「上記」「下記」は、取り除くと文が崩れるので、安全なテンプレートに替える
+	for _, in := range []string{"詳細は下記のとおりです。", "上記の件数を見てください。"} {
+		f := newFakeGemini(t, call("count_candidates", map[string]any{"cls": "confirmed_new"}), say(in))
+		s, _ := geminiService(t, f, newFakeData())
+		if r := mustAsk(t, s, "件数は？"); r.Content != SafeTemplate {
+			t.Errorf("%q が通った: %q", in, r.Content)
+		}
 	}
 }

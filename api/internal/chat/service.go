@@ -8,7 +8,7 @@
 //   - gemini.go・gemini_model.go: 実 LLM（Gemini）の窓口と、function calling の往復
 //   - service.go（このファイル）: 1 往復
 //
-// 数字・件数・座標は LLM に書かせない。ツールの結果をそのまま描く。範囲外の質問は断る。
+// 数字は、ツールの結果の値だけから出る（返答文の数字は GuardNumbers が結果と照合する。座標・ID は書かせない。ADR 0009）。範囲外の質問は断る。
 // LLM_PROVIDER=gemini（実 LLM）は、gemini.go（窓口）・gemini_model.go（function calling の往復）。模擬モデルと同じく、結果は Registry が DB から作り、
 // 返答文は同じ GuardNumbers を通る。キーが無いのに gemini が選ばれたら、模擬に黙って落とさず、New が明確なエラーを返す。
 package chat
@@ -16,6 +16,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,7 @@ type Service struct {
 	gemini   *geminiClient         // nil なら、模擬モデル
 	compose  func([]Result) string // 結果から返答文を作る（既定は Compose。テストが、数字の検査に落ちる文を差し込むために持つ）
 	logf     func(format string, args ...any)
+	stripped atomic.Int64 // 返答文から、カードの位置の語を取り除いた回数（同じく回数だけ）
 	replaced atomic.Int64 // 返答文を、安全なテンプレートに差し替えた回数（このプロセスの通算。回数だけ数える。本文は残さない）
 }
 
@@ -126,8 +128,16 @@ func (s *Service) Answer(ctx context.Context, messages []Message) (Reply, error)
 	} else {
 		guarded, replaced = guardTemplateNumbers(content, results)
 	}
+	if !replaced && guarded != content {
+		s.logf("返答文から、カードの位置の語（上の・下の など）を取り除きました（通算 %d 回）", s.stripped.Add(1)) // 回数だけ。本文は出さない
+	}
 	if replaced {
-		s.logf("返答文を安全なテンプレートに差し替えました（通算 %d 回）", s.replaced.Add(1))
+		names := make([]string, len(calls))
+		for i, c := range calls {
+			names[i] = c.Name
+		}
+		// 差し替えた回数と、どのツールの質問だったか（ツール名だけ。数字・本文はログに出さない）
+		s.logf("返答文を安全なテンプレートに差し替えました（通算 %d 回。ツール: %s）", s.replaced.Add(1), strings.Join(names, ","))
 	}
 	reply := Reply{Role: "assistant", Content: guarded, Results: results, ToolCalls: calls}
 	if run != nil {
