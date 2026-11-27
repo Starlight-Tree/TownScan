@@ -29,18 +29,18 @@ JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、�
 環境変数（画面のサーバーだけが読む。**どれも `NEXT_PUBLIC_` を付けない**。値はこのファイルにも書かない）:
 
 - `BETTER_AUTH_URL`: ブラウザーから見たこの画面の URL（開発では `http://localhost:3500`）。JWT の `iss` と、Google のリダイレクト URI の元
-- `BETTER_AUTH_SECRET`: 32 文字以上の乱数。`scripts/dev-up.sh` が `.env` に 1 回だけ作る。**決めたら変えない**（DB の署名鍵と Google のトークンの暗号化に使う。変えると全員がログアウトに見える）
-- `GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`: Google の OAuth クライアント（ウェブ アプリケーション）。自分で作って `.env` に書く。**Google 側の承認済みのリダイレクト URI は `http://localhost:3500/api/auth/callback/google`**
+- `BETTER_AUTH_SECRET`: 32 文字以上の乱数。`.env` の経路では `scripts/dev-up.sh` が 1 回だけ作り、Infisical の経路では `scripts/login-secrets.sh` で登録する。**決めたら変えない**（DB の署名鍵と Google のトークンの暗号化に使う。変えると全員がログアウトに見える）
+- `GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`: Google の OAuth クライアント（ウェブ アプリケーション）。自分で作って、`scripts/login-secrets.sh` で Infisical に登録する（`.env` に書く経路もある。[ADR 0004](../docs/decisions/0004-secrets-infisical.md)）。**Google 側の承認済みのリダイレクト URI は `http://localhost:3500/api/auth/callback/google`**
 - `DATABASE_URL`: Postgres への接続（`compose.yaml` が組む）
 - `JWT_AUDIENCE`（任意。既定 `townscan`）: JWT の `aud`。API の `AUTH_AUDIENCE` と同じ値
 
 **未設定のときの動き**: 上の必須の 5 つ（`JWT_AUDIENCE` を除く）のどれかが空、または `BETTER_AUTH_SECRET` が 32 文字未満・`BETTER_AUTH_URL` が http(s) の URL でないときは、`/login` が「Google でのログインは、まだ設定されていません」と出し（ボタンは出さない）、`/api/auth/*` は 503 を返す。サイドパネルのメニューは、ログインしていない人のもの（テーマとログインの入口）になる。ほかの画面・API は、今までどおり動く。環境変数を直したら、画面のコンテナを再起動する（設定は起動後に読み直さない）。
 
-ブラウザーで開く URL は、`BETTER_AUTH_URL` と同じホスト（`http://localhost:3500`）にする。Cookie はホストごとなので、`127.0.0.1` で開くと、Google から戻ったあとのログインの印が見えない（未確認の一般論。実際の確認は、OAuth クライアントを作ったあと）。
+ブラウザーで開く URL は、`BETTER_AUTH_URL` と同じホスト（`http://localhost:3500`）にする。Cookie はホストごとなので、`127.0.0.1` で開くと、Google から戻ったあとのログインの印が見えない（一般論からの注意）。
 
 ブラウザーから API を呼ぶ（同じオリジンの `/api/*`）。API へ JWT を渡すのは、会話の履歴（下）だけ。API の `GET /api/me` は、JWT を JWKS（`/api/auth/jwks`）で検証して `{sub, email, name, picture}` を返す入口で、アカウントのロジックの確認用。
 
-テストは、Better Auth と Google をモックする（`lib/session.test.ts`・`actions/auth.test.ts`・`app/api/auth/[...all]/route.test.ts` ほか）。本物の Google との往復は、OAuth クライアントを作ったあとに、手で確かめる。
+テストは、Better Auth と Google をモックする（`lib/session.test.ts`・`actions/auth.test.ts`・`app/api/auth/[...all]/route.test.ts` ほか）。本物の Google との往復は、自動のテストでは確かめない（手で確かめる）。
 
 ## 会話の履歴（ログイン中だけ。仕様 `docs/spec-prototype.md` §2.3・§7.1）
 
@@ -49,7 +49,7 @@ JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、�
 | 場所 | 役割 |
 |---|---|
 | `app/(site)/layout.tsx` | `currentUser()` の真偽値（ログイン中か）と `isAuthConfigured()`（ログインを使える設定か）を、`HistoryProvider` で画面の部品へ渡す。ログインの有無が変わったら、本文を作り直す |
-| `components/HistoryProvider.tsx` | ログイン中か・期限切れ（取り直しても 401）か・会話の一覧（`useConversations`）。一覧は、出す幅（1024px 以上）のときだけ取る |
+| `components/HistoryProvider.tsx` | ログイン中か・期限切れ（取り直しても 401）か・会話の一覧（`useConversations`）。一覧は、幅によらず、ログイン中なら取る |
 | `lib/auth-token.ts` | `GET /api/auth/token` で JWT を取り、メモリにだけ置く。期限の 60 秒前に取り直す・同時の取得は 1 回・401 は 1 回だけ取り直して送り直す。localStorage・sessionStorage・URL・ログには出さない |
 | `lib/conversations-api.ts`・`lib/use-conversations.ts` | 履歴の 3 本（一覧・発言・削除）と、一覧の取得・状態・取り直し。失敗は 401・404・422・その他の型にする |
 | `lib/conversation-session.ts` | 開いている会話の ID（`sessionStorage` の `townscan:conversation_id`）。タブごと。ID は画面が `crypto.randomUUID()` で作る |
@@ -59,7 +59,7 @@ JobNavi・DocuNavi と同じ作り: Better Auth 1.7.18（版は固定）が、�
 
 - ログインの確認が通らない（取り直しても 401、またはログインの確認だけが 503）ときは、`conversation_id` を外して送り直し、回答の下に注記を 1 回出す。その会話では、以降の送信にも付けない。
 - 開き直した会話の回答は、作ったときの run（`provenance.run_id` と `run_created_at`）が、いまの run（`/api/health`）と違えば、注意書きを出し、拡大ビューへ進むボタンを押せなくし、回答の中の図・写真を出さない。
-- テストは、`fetch` を差し替える（`tests/history-helpers.ts`）。実際の Google・Go の API との往復は、統合のあと、実画面で確かめる。
+- テストは、`fetch` を差し替える（`tests/history-helpers.ts`）。実際の Google・Go の API との往復は、実画面で確かめる（2026-11-25 に Chrome で一部を確認。仕様 §8 の E9）。
 
 ## 重い処理はホストの Node 24 で
 

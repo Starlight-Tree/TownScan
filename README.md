@@ -16,7 +16,7 @@ The photos on the right are the four largest "not detected in 2014" candidates; 
 
 ## Features
 
-- **A chat grounded in tool results.** Cards, charts and maps are drawn from the tool results as they are. A reply that is only a count, or only one candidate's photos, is worded by code ([ADR 0013](docs/decisions/0013-one-view-per-answer.md)). Other replies are written by the model, and one with a number that is not in the results is replaced with a fixed text ([ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)); other claims are not checked. Out-of-scope questions are declined. The model is Gemini (an API key is needed).
+- **A chat grounded in tool results.** Cards, charts and maps are drawn from the tool results as they are. A reply whose only result is a count, a candidate list, one candidate's photos, the accuracy report or a refusal is worded by code ([ADR 0013](docs/decisions/0013-one-view-per-answer.md)). Other replies are written by the model, and one with a number that is not in the results is replaced with a fixed text ([ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)); other claims are not checked. Out-of-scope questions are declined. The model is Gemini (an API key is needed).
 - **Two classes of candidates.** Each building outline extracted from the 2024 photo is checked against the 2014 photo. Buildings also detected in 2014 are dropped; the rest are "not detected in 2014" (`confirmed_new`) or "undecided" (`uncertain`).
 - **Map and photo comparison.** Candidates on IGN map and photo tiles, and the 2014 and 2024 crops of one building side by side.
 - **An accuracy page that shows its limits.** For now it says "not measured" and shows no numbers. The extraction scale and threshold are fixed values that have not been checked on this app's photos (how they were chosen: [ADR 0016](docs/decisions/0016-flair-hub-model.md)).
@@ -36,7 +36,7 @@ flowchart LR
     B -->|"map tiles"| G["IGN tile service"]
 ```
 
-A question goes through the API's chat: Gemini picks a tool (counts, comparison, list, detection image), and the cards are built from the tool's result. Gemini writes the reply text from that result (count-only and single-photo replies are worded by code). A number check replaces any reply that contains a figure that is not in the result.
+A question goes through the API's chat: Gemini picks a tool (counts, comparison, list, detection image), and the cards are built from the tool's result. Gemini writes the reply text from that result (replies with a single count, list, photo, accuracy or refusal result are worded by code). A number check replaces any reply that contains a figure that is not in the result.
 
 `compose.yaml` runs the Go API with Gemini (`LLM_PROVIDER=gemini` by default). The API is checked by the contract tests (`contract/`). Loading data is done in Python (`docker compose run --rm loader python -m pipeline.load …`).
 
@@ -78,7 +78,7 @@ The documents are written in Japanese.
 | Document | Contents |
 |---|---|
 | [docs/plan.md](docs/plan.md) | Plan, stages, exit criteria, pending decisions |
-| [docs/spec-prototype.md](docs/spec-prototype.md) | The contract: data files, DB, API, classes, evaluation, UI |
+| [docs/spec-prototype.md](docs/spec-prototype.md) | The contract: data files, DB, API, classes, evaluation, UI ([revision log](docs/spec-history.md)) |
 | [docs/decisions/](docs/decisions/) | Decisions and reasons: data and terms (0001), direction (0002), chat LLM (0003), secrets (0004), Go API (0005), conversation history, screens and wording (0006–0013), new-building recall (0014), the move to France (0015), the extraction model (0016) |
 | [frontend/README.md](frontend/README.md) · [api/README.md](api/README.md) | Running, checks and details of each part |
 | [CLAUDE.md](CLAUDE.md) | Development conventions (for AI agents) |

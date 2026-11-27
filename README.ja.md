@@ -16,7 +16,7 @@
 
 ## 機能
 
-- **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数だけ・写真 1 件だけの回答の本文は、コードが決めます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
+- **ツールの結果を根拠にするチャット。** カード・グラフ・地図は、ツールの結果のまま描きます。件数・候補の一覧・写真・精度・お断りの結果 1 件だけの回答は、本文をコードが決めます（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。それ以外の本文はモデルが書き、結果に無い数字があれば固定の文に差し替えます（[ADR 0009](docs/decisions/0009-llm-writes-result-numbers.md)）。数字以外の主張は、この検査の外です。範囲外の質問は断ります。モデルは Gemini です（キーが要ります）。
 - **新築候補の 2 分類。** 2024 年の写真から取り出した建物の外形を、2014 年の写真と比べます。2014 年でも検出した建物は外し、残りを「2014 年は未検出」（`confirmed_new`）と「未判定」（`uncertain`）に分けます。
 - **地図と写真の見比べ。** 候補を IGN の地図と写真の上に描き、1 棟の 2014 年と 2024 年の写真を並べます。
 - **限界を隠さない精度ページ。** いまは「未測定」とだけ出し、数字を作りません。抽出の倍率と閾値は固定の値で、このアプリの写真では確かめていません（選び方は [ADR 0016](docs/decisions/0016-flair-hub-model.md)）。
@@ -36,7 +36,7 @@ flowchart LR
     B -->|"地図タイル"| G["IGN の公開タイル配信"]
 ```
 
-質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、カードはツールの結果から作ります。返答の本文は、その結果をもとに Gemini が書きます（件数だけ・写真 1 件だけの回答はコードが決めます）。数字の検査が、結果に無い数字を含む返答を、安全な文に差し替えます。
+質問は API のチャットを通ります。Gemini がツール（件数・比較・一覧・検出画像）を選び、カードはツールの結果から作ります。返答の本文は、その結果をもとに Gemini が書きます（件数・一覧・写真・精度・お断りの結果 1 件だけの回答はコードが決めます）。数字の検査が、結果に無い数字を含む返答を、安全な文に差し替えます。
 
 `compose.yaml` は、Go の API を Gemini（既定が `LLM_PROVIDER=gemini`）で動かします。API は契約の検査（`contract/`）で確かめます。データの読み込みは Python です（`docker compose run --rm loader python -m pipeline.load …`）。
 
@@ -78,7 +78,7 @@ scripts/dev-up.sh    # frontend をビルドして、db・api・web を起動す
 | 文書 | 内容 |
 |---|---|
 | [docs/plan.md](docs/plan.md) | 計画・段階・出口条件・決定待ち |
-| [docs/spec-prototype.md](docs/spec-prototype.md) | 契約: データのファイル・DB・API・3 分類・評価・画面 |
+| [docs/spec-prototype.md](docs/spec-prototype.md) | 契約: データのファイル・DB・API・3 分類・評価・画面（[改訂の記録](docs/spec-history.md)） |
 | [docs/decisions/](docs/decisions/) | 決定とその理由: データと規約（0001）、方向（0002）、チャットの LLM（0003）、秘密の置き場（0004）、API を Go に（0005）、会話の履歴・画面・呼び名（0006〜0013）、新築の再現率（0014）、フランスへの移行（0015）、建物の抽出モデル（0016） |
 | [frontend/README.md](frontend/README.md) ・ [api/README.md](api/README.md) | 各部分の動かし方・検査・詳細 |
 | [CLAUDE.md](CLAUDE.md) | 開発の規約（AI エージェント向け） |
