@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 TownScan。パリ南西の近郊（県 92 の 12 地区）の IGN の空中写真（2014 年と 2024 年）から新築の候補を棟ごとに検出し、会話で聞けるアプリ（[ADR 0015](docs/decisions/0015-move-to-france.md)）。回答は、短い本文と表示 1 つ（地図・グラフ・写真など）で返す（[ADR 0013](docs/decisions/0013-one-view-per-answer.md)）。屋根の太陽光パネルを数える機能は、後のフェーズで追加し、新築の候補と合わせたハイブリッドにする（ユーザー決定 2026-11-27。時期と範囲は未定）。衛星（Google Earth Engine）で広域の変化の当たりをつける層は後の拡張で、やるかは未決。AI スクールの制作課題。
-計画の正本は [docs/plan.md](docs/plan.md)（段階・出口条件・決定待ち。今の段は §4.1 で、§1・§2 の熊本の記述は記録）。決定は `docs/decisions/` に 1 件 1 ファイル。
+計画の正本は [docs/plan.md](docs/plan.md)（段階・出口条件・決定待ち。フランスへの移行は §4.1）。決定は `docs/decisions/` に 1 件 1 ファイルで、本文は書き換えない（今も有効かは [一覧](docs/decisions/README.md)）。仕様の改訂の記録は [docs/spec-history.md](docs/spec-history.md)。
 
 ## 構成と検査
 
