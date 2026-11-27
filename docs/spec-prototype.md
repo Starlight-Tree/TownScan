@@ -1,45 +1,18 @@
 # たたき台の仕様（ローカルで動き、UI で操作できる縦切り）
 
-状態: 2026-11-24 起草（ユーザー依頼「アプリをローカル環境で動かして UI で操作できるたたき台になるところまで」）。**この文書が契約**。実装はここに従い、変えるときは先にここを直す。
-改訂 2026-11-25: §4.2（`reason` から `small` を外す）と §6（縁の除外を左右対称に・追加の診断・参照の時期の注記）を、実装と監査の指摘に合わせて直した。
-改訂 2026-11-25（2）: **任意のログイン**（Google だけ。ユーザー依頼「サイドバーも統一感を出して。そこのメニューも同様に」「プロフィールアイコンとかアカウントのロジックも同じにしておいて」。JobNavi・DocuNavi にそろえる）を足した。§2.1（認証）・§4.4（`GET /api/me`）・§7（サイドバー・アカウントのメニュー・`/login`）。既存の機能（チャット・地図・詳細・精度・このアプリについて）の契約は変えない。
-改訂 2026-11-25（3）: 独立検証の指摘に合わせ、§2.1・§4.4（形が不正な `AUTH_ISSUER`・`AUTH_JWKS_URL` は起動を止めず、警告を出して検証を無効にする。JWT の `email_verified`。`email`・`name`・`picture` の整形の規則）と §7（ログインしていないときの印は「≡」）を、実装に合わせて直した。
-改訂 2026-11-25（4）: `/` の画面（§7）を、右に「結果領域」（地図・グラフ・写真の比較のタブ）を置く設計に書き換えた（旧: 右に地図、候補の詳細は重なって開くドロワー）。回答の型から画面への自動の切り替え、手で選んだタブを保つこと、回答の条件（地区が 1 つ・複数・全地区、分類）を地図・グラフ・集計の帯へ同じに反映し、候補の一覧へは、地区が 1 つのときだけ地区で絞って反映すること（API が地区を 1 つしか受けないため。複数の地区のときは、一覧の本体を出さず、案内を出す）、印を押したときは地図に留まり「写真を比べる」で切り替わること、回答カードのボタンでその回答の条件を復元すること、「拡大」、縦に積む幅のスクロールを定めた。§4.5 は、backend がすでに返している `filter` の形（`area_ids`・`scope`、表と比較にも付く）に合わせて直した。API の振る舞いは変えない。
-改訂 2026-11-25（5）: **任意の実 LLM（Gemini）**を足した（ユーザー承認 2026-11-25「いいよ　さっさとつないで試してよ」→ Gemini の無料キー）。§1・§2.2（環境変数。新設）・§3・§4.4（`/api/health` の `llm`・`llm_model`、`POST /api/chat` の 502）・§4.5（Gemini を選んだときの役割・安全・失敗）を、実装に合わせて直した。既定は模擬のまま。決定の理由・データの扱いは [ADR 0003](decisions/0003-llm-provider.md)。**実 API での動作は未確認**（キーが入ったあとに確かめる）。
-改訂 2026-11-25（6）: `/` の画面（§7）を、実装に合わせて直した。分類の凡例を地図の上から外して集計の帯のチェックボックスへ移し、地図についての通知を地図の下の 1 行の帯へ移した。選択中の候補は、地図に重なるカード（地図の大きさは変わらない）にし、読み上げを足した。「拡大」の列幅を 340px から 280px にした。チャットは、開いた直後に説明の見出しから読み始められるようにした。詳細（写真の比較）は、「写真の比較」が見えるまでマウントも通信もしない。詳細を閉じたあとのフォーカスが body に落ちないようにした。回答の「対象・条件」は、右の絞り込みと同じ「最後の `count` か `compare`」から作る。API の振る舞いは変えない。**実画面（ブラウザー）では未確認**（コードと jsdom のテストで確かめた。幅の見積もりは CSS からの計算）。
-改訂 2026-11-25（7）: `/` の最初の画面（§7）を、**チャットだけ**に変えた（旧: 会話の前から右に地図の結果領域が開いていた）。結果領域は、結果つきの回答か「地図で見る」などの操作で開き、「新しい会話」で閉じる。知らせの live region を結果領域の外へ出した。
-改訂 2026-11-25（8）: `/` の画面（§7）を、**チャットだけの 1 列と「拡大ビュー」**に変えた（ユーザー決定 2026-11-25「そもそも　チャットウィンドウの中に回答全部出して　最大化ボタンみたいなのでキャンバスにした方がいい？」→ 案 D・既定案どおり）。常設の右の結果領域をなくし、結果は回答カードの中に出す。カードのボタン（「グラフで見る」「地図で見る」「詳細」など）を押すと、その回答の地図・グラフ・写真の比較が、大きなダイアログ（狭い幅では全面のシート）で開く。回答が届いても、画面は自動で開かない・替わらない。回答の条件の反映・詳細・地図の中身は、拡大ビューの中で今までと同じ。比較のカードは上位 5 地区までにした。API の振る舞いは変えない。
-改訂 2026-11-25（9）: **`compose.yaml` の api を Go に切り替えた**（ユーザー承認 2026-11-25「y」）。api は `api/` の Go（mem_limit 1g・`GOMEMLIMIT`・`/api -healthcheck`）。FastAPI 版は `compose.python-api.yaml`（`scripts/dev-up.sh --api python`）として、Gemini の窓口が Go に入るまで残す。データの読み込み（`app.load`）は、常駐しない `loader`（Python）で行う（`docker compose run --rm loader python -m app.load …`）。Go の API は `LLM_PROVIDER=gemini` で起動を止める（黙って模擬に落とさない）。API の契約（§4）は変えない。
-改訂 2026-11-25（10）: **会話の履歴**（ログイン中だけ・サーバーに保存・一覧・開き直し・2 段階の削除。ユーザー依頼「履歴は DocuNavi と同じ型」）を、**仕様として**足した。§1（対象外の認証の注記）・§2.1（ログインの有無で変えない範囲の例外と、`auth_user.id` の存在だけを api が読むこと）・§2.3（新設）・§4.3（表 2 つ。DDL は仕様の案で、実行しない）・§4.4（`/api/conversations` 3 本、`POST /api/chat` の任意の `conversation_id`、履歴のエラーと `Cache-Control`、空白の集合、題名の規則）・§7・§7.1（新設。サイドパネルの会話の履歴・開き直し・解析結果が変わった回答の扱い）・§8（E9）。ログインしていない間と、`conversation_id` を付けない要求は、今までと同じ。**この改訂は仕様だけで、実装は Go への切り替え（[ADR 0005](decisions/0005-api-in-go.md)）のあと**（Go の API にだけ入れる。Python の API には入れない。コードも DDL も、まだ無い。実装したら、この注を消す）。決定・理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。
-改訂 2026-11-25（11）: **回答の中に、グラフと地図そのものを出す**（ユーザー依頼 2026-11-25「回答の中にグラフや地図を出す。小さくなくてよい。その方がいいならやって」。ユーザーが最初に言った「チャットウィンドウの中に回答全部出して、最大化ボタンでキャンバスにする」に沿う）。件数・比較・地図の表示の回答の、結果カードの並びの下に、「図」を出す（件数＝地図とグラフ、比較＝グラフ、地図の表示＝地図。写真の比較は図に入れない）。各図の「拡大」（「地図を拡大」「グラフを拡大」）を押すと、その回答の拡大ビューを、その図の画面で開く（拡大ビューは残す。自動では開かない）。図と拡大ビューは、回答ごとの同じ状態（絞り込み・強調・選んだ候補・寄せ先）を読み書きする（図で変えたことは拡大ビューに引き継がれ、逆も同じ）。件数・比較のカードの「グラフで見る」「地図で見る」は、図が代わるので外した（地図の表示のカードの「地図で見る」は残す）。§7（回答の中に出すもの・回答の中の図〔新設〕・拡大ビューを開く・拡大の単位・「新しい会話」・回答カードのボタン・幅）・§7.1.4・§7.1.5・§8 の E8 を直した。API の振る舞いは変えない。**実画面（Chrome）・スクリーンリーダーでは未確認**（コードと jsdom のテストで確かめた。図の読み上げの抑え方は、`aria-live="off"` の入れ子で、読み上げソフトでの挙動は未確認）。
-改訂 2026-11-25（12）: **開発・実行の LLM の既定を Gemini にした**（ユーザー決定 2026-11-25「基本 LLM にしといた方良くない？」「ずっとモック鬱陶しかった」）。`compose.yaml` の既定を `gemini` にし、模擬は、契約の検査・テストと、Claude Code の内部の検証のとき（`LLM_PROVIDER=mock scripts/dev-up.sh`。利用者は使わない）だけにした。Go の API 自体の既定（環境変数が無いとき）と、契約の検査・テストは変えない。キーが無いときは、api が起動時に止まる（黙って模擬に落とさない）。
-改訂 2026-11-26（13）（のち（14）で、広い幅の横パネルを取り下げた）: **拡大ビューを、モーダルのダイアログから「広い幅は非モーダルの横パネル、狭い幅は 4 つのタブ」に変えた**（ユーザー承認 2026-11-26「おすすめで進めて」。決定・理由・選ばなかった案・受け入れ条件は [ADR 0007](decisions/0007-results-panel-and-narrow-tabs.md)。改めるのは、改訂（8）の案 D のうち「拡大ビュー＝モーダル」の部分だけ）。広い幅は、押したときだけ、チャットの右にパネル（地図・グラフ・写真の比較）が開き、チャットは操作できる（`inert`・スクロール固定なし）。そのパネルが表示中の回答の図は、「右のパネルで表示中」の 1 行になる。狭い幅は、チャット・地図・グラフ・写真の 4 つのタブで、チャットは隠すだけで外さない。広い・狭いの判定は、サイドパネルを除いた本体の幅。§7（`/` の項・回答の中の図・拡大ビューを開く・拡大の単位・見た目・フォーカス・「新しい会話」・拡大ビューのタブ・幅）・§8 の E7・E8 を直した。API・DB は変えない。**実装した（2026-11-26）。実画面（Chrome。広い幅・狭い幅・ライト・ダーク。模擬 LLM）で、パネルの開閉・4 つのタブ・チャットのタブ・図の 1 行を確かめた。VoiceOver・実機の指での操作・実 Gemini の返答での見え方は未確認**。幅の判定は 72rem に決めた（実測。パネル幅 24〜32rem は、窓 1420px・1700px で確かめた）。狭い幅のチャットの tabpanel に `tabindex="0"`（APG の注 4）を足した。実 Gemini の返答（比較）でも、要点・パネルの見え方を確かめた。グラフの行には、押せる印（›）を足した。点模様のコントラストは、模様と地色の比が 3.29〜4.53（非テキストの 3:1 以上）で、変更なし。
-改訂 2026-11-26（14）: **結果の見せ方を、全幅の 4 つのタブ（チャット｜地図｜グラフ｜写真の比較）に変えた**（ユーザー指摘 2026-11-26「方向性がズレてる」。期待は、メインの枠の中でチャットと地図・グラフ・写真をタブで切り替える形〔Perplexity の「回答」タブがチャットそのもの〕。私の提案への承認「1」。決定・理由・失うもの・先例は [ADR 0008](decisions/0008-full-width-tabs.md)。ADR 0007 の広い幅の横パネルを取り下げ、狭い幅の 4 つのタブを全幅へ広げた）。広い・狭いの判定（本体の幅の測定・72rem）、「右のパネルで表示中」の 1 行、`role="region"`（名前「結果」）は無くす。タブの帯は、いつも出る（最初の画面から。チャットのタブを選んだ状態。最初の実装は「開いたあとだけ」で、ユーザーに「タブになってない」と指摘された）。最初の画面で地図などのタブを押すと、回答を持たない拡大ビュー（全地区）が開く。§7・§8 の E7・E8 を直した。API・DB は変えない。**実装した（2026-11-26）。実画面（Chrome。窓 760px・1440px・1900px・ダーク。最初の実装〔タブは開いたあとだけ〕の確認）で、タブの帯・地図・グラフ・写真の比較・チャットのタブ・「閉じる」を確かめた。**タブの常時表示への変更後の実画面は、確認する**。ライトの見た目・VoiceOver・実機の指は未確認。写真の比較は、全幅の窓（1900px）では 2 枚が大きくなる（上限は設けていない）**。判定幅 72rem・`layout-mode.ts` は無くした。
-改訂 2026-11-26（15）: **タブの見た目と名前、回答の並びを改めた**（ユーザーが実画面を見て指示。[ADR 0008](decisions/0008-full-width-tabs.md) の追記）。①タブの名前を「回答｜地図｜グラフ｜画像」に（旧: チャット・写真の比較）。タブの帯は、枠も背景も無く、下に細い線を 1 本引き、選択中は太字と下線 2px。②「閉じる」ボタンを外した（Esc は残す。回答へ戻るのは「回答」のタブ）。③比較の回答の並びを「本文 → 要点（枠なし）→ 図 → 対象・条件の帯 → 補足（分類の意味・根拠を見る）」に（ほかの種類のカードは今までの枠のまま。条件の帯だけ、全種類でカードと図のあとへ）。④返答文に、結果にある数字を LLM が書いてよいと改めた（[ADR 0009](decisions/0009-llm-writes-result-numbers.md)）。**実画面は、ユーザーが 2026-11-26 に確認した（OK）。VoiceOver は未確認。**
-改訂 2026-11-26（16）: **全体の呼び名を「候補」に改め、件数の回答を表にした**（ユーザー承認 2026-11-26「全てy」・実画面は「画面OK」。決定・理由は [ADR 0010](decisions/0010-candidate-wording-and-count-card.md)）。①「候補」は 3 分類の全体、「新規出現」は分類の名前だけ。②分類で絞った `count` の結果に `overall:{total,uncertain}` を足した（§4.5。DB は変えない）。③件数のカードは、見出し・全体の数か内訳・判定保留の 1 行・候補の表（5 行と「残りを表示」）・根拠。「分類の意味」の折りたたみは回答から外した。④回答の中の地図は、地図・「拡大」・印の凡例・状態の帯だけ。件数の回答の中のグラフは出さない。§4.5・§7・§8 の E8 を直した。**直した指示は、実装を push したあとに実 Gemini の 9 回で確かめた（分類の指定は 9 回とも期待どおり。無いものを案内する回答が 2 回。内訳は ADR 0010）。回数が少なく、頻度は分からない。VoiceOver は未確認。**
-改訂 2026-11-26（17）: **分類の呼び名を、モデルが確認した事実に改めた**（ユーザー承認 2026-11-26「y」・実画面は「OK」。決定・理由は [ADR 0011](decisions/0011-class-labels-by-observation.md)）。①呼び名は「2018 年は未検出」「2018 年も検出」「未判定」。未判定の 1 件ごとの呼び名は、理由で「端のため未判定」（`edge`）「要確認」（`ambiguous`）。分類のキー・分類の決まり・DB は変えない。②地図用データの properties に `reason`、`count` の結果に `held` を足した（§4.4・§4.5）。③件数のカードは、表を出せるときは枠・見出し・内訳を出さない。候補の一覧も枠を外した。§4.4・§4.5・§5・§7 を直した
-改訂 2026-11-26（18）: **件数と候補の一覧の回答を、表から写真のカードに変えた**（ユーザー指摘「画像検出が主題なので、本文の次に画像」。案に「y」・直した実画面に「y」。決定・理由は [ADR 0012](decisions/0012-photo-cards-in-answers.md)）。①本文の次に、候補ごとの 2018・2023 年の写真のカードを出す（はじめは 4 件）。②候補 ID は画面に出さない（読み上げの名前と写真の説明には残す）。③分類の列は無くし、件数の回答は分類の見出し、一覧の回答は各カードに添える。④件数の回答の「根拠を見る」は、地図と対象・条件のあとへ移した。§7・§7.1.5・§8 の E8 を直した。API・DB は変えない。**実画面はダークで確かめた。ライト・狭い幅（1 列）・VoiceOver は未確認。**
-改訂 2026-11-26（19）: **回答を、短い本文と表示 1 つにした**（ユーザーが実画面を見て順に指示・承認。決定・理由は [ADR 0013](decisions/0013-one-view-per-answer.md)）。①本文の下の表示は、順位で 1 つ。ほかは、最新の回答の下の「表示を切り替える」に出す。②件数だけの回答の本文は、LLM でなくコードが組み立てる（§4.5。件数の結果に `area_ranking`・`tile_side_m`）。③回答から、分類の名前・内訳・凡例・色分け、「対象・条件」の行、「根拠を見る」を外し、写真の下に出典の 1 行を置く。④「詳細」の文字のリンクをやめ、写真を押して詳細を開く。⑤拡大ビューを閉じる手段は、右上の ✕ と Esc の 1 通りにした（「チャットへ戻る」と詳細の「閉じる」を外した）。拡大ビューの地図・グラフ・候補の詳細・精度の画面の分類の表示は、変えていない。
-改訂 2026-11-26（20）: （[ADR 0013](decisions/0013-one-view-per-answer.md) の追記。ユーザー承認）①写真 1 件だけの回答の本文は、実 LLM の文を使わず、結果の説明にする（§4.5）。②写真の対象は、分類の指定が無ければ全分類で面積が最大の候補（それまでは「2018 年は未検出」を先に選んでいた）。③Gemini への指示に、断りの理由の使い分けを足した。④チャットのツール選択の評価 `evals/` を足した。
-改訂 2026-11-26（21）: 精度 1 件だけの回答の本文は、実 LLM の文を使わず、コードが組み立てる（§4.5。[ADR 0013](decisions/0013-one-view-per-answer.md) の追記）。
-改訂 2026-11-27（22）: 新築の再現率は「未測定」にする。理由の言い方を「正解になる新築のデータが無い」に改めた（[ADR 0014](decisions/0014-new-building-recall-unmeasured.md)）。
-改訂 2026-11-27（23）: **対象を熊本からフランス（パリ南西の近郊の 12 地区）に変えた**（ユーザー指示 2026-11-27・実画面は「OK」。[ADR 0015](decisions/0015-move-to-france.md)）。写真は 2014 年と 2024 年の IGN の航空写真。差し引く建物データは使わず、前の写真でも検出した建物は候補にしない（画面の分類は「2014 年は未検出」「未判定」の 2 つ）。倍率と閾値は固定で、精度は未測定。§1・§3・§4・§5・§6・§7・§8 の該当箇所を直した。**これより前の改訂の記録（熊本・2018／2023 年）は、そのまま残す。**
-改訂 2026-11-27（24）: **熊本向けのデータと処理を消した**（ユーザー指示 2026-11-27。[ADR 0015](decisions/0015-move-to-france.md) の追記）。評価の正解の建物データの入力を、基盤地図情報の XML から GeoJSON（`--reference`）に替えた。地理院の逆ジオコーダの読み取りと、試作スクリプト（`scripts/spike/`）を消した。§4.1・§6 を直した。API・DB の形は変えない。
-改訂 2026-11-27（25）: 候補の一覧 1 件だけの回答の本文は、実 LLM の文を使わず、コードが組み立てる（§4.5。[ADR 0013](decisions/0013-one-view-per-answer.md) の追記）。
-改訂 2026-11-27（26）: **タイルの縁に接する建物も、2014 年の写真と比べて分類する**（§5。ユーザー承認 2026-11-27）。それまでは、比べる前に「端のため未判定」にしていた。建物が大きくまとまって取れるモデル（FLAIR-HUB）にすると、候補の大半がこれになった（`fr2` で 54 件中 46 件。うち 21 件は 2014 年の抽出が半分以上を覆う）。理由 `edge` は、前の決まりで作った解析結果（`fr1`）のために、型・DB・API・画面に残す。
-改訂 2026-11-27（27）: **アプリの抽出モデルを FLAIR-HUB にする（解析結果 `fr2`。plan の F3b の段 2。ユーザー承認 2026-11-27。[ADR 0016](decisions/0016-flair-hub-model.md)）。** API と画面は、固定の倍率・閾値の選び方を決め打ちで言わず、「このアプリの写真では確かめていない」と言う（選び方は `eval.json` の注記と ADR 0016）。分類の閾値は「未検証の初期値」のままで、精度の画面と候補の詳細の「正解データで確かめていない」には「このアプリの写真では」を添える。未判定の説明（画面・Gemini の指示）から、写真の端の話を外す。候補の詳細の「タイルの縁に接する」に、面積が小さく出る場合があることを添える。精度の画面の限界（タイルの縁・誤検出）と、出典のモデルを直す。API・DB の形は変えない。
-改訂 2026-11-27（28）: お断り 1 件だけの回答の本文は、実 LLM の文を使わず、結果の理由の文にする（§4.5。[ADR 0013](decisions/0013-one-view-per-answer.md) の追記）。理由の文にカードの位置の語があれば、固定の文に替える。
-位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）を、薄く一通り通す。GEE 層（P5）・パネル（P6）・公開（P7）は対象外。
+状態: 2026-11-24 起草（ユーザー依頼「アプリをローカル環境で動かして UI で操作できるたたき台になるところまで」）。**この文書が契約**。実装はここに従い、変えるときは先にここを直す。本文は今の仕様を書く。改訂の記録は [spec-history.md](spec-history.md)（本文の「改訂 N」は、そこの番号）。
+
+位置づけ: [plan.md](plan.md) の P2（建物抽出と評価）・P3（差分・API・DB）・P4（チャット）の仕様。GEE 層（P5）・パネル（P6）・公開（P7）は対象外（P6 は後のフェーズで追加する決定。始めるときに書く）。
 
 ## 1. 何ができれば「たたき台」か
 
 1. パリ南西の近郊（県 92）の 12 地区（z18 タイル 12 枚。2014・2024 年の写真が両方ある）で、事前学習モデルの建物抽出 → 2 時点の差分 → 建物の「候補」が、**実データで**出る（Colab の T4 で推論。[ADR 0015](decisions/0015-move-to-france.md)）。
 2. `docker compose up` で db・api・web が立ち上がり、ブラウザ（`http://127.0.0.1:3500`）で、チャットで質問でき、地図に候補が出て、1 棟ずつ 2014 / 2024 の写真を見比べられる。
-3. 「このアプリの精度」の画面は、精度をまだ測っていない解析結果では**「未測定」とだけ**出し、数字を作らない（§6）。正解データでの指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、実装はこのあと。
+3. 「このアプリの精度」の画面は、精度をまだ測っていない解析結果では**「未測定」とだけ**出し、数字を作らない（§6）。正解データでの指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1（実装済み）。アプリの精度の画面へ載せるのは未実装。
 4. 数字・件数・座標は、ツールの結果だけから出る（LLM の説明文に書かれる数字は、結果の値と照合して検査する。座標・ID は書かせない。[ADR 0009](decisions/0009-llm-writes-result-numbers.md)。開発の既定は Gemini で、模擬モデルはテストと Claude Code の内部の検証用（利用者は使わない）。LLM の役割はツールの選択と説明文だけ。§2.2・§4.5）。範囲外は断る。
 5. 合成データ（テスト用）と実データを取り違えない（§4 の `run.kind`、UI のバナー）。
 
-対象外（やらない・やったと書かない）: GEE 層、パネル、確認モード（人の確定）、認証（ただし、**任意のログインだけ** §2.1 に足した。機能の制限・権限の分けには使わない。ログインの有無で変わるのは、**会話の履歴の保存と、その検査・開き直しだけ**: §2.3。仕様のみで、実装は Go への切り替えのあと）、公開、地区の行政区画の厳密な境界、PostGIS。実 LLM は、**任意で選べる Gemini だけ**を §2.2・§4.5 に足した（既定は模擬。ほかの LLM は対象外）。
+対象外（やらない・やったと書かない）: GEE 層、パネル、確認モード（人の確定）、認証（ただし、**任意のログインだけ**がある: §2.1。機能の制限・権限の分けには使わない。ログインの有無で変わるのは、**会話の履歴の保存と、その検査・開き直しだけ**: §2.3）、公開、地区の行政区画の厳密な境界、PostGIS。実 LLM は **Gemini だけ**（開発・実行の既定。模擬はテストと内部の検証用: §2.2・§4.5。ほかの LLM は対象外）。
 
 ## 2. 構成
 
@@ -49,16 +22,16 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 ```
 
 - 起動はホストの Docker Compose（`compose.yaml`）。ポートは `127.0.0.1` だけに公開（既存の jobnavi 3200/8200・shoporder 3400/8400・docunavi 5433 と重ねない）。db は公開しない。
-- Docker VM は 8 GB で、他プロジェクトが約 5.3 GB を使っている。**本番ビルド（`next build` + standalone 実行）**にし、compose の `mem_limit` を db 256m・api 1g（Go の JSON の読み込みが本文の数十倍のメモリーを使うため。FastAPI 版は 512m）・web 512m とする。実測の使用量を報告する。
-- **メモリーの制約（2026-11-24 夜に実測）:** Docker VM の空きは約 0.5 GB（`free -m` の available 519 MB。jobnavi-frontend 1.9 GB・shoporder-frontend 3.3 GB が常駐）。ここで `next build`・`tsc`・`vitest` のような重い処理を流すと、OOM キラーが他プロジェクトのコンテナを落とす恐れがある。**他プロジェクトのコンテナは止めない・触らない。** よって **frontend の重い処理（`npm ci`・型検査・テスト・`next build`）はホストの Node 24 で行う**（理由: VM の空きメモリー。ホストの RAM は 17 GB。Node 24 は `npx -y -p node@24 -- <コマンド>` で得られる。実測で node v24.22.3）。Python の処理（pipeline・backend の単体テスト）は軽いので開発コンテナで行う。
+- Docker VM は 8 GB で、他のプロジェクトと分け合う。**本番ビルド（`next build` + standalone 実行）**にし、compose の `mem_limit` は db 256m・api 1g（Go の JSON の読み込みが本文の数十倍のメモリーを使うため）・web 512m。
+- **メモリーの制約（2026-11-24 夜に実測）:** Docker VM の空きは約 0.5 GB（`free -m` の available 519 MB。jobnavi-frontend 1.9 GB・shoporder-frontend 3.3 GB が常駐）。ここで `next build`・`tsc`・`vitest` のような重い処理を流すと、OOM キラーが他プロジェクトのコンテナを落とす恐れがある。**他プロジェクトのコンテナは止めない・触らない。** よって **frontend の重い処理（`npm ci`・型検査・テスト・`next build`）はホストの Node 24 で行う**（理由: VM の空きメモリー。ホストの RAM は 17 GB。Node 24 は `npx -y -p node@24 -- <コマンド>` で得られる。実測で node v24.22.3）。Python の処理（pipeline の単体テスト）は軽いので開発コンテナで行う。
 - web のイメージは 2 つの target を持つ: `runtime`（イメージの中で `npm ci` と `next build` まで行う。メモリーに余裕のある環境・CI 用）と `prebuilt`（ホストで作った `.next/standalone` を載せるだけ。この VM ではこちらを使う）。`scripts/dev-up.sh` は `WEB_BUILD=host`（既定）／`docker` で選ぶ。
 - コード・テストの実行は、可能なものは開発コンテナ（`devcontainer exec --workspace-folder /Users/Home/Projects/TownScan bash -lc '…'`、venv は `~/.venvs/townscan`）で行う。compose・DB を使うものはホストの Docker。
-- 秘密: DB のパスワードは `scripts/dev-up.sh` が初回に乱数で `.env`（gitignore 済み）へ書く。ログイン（§2.1）を足したあとは、`BETTER_AUTH_SECRET`（同じく dev-up.sh が、無いときだけ 1 回足す）と、`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`（利用者が自分で `.env` に書く。無くても動く）が加わる。それ以外の秘密は無い。`.env` は読まない・表示しない。
+- 秘密: DB のパスワードは `scripts/dev-up.sh` が初回に乱数で `.env`（gitignore 済み）へ書く。ほかは `BETTER_AUTH_SECRET`・`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`（ログイン。§2.1。Google の値は無くても動く）と `GEMINI_API_KEY`（§2.2）。置き場は Infisical が正で、`.env` は代わりの経路（[ADR 0004](decisions/0004-secrets-infisical.md)）。`.env` の経路では、`BETTER_AUTH_SECRET` を `dev-up.sh` が無いときだけ 1 回足す。`.env` は読まない・表示しない。
 - ログイン（任意）を足したあとの経路: web（Next.js）の中で Better Auth が動き、`/api/auth/*` は web 自身が受ける（`/api/*` の転送より先。api へは行かない）。web は db（`backend-net`）に届き、`auth_` の表だけを読み書きする。api は、web の JWKS（`http://web:3000/api/auth/jwks`）を取りに行って JWT を検証するだけ。ポート・公開範囲（127.0.0.1 のみ・db は非公開）は変えない。
 
 ### 2.1 認証（任意のログイン）
 
-位置づけ: **ログインは任意**。チャット・地図・詳細・精度は、ログインなしで今まどおり使える。ログインすると、サイドバーの下のアカウントに、プロフィール画像（または人型アイコン）・メール・ログアウトが出る（§7）。**それ以外の機能の制限は足さない**（ログインの有無で、API の応答・件数・機能を変えない。**ただし、会話の履歴の保存と、その検査（`conversation_id` つきの `POST /api/chat`・履歴の 3 本）を除く**。§2.3。仕様のみで、実装は Go への切り替えのあと）。
+位置づけ: **ログインは任意**。チャット・地図・詳細・精度は、ログインなしで今まどおり使える。ログインすると、サイドバーの下のアカウントに、プロフィール画像（または人型アイコン）・メール・ログアウトが出る（§7）。**それ以外の機能の制限は足さない**（ログインの有無で、API の応答・件数・機能を変えない。**ただし、会話の履歴の保存と、その検査（`conversation_id` つきの `POST /api/chat`・履歴の 3 本）を除く**。§2.3）。
 
 - **方式**: Better Auth **1.7.18**（`frontend/package.json` に固定。JobNavi と同じ版）、**Google だけ**（メール・パスワードは使わない）。web（Next.js）のサーバーの中で動く。pg の接続プールで、TownScan の Postgres（`townscan`）の `auth_` の表に入れる。セッションは JobNavi と同じ（14 日・延長しない）。api はログインの通信も秘密も持たない。
 - **Cookie の接頭辞は `townscan`**（`townscan.session_token` など。https では先頭に `__Secure-` が付く）。Better Auth の既定（`better-auth`）のままだと、同じ `localhost` で動く JobNavi（接頭辞 `jobnavi`）・DocuNavi と Cookie を上書きし合う（Cookie はポートで分かれない）。
@@ -69,16 +42,16 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 |---|---|---|
 | web | `BETTER_AUTH_URL` | ブラウザーから見た web の URL（`compose.yaml` の既定 `http://localhost:3500`）。JWT の `iss`・Google のリダイレクト URI の元 |
 | web | `BETTER_AUTH_SECRET` | 32 文字以上の乱数。`scripts/dev-up.sh` が `.env` に、無いときだけ 1 回作る |
-| web | `GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET` | Google の OAuth クライアント（ウェブ アプリケーション）。利用者が Google Cloud Console で作り、`.env` に自分で書く。リダイレクト URI は `http://localhost:3500/api/auth/callback/google` |
+| web | `GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET` | Google の OAuth クライアント（ウェブ アプリケーション）。利用者が Google Cloud Console で作り、`scripts/login-secrets.sh` で Infisical へ登録する（`.env` に書く経路もある）。リダイレクト URI は `http://localhost:3500/api/auth/callback/google` |
 | web | `DATABASE_URL` | db への接続（`compose.yaml` が `POSTGRES_PASSWORD` から組む。api と同じ資格情報で、表ごとの権限分けは無い。auth_ の表だけを使うのは、コードの上の約束） |
 | web・api | `JWT_AUDIENCE`（api では `AUTH_AUDIENCE`） | JWT の `aud`。既定 `townscan`。`compose.yaml` が両方に同じ値を渡す |
 | api | `AUTH_ISSUER` | JWT の `iss`。`compose.yaml` が web の `BETTER_AUTH_URL` と同じ値を渡す |
 | api | `AUTH_JWKS_URL` | api のコンテナから届く web の JWKS（compose の中では `http://web:3000/api/auth/jwks`。`iss` とは別の URL） |
 
-- **DB**: Better Auth の表は `auth_` 付きの 5 つ（`auth_user`・`auth_session`・`auth_account`・`auth_verification`・`auth_jwks`）。列名・型・外部キーは、JobNavi の `backend/app/migrations/0004_better_auth.sql`（Better Auth 1.7.18 が決めた camelCase の列名。引用符つき）の 5 つの表と同じ。`users` への列追加は TownScan には無い（アプリ側にプロフィールの表を持たない）。`auth_user.lastName`・`firstName` は JobNavi のプロフィール用の追加列で、TownScan のコードは読み書きしない（あっても無くてもよい。NULL 可）。置き場は `pipeline/sql/auth.sql`（ローダー用）と、その写し `api/internal/store/sql/auth.sql`（Go の API が起動時に適用する。一致をテストが確かめる。冪等: `CREATE TABLE IF NOT EXISTS`・`CREATE INDEX IF NOT EXISTS`。`DROP`・`TRUNCATE` は書かない）。すでにあるボリュームにも入る形で適用する（適用の方法は、`schema.sql` の適用の仕組みに合わせる。実装の側が決め、そこに書く）。`auth_` の表を読み書きするのは web だけで、api は読まない（JWT を検証して `sub`・`email`・`name`・`picture` を使うだけ）。**ただし、会話の履歴のために、api は `auth_user.id` の存在だけを読む**（外部キーと、LLM を呼ぶ前の存在の確認。`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.3・§4.3。仕様のみで、実装は Go への切り替えのあと）。
+- **DB**: Better Auth の表は `auth_` 付きの 5 つ（`auth_user`・`auth_session`・`auth_account`・`auth_verification`・`auth_jwks`）。列名・型・外部キーは、JobNavi の `backend/migrations/0004_better_auth.sql`（Better Auth 1.7.18 が決めた camelCase の列名。引用符つき）の 5 つの表と同じ。`users` への列追加は TownScan には無い（アプリ側にプロフィールの表を持たない）。`auth_user.lastName`・`firstName` は JobNavi のプロフィール用の追加列で、TownScan のコードは読み書きしない（あっても無くてもよい。NULL 可）。置き場は `pipeline/sql/auth.sql`（ローダー用）と、その写し `api/internal/store/sql/auth.sql`（Go の API が起動時に適用する。一致をテストが確かめる。冪等: `CREATE TABLE IF NOT EXISTS`・`CREATE INDEX IF NOT EXISTS`。`DROP`・`TRUNCATE` は書かない）。すでにあるボリュームにも入る形で適用する（適用の方法は、`schema.sql` の適用の仕組みに合わせる。実装の側が決め、そこに書く）。`auth_` の表を読み書きするのは web だけで、api は読まない（JWT を検証して `sub`・`email`・`name`・`picture` を使うだけ）。**ただし、会話の履歴のために、api は `auth_user.id` の存在だけを読む**（外部キーと、LLM を呼ぶ前の存在の確認。`SELECT EXISTS … WHERE id = $1`。ほかの列は読まない。§2.3・§4.3）。
 - **`BETTER_AUTH_SECRET` は、決めたら変えない。** DB の `auth_jwks` の署名鍵（暗号化して入れる）と、Google のトークン（`auth_account`）の暗号化に使う。変えると、保存済みの鍵が読めなくなり、全員がログアウトに見える（web のログに `Failed to decrypt private key`）。直すには `auth_jwks` の行を消す必要があり、承認が要る。`scripts/dev-up.sh` は、`.env` にあれば触らず、空の行があるときは重複を作らずに止まる。`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET` は、作らない・読まない・表示しない。
-- **未設定のときの動き**: `BETTER_AUTH_SECRET`・`BETTER_AUTH_URL`・`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`DATABASE_URL` のどれかが空（または `BETTER_AUTH_SECRET` が 32 文字未満・URL の形が違う）なら、`/login` は「まだ設定されていません」と出し（ボタンは出さない）、`/api/auth/*` は 503。api は `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無ければ `/api/me` が 503。**形が不正なとき**（http(s) の URL でない・ホストが無い・読めない形。例: `BETTER_AUTH_URL` を `localhost:3500` と書いた。`compose.yaml` はその値をそのまま `AUTH_ISSUER` へ渡す）も同じ扱い: api は**起動を止めず**、変数名だけ（値は入れない）を警告として 1 行ログに出し、検証を無効にして（`/api/me` は 503）、ほかの入口は動く（api が起動のたびに落ち続けると、web が api の healthy を待つため、チャット・地図まで使えなくなる）。`AUTH_AUDIENCE` は形の検査が無い文字列で、空なら `townscan`。**どの場合も、いまの機能（チャット・地図・詳細・精度・このアプリについて）は壊れない**（`compose.yaml` は、`GOOGLE_*` が空でも起動できる）。
-- **実際の Google ログイン**は、利用者が OAuth クライアントを作って `.env` に書いたあとに、手で確かめる（自動テストは Better Auth と Google をモックする。本物の Google との往復はテストしない）。
+- **未設定のときの動き**: `BETTER_AUTH_SECRET`・`BETTER_AUTH_URL`・`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`・`DATABASE_URL` のどれかが空（または `BETTER_AUTH_SECRET` が 32 文字未満・URL の形が違う）なら、`/login` は「まだ設定されていません」と出し（ボタンは出さない）、`/api/auth/*` は 503。api は `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無ければ `/api/me` が 503。**形が不正なとき**（http(s) の URL でない・ホストが無い・読めない形。例: `BETTER_AUTH_URL` を `localhost:3500` と書いた。`compose.yaml` はその値をそのまま `AUTH_ISSUER` へ渡す）も同じ扱い: api は**起動を止めず**、変数名だけ（値は入れない）を警告として 1 行ログに出し、検証を無効にして（`/api/me` は 503）、ほかの入口は動く（api が起動のたびに落ち続けると、web が api の healthy を待つため、チャット・地図まで使えなくなる）。`AUTH_AUDIENCE` は形の検査が無い文字列で、空なら `townscan`。**どの場合も、いまの機能（チャット・地図・詳細・精度）は壊れない**（`compose.yaml` は、`GOOGLE_*` が空でも起動できる）。
+- **実際の Google ログイン**は、利用者が OAuth クライアントを作って値を登録したあとに、手で確かめる（自動テストは Better Auth と Google をモックする。本物の Google との往復はテストしない）。
 
 ### 2.2 チャットの LLM（任意の実モデル）
 
@@ -87,16 +60,16 @@ host ブラウザ ──> web (Next.js, 127.0.0.1:3500) ──/api/* を転送�
 | 対象 | 名前 | 意味 |
 |---|---|---|
 | api | `LLM_PROVIDER` | `mock`（API 自体の既定。空でも `mock`。compose の既定は `gemini`）か `gemini`。ほかの値は、起動時に止める（ConfigError） |
-| api | `GEMINI_API_KEY` | Google AI Studio の無料キー。**利用者が `.env` に自分で書く**（値は、この文書・コード・`compose.yaml`・`.env.example` に書かない）。`gemini` なのに空、または形が不正（空白・改行・全角文字を含む）なら、起動時に止める。メッセージにキーの値は入れない。DocuNavi と同じ名前 |
+| api | `GEMINI_API_KEY` | Google AI Studio の無料キー。**利用者が自分で登録する**（Infisical が正。`.env` は代わりの経路。値は、この文書・コード・`compose.yaml`・`.env.example` に書かない）。`gemini` なのに空、または形が不正（空白・改行・全角文字を含む）なら、起動時に止める。メッセージにキーの値は入れない。DocuNavi と同じ名前 |
 | api | `GEMINI_MODEL` | 任意。空なら `gemini-3.5-flash-lite`（2026-11-25 の実測で、DocuNavi の既定だった `gemini-3.1-flash-lite` は 503・タイムアウトで失敗が続いたため、これに変えた。[ADR 0003](decisions/0003-llm-provider.md)）。英数字・`.`・`-`・`_` だけ（URL の path に入るため） |
 
 - キーは、repr・ログ・例外・応答（`/api/health` を含む）に出さない。Google へは、URL でなくヘッダー `x-goog-api-key` で送る（URL は、例外・ログ・記録に残りやすい）。リダイレクトは追わない。
 - `compose.yaml` は、`${GEMINI_API_KEY:-}`・`${GEMINI_MODEL:-}` で、ホストの `.env` の値を api へ渡すだけ。`scripts/dev-up.sh` は Gemini のキーを作らず、`.env` に書かない。
-- 追加の依存は無い（HTTP は標準ライブラリの `urllib`）。
+- 追加の依存は無い（HTTP は標準ライブラリの `net/http`）。
 
 ### 2.3 会話の履歴（ログイン中だけ）
 
-位置づけ: **API は Go に実装した（2026-11-25。`api/internal/store/history.go`・`api/internal/handlers/history.go`・`api/cmd/history-cleanup`）。画面（§7.1）は未実装。** Go の API にだけ入れ、Python の API には入れない（同じ業務ロジックを 2 つの言語に置かない）。決定の理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。表 2 つの追加は承認済み（ユーザー、2026-11-25）だが、**DDL（§4.3）は `api/internal/store/sql/history.sql` にあり、API の起動のたびに（すでにあるボリュームの DB にも）流れる**。土台のユーザー決定は「履歴は DocuNavi と同じ型（ログイン中だけ・サーバーに保存・サイドバーに一覧・削除は 2 段階）。ログインは任意で、ログインしていないときは今までどおり画面の中だけの会話」。画面は §7.1、API の形は §4.4、表は §4.3。本文の〔J1〕〜〔J7〕の印は、**ユーザー決定ではなく、起草者の判断**（異議があれば直す。一覧は ADR 0006）。印の無い項目のうち、ユーザーが決めたものは ADR 0006 の U1〜U10 に載る。
+位置づけ: **実装済み**（2026-11-25。API は `api/internal/store/history.go`・`api/internal/handlers/history.go`・`api/cmd/history-cleanup`、画面は §7.1）。決定の理由・選ばなかった案・未確認は [ADR 0006](decisions/0006-conversation-history.md)。表 2 つの追加は承認済み（ユーザー、2026-11-25）だが、**DDL（§4.3）は `api/internal/store/sql/history.sql` にあり、API の起動のたびに（すでにあるボリュームの DB にも）流れる**。土台のユーザー決定は「履歴は DocuNavi と同じ型（ログイン中だけ・サーバーに保存・サイドバーに一覧・削除は 2 段階）。ログインは任意で、ログインしていないときは今までどおり画面の中だけの会話」。画面は §7.1、API の形は §4.4、表は §4.3。本文の〔J1〕〜〔J7〕の印は、**ユーザー決定ではなく、起草者の判断**（異議があれば直す。一覧は ADR 0006）。印の無い項目のうち、ユーザーが決めたものは ADR 0006 の U1〜U10 に載る。
 
 #### 2.3.1 目的と範囲
 
@@ -202,7 +175,7 @@ DDL は §4.3。置き場は `api/internal/store/sql/history.sql`（実装済み
 
 #### 2.3.6 JWT をブラウザーからどう渡すか
 
-TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`frontend/proxy.ts` が API へ転送する（`/api/auth/*` だけ web 自身が受ける）。いま画面は、API へ JWT を渡していない（`frontend/lib/session.ts` の冒頭のコメント）。履歴の API は、`Authorization: Bearer` が要る。
+TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`frontend/proxy.ts` が API へ転送する（`/api/auth/*` だけ web 自身が受ける）。履歴の API は `Authorization: Bearer` が要り、画面は `frontend/lib/auth-token.ts` で JWT を取って付ける。
 
 **決定: DocuNavi と同じく、ブラウザーが `GET /api/auth/token`（Better Auth の jwt プラグインの経路。Cookie のセッションがあれば `{token}` を返す）で JWT を取り、`Authorization: Bearer` で送る。**
 
@@ -241,26 +214,28 @@ TownScan のブラウザーは、同じオリジンの `/api/*` を呼び、`fro
 #### 2.3.8 保存期間と件数の上限
 
 - **保存期間（決定）: 最後の動きから 7 日**（`updated_at` で決める。開いて見るだけでは更新しない。DocuNavi の方針と同じ値・同じ決め方）。
-- **掃除は、Go の保守コマンド**（新しい実行物。`api/cmd/history-cleanup`・新設の予定。DocuNavi の `app.history_admin` と同じ形）。`--older-than-days N`（N は 1 以上。既定 7）。**既定は件数の表示だけで、何も消さない。`--apply` を付けたときだけ消す。** 表示は件数だけで、利用者 ID・会話 ID は出さない。終了コードは 0（完了）・1（DB の失敗）・2（使い方の誤り・接続先が未設定）。Python ではなく Go にする理由: 履歴の表を読み書きするのは API の仕事で、同じ業務ロジック（表の定義・削除の規則）を 2 つの言語に置かない（ADR 0005）。新しい言語・依存・サービスは足さない（Go の標準ライブラリと、API が使う `pgx` と `internal/store` を使う）。
+- **掃除は、Go の保守コマンド**（`api/cmd/history-cleanup`。DocuNavi の `app.history_admin` と同じ形）。`--older-than-days N`（N は 1 以上。既定 7）。**既定は件数の表示だけで、何も消さない。`--apply` を付けたときだけ消す。** 表示は件数だけで、利用者 ID・会話 ID は出さない。終了コードは 0（完了）・1（DB の失敗）・2（使い方の誤り・接続先が未設定）。Python ではなく Go にする理由: 履歴の表を読み書きするのは API の仕事で、同じ業務ロジック（表の定義・削除の規則）を 2 つの言語に置かない（ADR 0005）。新しい言語・依存・サービスは足さない（Go の標準ライブラリと、API が使う `pgx` と `internal/store` を使う）。
 - **件数の上限（決定）: 保存時に、1 人あたり 50 件を超えた分を古い順に消す**（§2.3.3 の 5。一覧の上限 50 と同じ定数）。
   - **理由:** 一覧は新しい 50 件だけで、51 件目以降は画面に出ない。本人は、画面から ID を得る手段が無く、それらを消せない。掃除は手で流す（下）ので、「本人が消せる」「保存期間 7 日」だけでは保証にならない。保存を 50 件に収めれば、一覧に出る会話が保存の全部で、本人が消せる範囲と一致し、画面に出ない会話が溜まらない。
   - **効き方:** 保存のたびに効く（定期実行に依らない）。いま保存した会話は先頭なので、消えない。別のタブで開いている古い会話は、次の保存で消えうる（開き直しの 404。§7.1.4 の 5）。
 - **保証できるのは、件数（50 件）のほう。** 7 日は目安: DocuNavi は Cloud Scheduler＋Cloud Run Job（週 1 回）だが、TownScan はローカルだけで、定期実行の仕組みが無い。当面は手で流す。**期限を過ぎた会話は、コマンドを流すまで残る**（API は、期限を理由に隠さない。DocuNavi も同じ）。公開（P7）の前に、実行の仕組みを決める（ADR 0006 の未確認）。
 - DocuNavi の保守コマンドにある `--thread-id`（1 件を運用者が消す）は、足さない（本人の削除は API で、利用者ごと消すなら `auth_user` の行を消す）。
 
-**承認の関門**（それぞれ別に承認を得る。前の承認は次に及ばない）: この仕様の main へのコミットと push・DDL の実行（`history.sql` を `go:embed` へ足すコミットを main へ入れると、次の API の起動で、すでにあるボリュームの DB に表が入る。マージの前に、適用先の DB と影響を示す）・`api/cmd/history-cleanup` を実際に `--apply` で流すこと・本番への配備。Python のローダー（`python -m app.load`）の `apply_schema` は、この表を作らない（使わない）。
+**承認の関門**（それぞれ別に承認を得る。前の承認は次に及ばない）: `history.sql` の変更を main へ入れること（次の API の起動で、すでにあるボリュームの DB に流れる。マージの前に、適用先の DB と影響を示す）・`api/cmd/history-cleanup` を実際に `--apply` で流すこと・本番への配備。Python のローダー（`python -m pipeline.load`）の `apply_schema` は、この表を作らない（使わない）。
 
 ## 3. ディレクトリと担当
 
 | 場所 | 内容 |
 |---|---|
 | `pipeline/` | 後処理（ベクトル化・正解の建物データ（任意）の読み込み・評価・差分と 3 分類・地区名）。出力は §4.1 |
-| `pipeline/colab/` | Colab 側の推論スクリプト（**メインのセッションが担当。触らない**） |
-| `api/` | Go の API（ADR 0005）: DB の読み取り・ツール・チャット（模擬モデル。任意で Gemini）・画像切り出し・認証・会話の履歴 |
+| `pipeline/colab/` | Colab 側の推論スクリプト |
 | `pipeline/load.py`・`pipeline/sql/` | DB へのローダー（`python -m pipeline.load`）と DB スキーマ（`schema.sql`・`auth.sql`） |
+| `api/` | Go の API（ADR 0005）: DB の読み取り・ツール・チャット（Gemini と模擬モデル）・画像切り出し・認証・会話の履歴 |
 | `frontend/` | Next.js（App Router・TypeScript）。`frontend/Dockerfile` を含む |
-| `compose.yaml`・`.env.example`・`scripts/dev-up.sh` | backend の担当 |
-| `scripts/verify.sh`・`.github/` | 最後に統合役が配線（それまで触らない） |
+| `contract/` | API の契約の検査（HTTP だけで叩く） |
+| `evals/` | 実 Gemini のツール選択の評価 |
+| `compose.yaml`・`.env.example`・`scripts/` | 起動（`dev-up.sh`）と検査（`verify.sh`・`test-go.sh`・`test-contract.sh`） |
+| `.github/` | CI（`verify.sh repo` だけ） |
 | `data/townscan/` | 実行時データ（gitignore 済み。Git に入れない） |
 
 ## 4. データの契約
@@ -273,7 +248,7 @@ data/townscan/
   fr2/colab/                          Colab の出力（メインが置く。fr2 は run のフォルダ名）
     meta.json                         モデル・版・正規化・タイル一覧・取得結果
     prob_{year}_{x}_{y}_s{100|150|200}.npy   建物の確率 float16 (H,W)。H=W=256×倍率（双三次で拡大して推論。fr2 は 2.0 倍だけ）
-  fr2/out/                            後処理の出力（pipeline が作る。backend のローダーが読む）
+  fr2/out/                            後処理の出力（pipeline が作る。ローダーが読む）
     run.json                          {run_id, kind:"real"|"synthetic", created, model, params, tiles:[...], notes}
     areas.json                        [{id, z, x, y, bbox:[w,s,e,n], centroid:[lon,lat], name, ward, municipality, name_source}]
     buildings_2014.geojson / buildings_2024.geojson   建物ポリゴン（lon/lat）。properties: area_id, area_m2, prob_mean
@@ -297,18 +272,18 @@ evidence: { prob_2024_mean, ov_2014, prob_2014_p90, ov_kiban, edge_touch },
 reason: "new_absent_2014" | "present_2014" | "ambiguous" | "edge"
 ```
 
-`reason` は上の 4 つだけ。面積 20 m² 未満の塊は §5 で**捨てる**ので、`candidates.geojson` に出ず、`"small"` は**出力しない**（pipeline の `diff` は、捨てる理由として内部でだけ使う）。backend のローダーは `"small"` も受理するが、これは余分に許しているだけで、pipeline は出さない。
+`reason` は上の 4 つだけ。面積 20 m² 未満の塊は §5 で**捨てる**ので、`candidates.geojson` に出ず、`"small"` は**出力しない**（pipeline の `diff` は、捨てる理由として内部でだけ使う）。ローダーは `"small"` も受理するが、これは余分に許しているだけで、pipeline は出さない。
 
 ### 4.3 DB（Postgres 17。拡張なし）
 
 `runs(run_id pk, kind, created_at, model, params jsonb, notes)`・`areas(id pk, run_id, z, x, y, west, south, east, north, centroid_lon, centroid_lat, name, ward, municipality, name_source)`・`buildings(id bigserial pk, run_id, area_id, year, area_m2, prob_mean, geom jsonb)`・`candidates(id text pk, run_id, area_id, class, area_m2, west, south, east, north, centroid_lon, centroid_lat, geom jsonb, evidence jsonb, reason)`・`metrics(run_id pk, body jsonb)`。`class` は CHECK 制約。ローダーは冪等（同じ run_id を入れ直すと置き換える。トランザクション）。表示する現在の run は「最新の created_at」。
 
-**会話の履歴の表 2 つ**（§2.3。**実装済み**。表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（新設の予定。Go だけが使う表。`pipeline/sql/` には置かない。`TestSchemaMatchesLoaderCopy` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴は、その SQL の並びの `authSQL` のあとに `historySQL` を足す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
+**会話の履歴の表 2 つ**（§2.3。**実装済み**。表 2 つの追加は承認済み〔ユーザー、2026-11-25〕。Go の API にだけ入れる）: `conversations(user_id, id, title, created_at, updated_at)`（主キー `(user_id, id)`。`user_id` は `auth_user.id` への外部キー `conversations_user_fk`・`ON DELETE CASCADE`）と、`conversation_messages(user_id, conversation_id, seq, role, content, results jsonb, tool_calls jsonb, run_created_at)`（主キー `(user_id, conversation_id, seq)`。`conversations` への外部キーで `CASCADE`）。置き場は **`api/internal/store/sql/history.sql`**（Go だけが使う表。`pipeline/sql/` には置かない。`TestSchemaMatchesLoaderCopy` の対象にしない）。Go の API はすでに `schema.sql`・`auth.sql` を `go:embed` し、起動のたびに `ApplySchema` で、1 つのトランザクション・1 つの鍵で適用する（`api/internal/store/schema.go`。冪等）。履歴の `historySQL` は、その並びの `authSQL` のあとに流す（`auth_user` を参照するため、順序が要る）。何度流しても同じになる形（`IF NOT EXISTS`）で、`DROP`・`TRUNCATE` は書かない。設計の説明・書き込みの SQL の形は §2.3.2・§2.3.3。
 
-**承認の関門:** `historySQL` を `go:embed` へ足すコミットを main へ入れると、次の API の起動で、**すでにあるボリュームの DB に表が入る**。表の追加の承認は、この関門を通る承認として扱う（マージの前に、適用先の DB と影響を示す）。Python のローダー（`python -m app.load`）の `apply_schema` は、この表を作らない（使わない）。
+**承認の関門:** `history.sql` を変えて main へ入れると、次の API の起動で、**すでにあるボリュームの DB に流れる**（マージの前に、適用先の DB と影響を示して承認を得る）。Python のローダー（`python -m pipeline.load`）の `apply_schema` は、この表を作らない（使わない）。
 
 ```sql
--- 会話の履歴（ログイン中だけ）。auth.sql（auth_user）のあとに流す。仕様: spec-prototype §2.3（案）。
+-- 会話の履歴（ログイン中だけ）。auth.sql（auth_user）のあとに流す。仕様: spec-prototype §2.3。
 CREATE TABLE IF NOT EXISTS conversations (
     user_id     text        NOT NULL,
     id          text        NOT NULL CHECK (id ~ '^[A-Za-z0-9_-]{1,128}$'),
@@ -355,7 +330,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 | GET `/api/metrics` | `eval.json` の内容 + provenance |
 | POST `/api/chat` | 入力 `{messages:[{role,content}], conversation_id?}`（`conversation_id` は任意。会話の履歴〔§2.3〕を保存するときだけ付ける）、出力 `{message:{role:"assistant", content, results:ToolResult[], tool_calls:[{name,args}]}}`（`conversation_id` の有無で変わらない） |
 | GET `/api/me` | 任意のログイン（§2.1）の受け口。`Authorization: Bearer <JWT>` を検証し、`{sub, email, name, picture}` を返す |
-| GET `/api/conversations` | 会話の履歴（§2.3。Go の API だけ）: 本人の会話の一覧。`Authorization: Bearer` が要る |
+| GET `/api/conversations` | 会話の履歴（§2.3）: 本人の会話の一覧。`Authorization: Bearer` が要る |
 | GET `/api/conversations/{conversation_id}/messages` | 同上: 会話の発言（古い順） |
 | DELETE `/api/conversations/{conversation_id}` | 同上: 会話を 1 件消す |
 
@@ -369,7 +344,7 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
 - **503** `{error:{code:"unavailable", message}}`: `AUTH_ISSUER`・`AUTH_JWKS_URL` のどちらかが無い、または URL の形が不正（ログインの設定が無い扱い。起動は止まらない。§2.1。JWT の有無を見る前に返す）、または JWKS を取りに行けず前に取れた鍵も無い。ほかの入口には影響しない。
 - 使うのはアカウントのロジック（ログインの確認・JWT と JWKS の疎通の確かめ）だけ。チャット・地図・詳細・精度などの入口は、これを呼ばず、これに依存しない。
 
-**会話の履歴の API**（§2.3。**Go の API に実装済み。Python の API には入れない**。保存の動き・検査の順・上限は §2.3.4・§2.3.5）:
+**会話の履歴の API**（§2.3。保存の動き・検査の順・上限は §2.3.4・§2.3.5）:
 
 - **共通**: ログインは `Authorization: Bearer <JWT>`（§2.1。ES256・`iss`・`aud`・`exp`・`sub` を検査。`GET /api/me` と同じ検証）。**利用者は、検証に通った JWT の `sub` だけから決める**（本文・クエリ・ヘッダーの別の値は使わない）。エラーは既存の形 `{error:{code,message}}`。422 は `details`（`loc`・`msg`）も付く。`details[].loc` は**文字列の配列**（例 `["path","conversation_id"]`・`["body","conversation_id"]`）で、`message` の側が先頭の `loc` を `.` でつないだ形（例「引数が不正です（path.conversation_id）」。`api/internal/apierr`）。入力値は応答に出さない。履歴の保存先が使えないときの文に、例外の内容・接続先・SQL を含めない。
 - **`Cache-Control: no-store`**: 3 本の API は、成功・失敗のどの応答にも（204・401・404・422・500・503 を含めて）付ける（人ごとに違う内容。`/api/me` と同じ）。ルーターが 3 経路に合わせたあとの応答だけが対象（経路もメソッドも合わない 404・405 は含めない）。`POST /api/chat` には付けない（既存のまま）。
@@ -421,12 +396,12 @@ ToolResult =
 - 範囲外の例: 天気・雑談、2014・2024 年以外の年（2025 年以降を含む）の棟の確認（写真が無い → `no_photo_period`）、衛星の「変化の当たり」・屋根の太陽光パネル・取り壊しや減少（`not_implemented`: 未実装と言う）、対象地区の外（日本の地名を含む）。
 - LLM の切り替え: 環境変数 `LLM_PROVIDER`（`mock`＝API 自体の既定・テスト用、`gemini`＝compose の既定。§2.2）。道具の登録口は、後から GEE の道具を足せる形にする（登録表）。
 - **Gemini を選んだとき**（`LLM_PROVIDER=gemini`。実装は `api/internal/chat/gemini*.go`）:
-  - **役割**: 「どのツールを呼ぶか」と「結果の説明文」だけ（件数だけ・写真 1 件だけ・精度 1 件だけの回答の本文は、上のとおりコードが決める）。LLM が書く文は、2 文までのまとめにし、分類の名前と内訳・画面を見れば分かること・「増えた」「増加」を書かないよう、システムの指示で言う（指示なので、守られる保証は無い）。座標・ID は書かせない。数字・件数・面積は、結果に書かれている値だけを、そのまま書いてよい（システムの指示で言い、文は `guard_numbers` が結果と照合して検査する。結果にない数字・漢数字・英語の数詞は固定の文に替える。カードの位置の語〔上の・下の など〕は取り除き、上記・下記は固定の文に替える。**検査が止めるのは数字と位置の語だけ**で、数字以外の主張〔最も多い・過半など〕は検査の外。[ADR 0009](decisions/0009-llm-writes-result-numbers.md)）。結果（`results`）・`tool_calls` の形は、模擬のときと同じ。変わるのは、`message.content` と、どのツールを呼ぶか。
+  - **役割**: 「どのツールを呼ぶか」と「結果の説明文」だけ（件数・候補の一覧・写真・精度・お断りの結果 1 件だけの回答の本文は、上のとおりコードが決める）。LLM が書く文は、2 文までのまとめにし、分類の名前と内訳・画面を見れば分かること・「増えた」「増加」を書かないよう、システムの指示で言う（指示なので、守られる保証は無い）。座標・ID は書かせない。数字・件数・面積は、結果に書かれている値だけを、そのまま書いてよい（システムの指示で言い、文は `guard_numbers` が結果と照合して検査する。結果にない数字・漢数字・英語の数詞は固定の文に替える。カードの位置の語〔上の・下の など〕は取り除き、上記・下記は固定の文に替える。**検査が止めるのは数字と位置の語だけ**で、数字以外の主張〔最も多い・過半など〕は検査の外。[ADR 0009](decisions/0009-llm-writes-result-numbers.md)）。結果（`results`）・`tool_calls` の形は、模擬のときと同じ。変わるのは、`message.content` と、どのツールを呼ぶか。
   - **呼び方**: `generateContent` に、登録表のツールを `functionDeclarations` として渡す（引数のスキーマは登録表の定義から作る）。最初の往復は `toolConfig` の `ANY`（必ずツールを呼ぶ。範囲外も `refuse` を呼ばせる）、結果（`functionResponse`）を渡したあとは `AUTO`。**モデルへの往復は最大 4 回、ツール呼び出しは最大 6 件、1 回の呼び出しの待ちは 20 秒（接続・受信の段階ごと）。チャット 1 回の要求の全体（往復・ツール・再試行）には 27 秒の期限があり、各呼び出しの待ちは残りの期限を超えない**（各呼び出しが渡した待ちの内に終わる場合、frontend の Next.js の転送の既定の待ち 30 秒より前に、API が 502 を返す。少しずつ届く応答は、呼び出しの途中では切らない）。ツールを 1 つも呼ばずに返った文は、根拠が無いので使わない。モデルが返した `functionCall` の発言は、`thoughtSignature` を含め、返ってきたとおりに戻す。
   - **送るもの（Google へ出ていくもの）**: 会話の末尾 20 件（`CONTEXT_MESSAGES`。質問の文面を含む）、システムの指示（規則と、地区の**名前と市町村だけ**。座標・件数・ID は入れない）、ツールの結果（出どころ・座標・画像の URL・候補 ID の一覧・区画の一辺の長さは除き、配列は 50 件まで）。地区は名前で指定でき、API が ID に直す。
   - **安全**: ① 返答文は必ず `guard_numbers` を通す（コードが組み立てた件数の本文は、模擬モデルの文と同じ範囲の検査）。LLM が結果に無い数字を書いた文は、安全なテンプレートに替わる（替えた回数だけをログに出す。文は出さない）。検査は、数字の連なり・漢数字＋助数詞に加え、空白や不可視の書式文字（ゼロ幅スペース・ソフトハイフンなど）で区切った数も見る（不可視の文字は先に除いてから数える。空白で区切った整数の並びは、つなげた数も、結果に無ければ落とす）。② `refuse` の `message` は、結果にそのまま入る（＝結果の数字として guard が認める）ので、写真の年（2014・2024）以外の数字を含む・カードの位置の語（下のカード・上記など）を含む・空・300 文字を超える文は、理由ごとの固定の文に替える。`suggestions` は捨てる（既定の候補が付く）。③ 返答文は 1000 文字までに切る（frontend が会話の全履歴を送り返し、1 件 2000 文字の上限があるため）。④ 宣言していない引数は、`tool_calls` に残さない。知らないツール名は、断りの結果にする。⑤ ユーザーの発言の中の指示には従わない、とシステムの指示で言うが、守られる保証は無い。実際の防ぎは、数字の検査・ツールの境界（結果は DB からだけ）・`refuse` の文の検査。
   - **失敗**: キーが無効（401・403。Google は無効なキーに 400 を返すこともある）・429・5xx・タイムアウト・壊れた応答・候補が無い／拒否・往復やツール呼び出しの上限超過は、**模擬に切り替えず**、HTTP **502**（`code:"llm_unavailable"`、メッセージは固定）。**再試行**は、一時的な失敗（HTTP 5xx・タイムアウト・接続エラー）だけを、チャット 1 回の要求につき最大 1 回（往復ごとではない）、1 秒待ってやり直す。4xx（429 を含む）・壊れた応答はやり直さない。待ったあとの残りの期限が 5 秒未満なら、やり直さない。期限を使い切ったときの失敗の種類は `deadline`。やり直したことも、種別つきでログに残す。ログと応答に出すのは、失敗の種類・HTTP のステータス・Google の理由の定数（`INVALID_ARGUMENT` など）だけで、キー・URL・応答の本文は出さない。frontend は、既存の失敗の表示（「送信できませんでした」＋「もう一度送る」）でそのまま扱える。
-  - **未確認**: 実 API での動作（`functionDeclarations` の受理・`ANY` と `AUTO` の挙動・`gemini-3.5-flash-lite` での関数呼び出し・日本語の質・待ち時間・無料枠の制限と利用条件）。キーが入ったあとに、手で確かめる。
+  - **実 API の確認**: ツールの選び方は `evals/`（実 Gemini）で測る（2026-11-27 は 18 問とも期待どおり。そのあと断りの本文を直し、断りの 5 問を流し直して 5／5。各 1 回）。判定はツール・絞り込み・断りの理由で、本文の正しさは測らない。無料枠の制限と利用条件は未確認。
 
 ## 5. 差分と 3 分類（`pipeline/diff.py`）
 
@@ -442,7 +417,7 @@ ToolResult =
 
 ## 6. 評価（`pipeline/evaluate.py` → `eval.json`）
 
-**アプリの表示は、フランス版が未測定のまま**（2026-11-27。FOTBCD の val の値は [ADR 0015](decisions/0015-move-to-france.md) にあり、アプリへはまだ載せていない）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は固定の値で、このアプリの写真（IGN の配信タイル）では確かめていない。注記（`notes`）には、モデル・倍率・閾値が、選び方の記録がある組（`pipeline/run_postprocess.py` の `FIXED_BASIS`。今は FLAIR-HUB の倍率 2.0・閾値 0.6 だけ）とそろって一致するときに限り、選び方を書く。API と画面は、固定の値の選び方を決め打ちで言わない（改訂 27）。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。結果をアプリ（`eval.json`・精度の画面）へ載せる形は、val の推論のあとに決める。
+**アプリの表示は、フランス版が未測定のまま**（2026-11-27。FOTBCD の val の値は [ADR 0015](decisions/0015-move-to-france.md) にあり、アプリへはまだ載せていない）。`run_postprocess --fixed 倍率,閾値` が作る `eval.json` は `{reference:null, chosen:{scale,threshold,selected_by:"fixed"}, protocol:{year:2024}, new_building_recall:null, notes:[...]}` で、`holdout`・`tune`・`sweep`・`split` を書かない。画面と回答は「未測定」「まだ測っていません」と出し、固定の値を「調整用の地区で選んだ」と言わない。倍率と閾値は固定の値で、このアプリの写真（IGN の配信タイル）では確かめていない。注記（`notes`）には、モデル・倍率・閾値が、選び方の記録がある組（`pipeline/run_postprocess.py` の `FIXED_BASIS`。今は FLAIR-HUB の倍率 2.0・閾値 0.6 だけ）とそろって一致するときに限り、選び方を書く。API と画面は、固定の値の選び方を決め打ちで言わない（改訂 27）。正解データ（FOTBCD）での指標は [ADR 0015](decisions/0015-move-to-france.md) で定義し、計算は §6.1。val の推論と採点は済み（ADR 0015・0016）。結果をアプリ（`eval.json`・精度の画面）へ載せるのは未実装で、形も未定（plan の F3 の③）。
 
 ### 6.1 FOTBCD の評価（`pipeline/fotbcd.py`・`pipeline/evaluate_fotbcd.py`）
 
@@ -493,20 +468,18 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
 
 ## 7. UI（`frontend/`）
 
-デザインの参考: 以前の UI モックのソース `/private/tmp/claude-501/-Users-Home-Projects/1150cdf2-1c45-42c2-85c0-d568636ced2a/scratchpad/ts-mock/project/*.dc.html`（Main＝会話と地図・Welcome＝初回の説明・Detail＝建物の詳細・Quality＝精度）。レイアウト・文言・色を踏襲してよい（写真は模式図で、数値はダミーだった。今回は実データ）。
-
-- **全体の枠（サイドバー）**: JobNavi・DocuNavi と同じ作り・見た目・規則。本文（以下の各ページ）は、その右（1023px 以下では、上の帯の下）に置く。
+- **全体の枠（サイドバー）**: JobNavi・DocuNavi と同じ作り・見た目・規則。本文（以下の各ページ）は、その右（1023px 以下では、サイドパネルを開くボタンの行の下）に置く。
   - **幅 1024px 以上: 左のサイドパネル。** 開いた表示（上にロゴと名前・閉じるボタン、続いて**「新しい会話」**（DocuNavi と同じ位置のボタン。細い帯では「＋」のアイコン）、下にアカウント（アバター＋名前）。ページへの入口の欄〔行き先〕は無い）と、アイコンだけの**細い帯**を、ボタンで切り替える。はじめは開いた状態で、保存はしない。細い帯では、ロゴの位置が「サイドパネルを開く」ボタンになり（ホバー・フォーカスでロゴが開閉の絵に変わる）、帯の空き部分をクリックしても開く。名前は、ホバーとキーボードのフォーカスで、アイコンの右に出る。開閉したら、フォーカスを、いま押せる側のボタンへ移す。
-  - **「新しい会話」**（サイドパネル。`frontend/components/NewConversation.tsx`・`AppSidebar.tsx`）: ホーム（`/`）が開いていれば、チャット列の「新しい会話」と同じ処理（返答待ちの通信を止め、発言を 0 件に戻し、入力欄へフォーカスを移す。指で触る端末では移さない）を呼ぶ。ほかのページ（精度）では、ホームへ移る（移ればチャットは新しく始まる）。拡大ビュー（地図・グラフ・写真の比較）は、チャット列のボタンと同じく、閉じて（狭い幅は、タブの帯ごと外してチャットへ戻る）、回答ごとの状態も捨てる（下の「「新しい会話」」）。1023px 以下は、サイドパネルが無いので、チャット列のボタンだけ。会話の履歴（一覧・保存・開き直し）は、**ログイン中だけ**の機能として、§7.1 に仕様を書いた（**仕様のみ。実装は Go への切り替えのあと**。いまは無く、会話は画面の状態だけで、開き直すと消える）。ログインしていないときは、今までどおり。
+  - **「新しい会話」**（サイドパネル。`frontend/components/NewConversation.tsx`・`AppSidebar.tsx`）: ホーム（`/`）が開いていれば、チャット列の「新しい会話」と同じ処理（返答待ちの通信を止め、発言を 0 件に戻し、入力欄へフォーカスを移す。指で触る端末では移さない）を呼ぶ。ほかのページ（精度）では、ホームへ移る（移ればチャットは新しく始まる）。拡大ビュー（地図・グラフ・写真の比較）は、チャット列のボタンと同じく、閉じて回答のタブへ戻り、回答ごとの状態も捨てる（下の「「新しい会話」」）。1023px 以下は、サイドパネルが無いので、チャット列のボタンだけ。会話の履歴（一覧・保存・開き直し）は、**ログイン中だけ**の機能（§7.1）。ログインしていないときは、会話は画面の状態だけで、開き直すと消える。
   - **幅 1023px 以下: サイドパネルを、必要なときだけ重ねて開く**（2026-11-25、ユーザー決定。上の横帯は無い）。はじめは閉じている（出さない）。本文の上に、細い 1 行（44px）があり、そこの「サイドパネルを開く」ボタンで、本文の上に重ねて開く（固定・窓の高さいっぱい・幅は最大 18rem。後ろに暗い背景〔scrim〕）。開いたときは、いつも**開いた表示**（細い帯にはならない）。閉じるのは、閉じるボタン・背景・Esc・ロゴ・「新しい会話」・ページの移動（アカウントのメニューの Esc は、メニューだけを閉じる）。開くとフォーカスは閉じるボタンへ、閉じると開くボタンへ戻る。細い帯の開閉は PC 幅だけで、幅の判定は `useWideScreen`（`(min-width: 1024px)`。サーバーの描画では PC 幅として扱い、見えるかどうかは CSS が決める）。DocuNavi も、狭い幅でサイドバーを開閉できる。
   - **状態の印（「模擬モデルで応答しています」・「モデル: 名前」）は出さない**（2026-11-25、ユーザー決定。サイドパネルにも、ほかのどこにも置かない）。合成データ・API 不通のバナーは、本文の上に出す（`AppBanners`）。
   - **ページへの入口の欄は無い**（2026-11-25 に、ユーザー決定で外した。ホームはロゴ、精度は下の「アカウントのメニュー」の中。サイドパネルにも横帯にも、ページの入口は置かない）。ページは 2 つ（`/`・`/accuracy`）。「このアプリについて」のページは、同日にやめた。さわればわかる作りにし、限界・出典と規約は精度ページへ移した。合成データのバナーと API 不通のバナーは、どちらの幅でも本文の上に出す（内容・文言は変えない）。
-- **アカウントのメニュー**（サイドバー下のアバターのボタン。1023px 以下は上の帯の右端）: 押すとメニューが開く（細い帯では右へ、開いたパネルでは上へ）。パネルを開いているときは、ボタンにアバターと名前が並ぶ。
+- **アカウントのメニュー**（サイドパネルの下のアバターのボタン。1023px 以下は、重ねて開くサイドパネルの下）: 押すとメニューが開く（細い帯では右へ、開いたパネルでは上へ）。パネルを開いているときは、ボタンにアバターと名前が並ぶ。
   - ログイン中: メールアドレス（先頭）・テーマ（ライト / ダーク / システム。選ぶと localStorage に保存し、以後は OS より優先する。「システム」で OS に従う状態へ戻す）・**「このアプリの精度」**（`/accuracy` へのリンク。押すとメニューを閉じる。開いているページでは `aria-current="page"`。ログインの有無に関わらず出る）・**「表示名を変更」**（DocuNavi と同じ。ログイン中だけ。押すとメニューを閉じて、標準の `<dialog>` を開く。1 欄・前後の空白を除いた 1〜30 文字・制御文字なし。保存は、サーバーアクション（`updateNameAction`）が、検査し直してから、Better Auth の `updateUser` で**名前だけ**を書き換える。HTTP の `/api/auth/update-user` は閉じたまま。保存したら、サイドパネルの名前がすぐ変わる。この名前は、自分にだけ表示される）・ログアウト。アバターは**プロフィール画像**（Google の `image`。`https://` のときだけ表示し、無い・読めないときは人型アイコン）。ログアウトはサーバーアクションでセッションを消し、`/` へ戻る。
   - ログインしていない: 「≡」（メニューの印。JobNavi と同じ。人型アイコンはログイン中の画像が無いときだけ）、テーマ、「このアプリの精度」、ログイン（`/login`）の入口。
   - 開いたら先頭の項目にフォーカスを置く。↑↓ で移動、Esc で閉じてボタンへ戻る、メニューの外を押しても閉じる。
 - `/login`: **ログインは Google だけ**（見出し・1 行の案内・「Google でログイン」ボタン。はじめての人は、ログインするとそのまま登録される）。ログイン済みなら `/` へ。失敗は固定の文で出す（理由・秘密を含めない）。設定が足りないときは「まだ設定されていません」（§2.1）。**ログインは任意**: しなくても、全ページ・全機能を今まどおり使える。
-- `/`: **チャットの 1 列**（枠・背景は無く、ページの地の上に、幅 46rem（736px）の列を中央に置く。DocuNavi と同じ）。常設の結果領域は無い。チャットは結果カードを §4.5 の型ごとに描く（`switch` を網羅的にし、`never` で漏れを検出）。グラフ・地図は、回答の中の**図**として出る（下の「回答の中の図」）。図の「拡大」、写真を押す操作、地図の表示の「地図で見る」、回答の下の「表示を切り替える」の地図・グラフ、最初の画面の「解析した地区を地図で見る」は、**拡大ビュー**（地図・グラフ・写真の比較）を開く。拡大ビューは、本体の幅が足りる（広い）ときは**チャットの右に置く非モーダルのパネル**、足りない（狭い）ときは**チャット・地図・グラフ・写真の 4 つのタブ**の画面（下の「見た目」。判定は、サイドパネルを除いた本体の幅）。サジェストのチップ。送信中・エラーの状態。「模擬モデルで応答しています」の表示（`/api/health` の `llm`）。`run.kind = synthetic` のとき、目立つバナー「合成データ（テスト用）」。
+- `/`: **チャットの 1 列**（枠・背景は無く、ページの地の上に、幅 46rem（736px）の列を中央に置く。DocuNavi と同じ）。常設の結果領域は無い。チャットは結果カードを §4.5 の型ごとに描く（`switch` を網羅的にし、`never` で漏れを検出）。グラフ・地図は、回答の中の**図**として出る（下の「回答の中の図」）。図の「拡大」、写真を押す操作、地図の表示の「地図で見る」、回答の下の「表示を切り替える」の地図・グラフ、最初の画面の「解析した地区を地図で見る」は、**拡大ビュー**（地図・グラフ・写真の比較）を開く。拡大ビューは、どの幅でも、本体の全幅の**回答・地図・グラフ・画像の 4 つのタブ**の画面（下の「見た目」。以下の「写真の比較」は、画像のタブの中身）。サジェストのチップ。送信中・エラーの状態。`run.kind = synthetic` のとき、目立つバナー「合成データ（テスト用）」。
   - **回答の中に出すもの**（`frontend/components/chat/cards.tsx`・`frontend/lib/answer-view.ts` の `planAnswer`。[ADR 0013](decisions/0013-one-view-per-answer.md)）: 回答は、**本文と、その下の表示 1 つ**。数字・件数・面積・地区の名前は、結果の値のまま（丸めない）。
     - **表示は順位で 1 つ**（純粋な関数 `planAnswer`）: `map_focus`（範囲と候補の並びが読める）＞ `detection_image` ＞ `compare`（比べる地区が 1 つ以上）＞ 候補の一覧（`table` で、どの行にも候補 ID がある）＞ `count`（内訳と出どころがある）。2 位以下は出さず、切り替えに入れる。順位の対象でない結果（`accuracy`・`refusal`・使い方の表・知らない型・壊れた結果）は、いつも出す。
     - **表示を切り替える**: 最新の回答の下だけに、ボタンを 2 つまで。2 位以下の結果（順位の順）が先で、次に、1 位の結果と同じ対象の「地図で見る」「グラフで見る」（件数は地図とグラフ、一覧はその候補を目立たせる地図、比較と検出画像は地図、地図の表示は無し）。2 位以下の件数・一覧・検出画像は、押すと回答の中に出て、そのボタンは消える。地図・グラフは、その回答の拡大ビューを開く。押しても質問は送らない。別の解析結果の回答には出さない。
@@ -530,13 +503,12 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
     - **壊れたとき**: 図の中身の描画が壊れても、図の枠と「拡大」は残り、中に日本語のエラー（`role="alert"`）と「もう一度表示する」を出す（チャット・ほかの図は巻き込まない）。
   - **拡大ビューを開く**（`frontend/components/HomeClient.tsx`）: 図の「拡大」・写真を押す操作・地図の表示の「地図で見る」・回答の下の「表示を切り替える」の地図とグラフ・最初の画面の「解析した地区を地図で見る」を**押したときだけ**開く（図の地図の「写真を比べる」・一覧、グラフの図の「地図で見る」も、図の中から開く操作）。**回答が届いても、拡大ビューは開かず、画面は替わらない**（図は回答の中に出るだけ。地図の表示の回答も同じ。拡大ビューへ広げるのは、押したとき）。**拡大ビューを開いているあいだに新しい回答が届いても、画面は切り替えない**（回答のタブに文字の印が付く。下の「新着の知らせ」）（別の回答のボタンを押したときだけ、その回答へ切り替える。切り替えは「新しく開いた」扱いで、フォーカスを移し直す）。回答が届いたことでは、フォーカスを動かさない。開く画面は、押したボタンで決まる: 「地図を拡大」＝地図、「グラフを拡大」＝グラフ、「地図で見る」（`map_focus`）＝地図（その候補を目立たせて範囲へ寄せる。最初の画面の「解析した地区を地図で見る」からなら全地区）、写真を押す・図の地図の一覧＝写真の比較（その候補を選び、地図もその候補へ寄せる）、図の地図の「写真を比べる」＝写真の比較（地図は動かさない）。開いたあとは、タブ（利用者の操作）でも画面を替えられる。
   - **拡大の単位は、回答 1 件**: 拡大ビューは同時に 1 つだけ。回答ごとに、地図・グラフ・写真の比較の状態（選んでいるタブ・絞り込み・強調・選んだ候補・寄せ先）を持ち、会話のあいだ保つ（保存はしない）。その状態は、回答の中の図と共有する（上の「回答の中の図」）。その回答を**はじめて図に出すとき・はじめて開くとき**の早いほうで、回答の結果から決める（絞り込みは下の「回答の条件」、強調・選択は `map_focus`・検出画像・写真を押した候補）。**開き直すときは、利用者が図・拡大ビューで変えたタブ・絞り込み・選択をそのまま残し**、押したボタンの画面を選ぶ。別の回答のカードを押すと、その回答の状態で開く（前の回答の状態は残る）。最初の画面の「解析した地区を地図で見る」は、回答を持たない 1 つの状態（全地区・地図）として扱う。**地図の拡大・移動は保たない**（閉じると地図は外れる。開き直すと、保っている寄せ先へ寄せ、無ければ地区の枠が収まる範囲を見せる）。窓の幅を変えても、回答ごとの状態と入力中の文は失わない（幅で形が変わらないので、開いている回答・選んでいるタブもそのまま）。
-  - **見た目**（`frontend/components/HomeClient.tsx`・`ExpandedView.tsx`。モーダルでも横パネルでもない。[ADR 0008](decisions/0008-full-width-tabs.md)）: **メインの枠いっぱい（サイドパネルを除いた本体の全幅）の 4 つのタブ（回答・地図・グラフ・画像。2026-11-26 に名前を改めた）**。どの幅でも同じ形で、幅の測定・判定は無い（`lib/layout-mode.ts`・`data-layout` は無くす）。タブの帯は、いつも本体の上端に出る（最初の画面から。回答のタブを選んだ状態。回答が届いても、画面は替わらない）。地図・グラフ・画像のタブは、拡大ビューがまだ開いていないとき（最初の画面など）は、押すと、回答を持たない拡大ビュー（全地区。「解析した地区を地図で見る」と同じ状態）をその画面で開く（閉じたあとのフォーカスは、押したタブへ戻る）。閉じる手段は、質問の行の右端の ✕（読み上げの名前「閉じる」）と Esc の 1 通りで、どの画面でも拡大ビューを閉じて回答へ戻る。帯は、枠も背景も無く、下に細い線を 1 本引き、選んでいるタブは太字と下線 2px で示す。帯の下は、選んだタブの画面: 回答のタブは今までのチャット。地図・グラフ・画像のタブは、その回答の質問（長ければ省略）を示す行（右端に閉じる ✕）と、その下に画面。地図・グラフ・写真の比較は、本体の全幅を使う（チャットの列だけ、幅 46rem で中央）。窓いっぱいに使う（余白・角丸なし）。**開いてからマウントする**（地図の Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す。アニメーションは `prefers-reduced-motion` に従う。
+  - **見た目**（`frontend/components/HomeClient.tsx`・`ExpandedView.tsx`。モーダルでも横パネルでもない。[ADR 0008](decisions/0008-full-width-tabs.md)）: **メインの枠いっぱい（サイドパネルを除いた本体の全幅）の 4 つのタブ（回答・地図・グラフ・画像。2026-11-26 に名前を改めた）**。どの幅でも同じ形で、幅の測定・判定は無い。タブの帯は、いつも本体の上端に出る（最初の画面から。回答のタブを選んだ状態。回答が届いても、画面は替わらない）。地図・グラフ・画像のタブは、拡大ビューがまだ開いていないとき（最初の画面など）は、押すと、回答を持たない拡大ビュー（全地区。「解析した地区を地図で見る」と同じ状態）をその画面で開く（閉じたあとのフォーカスは、押したタブへ戻る）。閉じる手段は、質問の行の右端の ✕（読み上げの名前「閉じる」）と Esc の 1 通りで、どの画面でも拡大ビューを閉じて回答へ戻る。帯は、枠も背景も無く、下に細い線を 1 本引き、選んでいるタブは太字と下線 2px で示す。帯の下は、選んだタブの画面: 回答のタブは今までのチャット。地図・グラフ・画像のタブは、その回答の質問（長ければ省略）を示す行（右端に閉じる ✕）と、その下に画面。地図・グラフ・写真の比較は、本体の全幅を使う（チャットの列だけ、幅 46rem で中央）。窓いっぱいに使う（余白・角丸なし）。**開いてからマウントする**（地図の Leaflet が、大きさの無い枠で始まらないように）。閉じると全部外す。アニメーションは `prefers-reduced-motion` に従う。
     - **回答のタブ**: 隠すだけで外さない（入力中の文・受信・スクロール位置を保つ）。「回答」のタブを選ぶだけなら拡大ビューは閉じず、タブの帯と、ほかのタブの中身（地図の位置・拡大を含む）は保つ。✕・Esc で閉じると、回答のタブへ戻り、ほかのタブの中身（地図など）を外す（タブの帯は残る。回答ごとの状態は保つ）。回答のタブの画面（tabpanel）は、`tabindex="0"`（先頭の要素がフォーカスを受けないため。APG の注 4）。
     - **新着の知らせ**: 回答以外のタブにいる間に回答が届いたら、回答のタブに**文字の印**（色や点だけにしない）を出し、**空のまま先に置いてある**ライブ領域（`role="status"`。フォーカスは移さない）へ、短い 1 文「新しい回答が届きました」を入れる（毎回の数や点の変化は読み上げない）。回答のタブを選んだら、印を消す。
-    - タブの名前は固定（チャット・地図・グラフ・写真の比較）。どの回答の図かは、タブの名前ではなく、質問の行で示す。
-  - **フォーカス・閉じる**: **利用者の操作で開いたとき**、フォーカスを拡大ビューへ移す（選んでいるタブ。詳細の見出しへ移す操作のときは、その見出し）。拡大ビューの内容を別の回答へ切り替えたときも、新しく開いた扱いで移し直す。回答が届いたこと・窓の幅が変わったことでは、動かさない。閉じる（✕・Esc）と、開いたボタンへ戻す（そのボタンが無ければ、チャットの入力欄）。Tab は、いま表示している画面（タブの帯と選んでいるタブの中身）を巡る。**Esc**: 拡大ビューの中の Esc は（写真の比較の詳細の中でも）、拡大ビューを閉じる（例外は、地図で候補を選んでいるとき。地図の既存の動作のまま、1 回目の Esc は選択の解除だけ、2 回目で閉じる）。回答のタブを見ているときの Esc は、何も閉じない。開く・閉じるを、live region で知らせない（フォーカスの移動で足りる。知らせるのは、上の、狭い幅の新着だけ）。
+    - タブの名前は固定（回答・地図・グラフ・画像）。どの回答の図かは、タブの名前ではなく、質問の行で示す。
+  - **フォーカス・閉じる**: **利用者の操作で開いたとき**、フォーカスを拡大ビューへ移す（選んでいるタブ。詳細の見出しへ移す操作のときは、その見出し）。拡大ビューの内容を別の回答へ切り替えたときも、新しく開いた扱いで移し直す。回答が届いたこと・窓の幅が変わったことでは、動かさない。閉じる（✕・Esc）と、開いたボタンへ戻す（そのボタンが無ければ、チャットの入力欄）。Tab は、いま表示している画面（タブの帯と選んでいるタブの中身）を巡る。**Esc**: 拡大ビューの中の Esc は（写真の比較の詳細の中でも）、拡大ビューを閉じる（例外は、地図で候補を選んでいるとき。地図の既存の動作のまま、1 回目の Esc は選択の解除だけ、2 回目で閉じる）。回答のタブを見ているときの Esc は、何も閉じない。開く・閉じるを、live region で知らせない（フォーカスの移動で足りる。知らせるのは、上の新着だけ）。
   - **「新しい会話」**（チャット列のボタン・サイドパネルのボタン）: 拡大ビューを閉じ（回答のタブへ戻る）、回答の中の図も含めて会話を空にし、回答ごとの状態をすべて捨てる（前の会話の絞り込み・強調・選んだ候補・タブ・寄せ先が、次の会話に残らないように）。
-  - **コード上の注記**: 次は無くす。`HomeClient` の `defaultResultOpen`・`resultOpen`・`expanded`・`revealNonce`・live region（`announcement`）、`ResultArea` の「拡大」ボタン・`revealOnMount`・`revealNonce`、`ChatActions` の `answered`、`lib/result-view.ts` の `viewForResults`、CSS の `.home--expanded` と、チャットと結果領域を並べる・積む切り替え。結果領域の中の動き（`ResultArea`・`MapPanel`・`AreaChartView`・`CandidateDrawer`）は、拡大ビュー（パネル・タブ）の中で今までどおり。検査は、ボタンを押して拡大ビューを開いてから行う。
   - **チャットの最初の位置**（`frontend/components/chat/ChatPanel.tsx`）: 開いた直後（発言が 1 件も無い）は、チャットの一覧を一番上のままにして、説明の見出し「パリ近郊の街の変化を、写真と会話で調べる」から読み始められるようにする。発言の追加・送信中・失敗の変化のあと（発言が 1 件以上）だけ、いちばん下へ動かす。「新しい会話」で発言が 0 件に戻ったときは、一番上へ戻す。
   - **拡大ビューのタブ**（`frontend/components/ResultArea.tsx`。拡大ビューの中身）: 「地図」「グラフ」「画像」。WAI-ARIA の tabs で、選ぶと同時に切り替わる。選んでいるタブだけが Tab キーの順に入り、タブの間は ←・→・Home・End で動く（Alt・Ctrl・Cmd・Shift が付いた組み合わせは、ブラウザー・OS の操作なので処理しない）。3 つの画面は、どれも外さず、選んでいない画面は隠すだけにする（地図の位置・拡大を保つため）。**先頭に回答のタブを足した 4 つ**（チャットの画面も、選んでいないときは隠すだけ）。`tablist` に名前（`aria-label`）、各 `tab` に `aria-controls`、選んでいるタブだけ `aria-selected="true"`、各 `tabpanel` に `aria-labelledby`。矢印キーは端で反対側へ回る。隠す画面は `hidden`。パネルの先頭にフォーカスできる内容が無い画面は、`tabpanel` に `tabindex="0"`。**有効化は、初期値は「選ぶと同時に切り替わる（自動）」で、APG（W3C）が勧める形**（3 つの画面は開いたときにマウント済みで、切り替えに遅れが出ないため）。実画面で、地図の初回の読み込みの遅れが目立てば、手動（Space・Enter）に変える（**実画面で決める**）。ローヴィング `tabindex`（選んでいるタブだけが Tab の順に入り、ほかは `-1`）は、APG の本文ではなく、例のコードと属性の表にある（2026-11-26 に、APG のタブのパターンと自動有効化の例の JS を読んで確認した。矢印キーの端での回り込み・Home／End〔任意〕・自動有効化は「遅れなく表示できるとき」に勧める、も同じ）。
   - **画面が替わるときのフォーカス**: 見ていた画面の中（詳細の「地図で見る」・グラフの「地図で見る」など）にフォーカスがあるまま、その画面が隠れるときだけ、選ばれたタブへフォーカスを移す（フォーカスが消えないように）。タブの操作と、画面の外にあるフォーカスは、動かさない。
@@ -554,11 +526,11 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
   - **写真の比較**（`frontend/components/CandidateDrawer.tsx`。旧: 重なって開くドロワー）: 候補を選んでいないときは、選び方の案内を出す（この枠はフォーカスを受ける。フォーカスの輪は、親の `overflow` に切られないよう、枠の内側に描く）。選んでいるときは、その候補の詳細を、このタブの中に埋め込んで出す（地図に重ならない）。内容は、2014・2024 の切り出し画像を並べる（`/api/candidates/{id}/image`）、分類のバッジと平易な説明、根拠の数字（`evidence`）、位置、データの出どころ、「地図で見る」（地図のタブへ切り替えて、その候補へ寄せる）、閉じるボタンは持たない（閉じるのは、拡大ビューの ✕・Esc）。チャットの写真を押して開いたときは、その候補を選び、見出しへフォーカスを移す。
     - **詳細は、「写真の比較」が一度見えるまでマウントしない**（`frontend/components/HomeClient.tsx` の `PhotosPanel`）: 地図の印を選んだだけでは、`GET /api/candidates/{id}` を呼ばない（印を続けて押しても 0 回）。「写真を比べる」を押す・「画像」のタブを選ぶ・チャットの写真を押して開く、のどれかで写真の比較が見えたときに、初めてマウントして 1 回取る。一度見えた詳細は、別のタブへ替えても保ち、戻しても取り直さない。選んだ候補が替わったら、前の詳細は外し、新しい候補は、また見えるまでマウントしない。見えたときにマウントするので、見出しへフォーカスを移すかどうかも、そのときの選び方で決まる（「写真を比べる」とチャットの写真は移す。タブ操作は、フォーカスを奪わない）。
     - **閉じたあとのフォーカス**: 詳細だけを閉じる操作は無い。✕・Esc は拡大ビューごと閉じ、フォーカスは開いたボタン（無ければ入力欄）へ戻る（上の「フォーカス・閉じる」）。候補の切り替えで見えていない詳細が外れ、フォーカスが body に落ちたときは、開く前の場所へ戻す（フォーカスが別の所にあれば動かさない）。選択は、その回答の状態に残る。
-  - **幅**: チャットは常に 1 列（会話・「新しい会話」の行・入力欄・最初の画面は、幅 46rem（`--chat-w`）の列を中央に置く。左右の余白は `--chat-pad` = `max(1.25rem, (幅 − 46rem) / 2)` で、3 つとも同じ式。外側の枠・背景・角丸は無い。420px 以下は余白 0.75rem）。回答の中の図も、この列の中（結果カードと同じ幅）。常設の結果領域は無く、結果領域が見える所までのスクロールも無い。拡大ビューは、全幅の 4 つのタブ（上の「見た目」）。地図・グラフ・写真の比較が本体の全幅になるので、写真の比較の中身の最大幅（読みやすい上限）は、**実画面で決める**（旧: 窓が 1257px 以上のときの `clamp(1040px, 70vw, 1440px)` は、横パネルの導入で無くなった）。
+  - **幅**: チャットは常に 1 列（会話・「新しい会話」の行・入力欄・最初の画面は、幅 46rem（`--chat-w`）の列を中央に置く。左右の余白は `--chat-pad` = `max(1.25rem, (幅 − 46rem) / 2)` で、3 つとも同じ式。外側の枠・背景・角丸は無い。420px 以下は余白 0.75rem）。回答の中の図も、この列の中（結果カードと同じ幅）。常設の結果領域は無く、結果領域が見える所までのスクロールも無い。拡大ビューは、全幅の 4 つのタブ（上の「見た目」）。地図・グラフ・写真の比較が本体の全幅になるので、写真の比較の中身に、最大幅（読みやすい上限）は設けていない（必要になれば、実画面で決める）。
   - **チャットの見た目**（`frontend/components/chat/ChatPanel.tsx`・`Composer.tsx`・`app/globals.css`。ユーザー決定 2026-11-25: DocuNavi のチャットと同じ見た目にする。値は DocuNavi の `frontend/src/styles.css` の宣言をそのまま写す）: **質問**は右寄せ・最大幅 85%・枠なしの無彩色の淡い背景（`--surface-muted`）・文字は通常の色・1rem。**質問の前**に、送った時刻を中央に薄く出す（`<time>`。「今日 9:05」「昨日 20:41」「11月14日 21:02」「2025年11月14日 21:02」。`frontend/lib/sentAt.ts`。時刻は端末で付ける画面だけの値で、`/api/chat` へは送らない。送信に失敗した質問にも付き、「もう一度送る」で時刻は変えない）。**回答の本文**は 1rem・行間 1.85・`--text-body`（少し淡い色）。結果カード・表の文字は、これまでの大きさ。**入力欄**は角丸の 1 つの枠（フォーカスが中にあるあいだ、主色の縁とフォーカスの輪）で、中に伸びる入力（`textarea`。1 行から最大 13rem）と、下の行の右に**丸いアイコンだけの送信ボタン**（名前「送信」・title「送信（Enter）」）。Enter で送り、Shift+Enter で改行し、日本語入力の変換を確定する Enter では送らない。空・空白だけの間と、返答待ちの間は、ボタンも Enter も送らない。**続けて聞く**（DocuNavi の `.follow-ups`・`.follow-up` と同じ宣言。`frontend/components/chat/ChatPanel.tsx`）: 回答が届いたあと（返答待ち・失敗のときは出さない）、会話の中の、最後の回答の下に、上に区切りの線を引いて、まだ聞いていない質問の例を最大 2 件、縦に並べる（その上に、あれば「表示を切り替える」の組。こちらは見出しの文字を出し、小さいボタンを横に並べる）（枠なし・0.85rem・`--text-muted`・先頭に「↳ 」・触れると主色と下線。見出しの文字は出さず、名前は aria-label「続けて聞く」）。押すとその質問を送り、入力欄へフォーカスを移す。以前の、入力欄の上の丸い質問の例の行は無い。**最初の画面の質問の例**は、DocuNavi の `.example-chips`・`.example-chip` と同じ宣言（幅いっぱいの角丸の長方形のボタンを縦に並べる。違いは、幅を 34rem までにすることと、見出しとの間の余白だけ）。範囲外の例は、破線の枠でも区別する。**「新しい会話」**のボタン（入力欄の上。同じ幅の列の右端）は、サイドパネルの無い幅（1023px 以下）だけで見える（1024px 以上は、サイドパネルの同じ処理のボタンだけ。DocuNavi のチャットには無い）。
 - 地図（拡大ビューの「地図」）: IGN の公開タイル配信を直接読む（標準地図 Plan IGN・2014 年と 2024 年の BD ORTHO。帯の外・範囲外のタイルが 404 でも崩れない。出典の表示）。解析した 12 地区の枠を描く。候補のポリゴンを分類の色（色だけに頼らず、形・線種・分類の印でも区別）で描く。パネルは縦の flex で、地図（`.map-stage`）が、上下の帯の残りの高さをすべて取る（最小 320px）。帯は縮めず、中身が収まらないときだけ、パネルがスクロールする。上から、次の順に並べる。帯（ツールバー・集計の帯・現在表示の帯）は、幅が足りなければ折り返す（はみ出さない）。
   - **ツールバー**: 地図の種類・地区の選択・「解析した地区の枠」を、1 行に並べる（狭い幅では折り返す）。ボタン・選択・チェックは 36px。
-  - **集計の帯**（`frontend/components/map/SummaryStrip.tsx`）: 「対象」・分類ごとの件数・（条件があれば）「条件を解除」。数字は `/api/areas` の件数を足したもので、地区の条件だけを反映する。**分類ごとの件数は、そのまま表示の切り替えのチェックボックス**（`role="group"`「表示する分類（色・線・形で区別）」）で、分類の印（色・線・形）・短い名前・件数を 1 つのラベルにまとめる。**地図に重ねる凡例は無い**（同じ内容を 2 か所に出さない）。押すと `filter.classes` だけを替え、地区（`areaId`）と複数の地区（`areaIds`・`scope`）の条件は保つ。選んでいる分類は、色だけでなく、チェック・太い枠・地色で見分ける。外した分類は「（非表示）」。分類の一部だけを表示しているときは、「全 m 件のうち、表示中 n 件」と「条件を解除」を出す。読み上げの名前は、分類の全文と件数（例「新規出現（旧写真に無い）、9 件」）。
+  - **集計の帯**（`frontend/components/map/SummaryStrip.tsx`）: 「対象」・分類ごとの件数・（条件があれば）「条件を解除」。数字は `/api/areas` の件数を足したもので、地区の条件だけを反映する。**分類ごとの件数は、そのまま表示の切り替えのチェックボックス**（`role="group"`「表示する分類（色・線・形で区別）」）で、分類の印（色・線・形）・短い名前・件数を 1 つのラベルにまとめる。**地図に重ねる凡例は無い**（同じ内容を 2 か所に出さない）。押すと `filter.classes` だけを替え、地区（`areaId`）と複数の地区（`areaIds`・`scope`）の条件は保つ。選んでいる分類は、色だけでなく、チェック・太い枠・地色で見分ける。外した分類は「（非表示）」。分類の一部だけを表示しているときは、「全 m 件のうち、表示中 n 件」と「条件を解除」を出す。読み上げの名前は、分類の名前と件数（例「2014 年は未検出、9 件」）。
   - **地図**: 地図の上に重ねるのは、候補の読み込み中（`role="status"`）と、読み込みの失敗（`role="alert"`。再試行つき）の、小さい通知 1 つだけ。候補と地区の一覧が両方失敗したときは 1 つにまとめ、再試行は両方を取り直す。下端に、選択中の候補のカード（上の「印・形を押したとき」）。
   - **現在表示の帯**（`.map-status`。1 行。長いときは折り返す）: 現在の表示・「強調表示を解除」・案内「印・形を選ぶと「写真を比べる」が出ます。」・地図についての通知（写真が無い範囲のタイルの通知は `role="status"`。「候補は印で表示しています。拡大すると建物の形が見えます。」。候補が 0 件のときの文）。**通知は、地図に重ねず、この帯に出す**。
   - **「候補を一覧で見る（面積の大きい順）」**（既定は閉じている）: 一覧の項目のフォーカスの輪が切れないよう、スクロールする枠に 6px の余白を取る（負の余白で位置は保つ）。
@@ -568,10 +540,10 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
   - `year_compare` があれば、もう一方の年の写真での値と、年で比べる表を出す。無い・形が違うときは、その部分を出さず、画面は落ちない。
   - 限界欄に、`existing_absent_in_2014` から描く「2014 年の写真での見落とし」（既存の建物のうち、2014 年の抽出が何も見ていない割合。正解データの代わりにならない）、参照と写真の時期のずれと物体単位の適合率が合成値であること、年ごとの再現率の違い（数字だけ。原因は書かない）を載せる。数字はデータから描き、手書きにしない。
   - 評価の内部のキー名（`pixel_iou` など）は、日本語の見出しにする。
-- `/accuracy` の末尾: 既知の限界（写真が無い期間・写真は 2 時点・地区は新築の多い場所・タイルの縁・誤検出の可能性・対象範囲・未実装のもの＝衛星の「変化の当たり」・パネル・人による確認・公開。精度を測っていないときは「正解が無い」も）と、出典と規約（IGN の公開タイル配信と BD ORTHO＝Licence Ouverte 2.0、地区の選び方に使った FOTBCD の作者と CC BY 4.0、モデル `IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet`＝提供者 IGN・Licence Ouverte 2.0（Etalab 2.0）・最終更新 2026-04-28・写真を機械学習に使うことは利用規約に記載が無い）。限界の「タイルの縁」は、地区の縁で切れた建物を見えている部分だけで分類し、面積が実際より小さい場合があること（精度を測っているときは、測定で縁の建物を外すことも）。「誤検出の可能性」は、目で見て確かめた誤りの例（道路の上を建物と判定・隣り合う建物が 1 つの形にまとまる）と、見落としもあること。最初のチャット画面は、見出し・1 行の説明（候補であり新築と断定しない）・地図のボタン・質問の例だけを出し、対象・地区の名前・比較・出典・分類・範囲外の質問は「くわしく」（閉じた状態）に入れる。入力欄の下にモデル名の注記は出さない（モデルの印は、サイドパネル・上の横帯に 1 か所）。
+- `/accuracy` の末尾: 既知の限界（写真が無い期間・写真は 2 時点・地区は新築の多い場所・タイルの縁・誤検出の可能性・対象範囲・未実装のもの＝衛星の「変化の当たり」・パネル・人による確認・公開。精度を測っていないときは「正解が無い」も）と、出典と規約（IGN の公開タイル配信と BD ORTHO＝Licence Ouverte 2.0、地区の選び方に使った FOTBCD の作者と CC BY 4.0、モデル `IGNF/FLAIR-HUB_LC-A_RGB_swinbase-upernet`＝提供者 IGN・Licence Ouverte 2.0（Etalab 2.0）・最終更新 2026-04-28・写真を機械学習に使うことは利用規約に記載が無い）。限界の「タイルの縁」は、地区の縁で切れた建物を見えている部分だけで分類し、面積が実際より小さい場合があること（精度を測っているときは、測定で縁の建物を外すことも）。「誤検出の可能性」は、目で見て確かめた誤りの例（道路の上を建物と判定・隣り合う建物が 1 つの形にまとまる）と、見落としもあること。最初のチャット画面は、見出し・1 行の説明（候補であり新築と断定しない）・地図のボタン・質問の例だけを出し、対象・地区の名前・比較・出典・分類・範囲外の質問は「くわしく」（閉じた状態）に入れる。入力欄の下にモデル名の注記は出さない（モデルの印は、どこにも出さない）。
 - ブラウザから API へは、同じオリジンの `/api/*`（Next の rewrites。転送先は実行時の環境変数 `API_URL`）。ただし `/api/auth/*`（ログイン・JWKS）は web 自身の Route Handler が受け、api へは転送しない（§2.1）。
 - ログインの依存: `better-auth` 1.7.18 と `pg`（版を固定し、ロックファイルに含める）。ほかの新しいサービス・言語・DB は足さない。
-- 技術: Next.js（最新の安定版を、版を固定して）、React、TypeScript strict、Node 24、`output: "standalone"`。地図は Leaflet か MapLibre GL JS（版を固定。選んだ理由を 1 行）。`npm ci` で入れる（ロックファイルをコミット対象に含める）。
+- 技術: Next.js（最新の安定版を、版を固定して）、React、TypeScript strict、Node 24、`output: "standalone"`。地図は Leaflet（版を固定）。`npm ci` で入れる（ロックファイルをコミット対象に含める）。
 
 ### 7.1 会話の履歴（ログイン中だけ）
 
@@ -612,7 +584,7 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
 
 #### 7.1.4 開き直し（再開）
 
-1. 押したら、返答待ちを止め、発言を空にし、**拡大ビューも「新しい会話」と同じに閉じて、回答ごとの状態を捨て**（前の会話の絞り込み・強調・選んだ候補・タブ・寄せ先が残らないように）、会話 ID を `sessionStorage`（キー案 `townscan:conversation_id`。タブごと）に書く。
+1. 押したら、返答待ちを止め、発言を空にし、**拡大ビューも「新しい会話」と同じに閉じて、回答ごとの状態を捨て**（前の会話の絞り込み・強調・選んだ候補・タブ・寄せ先が残らないように）、会話 ID を `sessionStorage`（キー `townscan:conversation_id`。タブごと）に書く。
    - **新しい会話の ID を `sessionStorage` に書くのは、`conversation_id` つきで送った最初の回答が届いたとき**（保存されたとき）〔J6〕。最初の送信が失敗した・保存を飛ばして送り直した（§7.1.7）のに ID だけが残り、再読み込みで「見つかりません」になるのを避ける。
 2. `GET /api/conversations/{id}/messages` を取る。取っている間、チャット欄には説明（`Welcome`）ではなく「これまでのやり取りを読み込んでいます…」（`role="status"`）を出す（DocuNavi と同じ文言）。取得の間に別の会話へ移った・新しい会話にした・送信を始めたなら、遅れて届いた結果は捨てる（DocuNavi の `jobRef`）。
 3. 届いたら、`ChatEntry`（`role`・`content`・`results`・`tool_calls`）として並べる（形が合わない `results` は、今の画面と同じく、壊れずに飛ばす）。以後、続きを送れる（送る `messages` は、今と同じく画面の発言から作り、`conversation_id` を付ける）。並べた位置は、いまの「回答が届いたあと」の規則（長い回答は質問の先頭が見える位置）と同じ。**拡大ビューは開かず、画面は替えない**（回答が届いたときと同じ。§7）。回答の中の図は、回答が届いたときと同じく、回答の中に出る（地図は画面に近づくまでマウントしない）。解析結果が変わっていた回答の扱いは §7.1.5。
@@ -633,14 +605,14 @@ python -m pipeline.evaluate_fotbcd --split val --tar data/fr/download/val-000000
 3. **解析結果（run）が変わっていたら、その回答は「別の解析結果に基づく回答」として扱う**（拡大ビューを開かせない。規則 4）。回答ごとに、作ったときの run といまの run を比べる:
    - 作ったとき: 回答の `results` の `provenance.run_id`（`refusal` には無い）と、その回答の `run_created_at`（§2.3.2・§4.4）〔J4〕。
    - いま: `GET /api/health` の `run.run_id` と `run.created_at`（`HealthProvider` が持つ）。
-   - **`run_id` が同じでも、`run_created_at` が違えば、別の解析結果。** 実データの `run_id` は run のフォルダ名（`pipeline/run_postprocess.py` の `default_run_id`）で、`created` の既定は現在時刻。ローダーは同じ `run_id` の行を消して入れ直す（`pipeline/load.py` の `write_run`）。同じ `run1` を後処理し直して読み込み直すと、候補 ID・件数が変わっても `run_id` は同じで、`created_at` だけが変わる。
+   - **`run_id` が同じでも、`run_created_at` が違えば、別の解析結果。** 実データの `run_id` は run のフォルダ名（`pipeline/run_postprocess.py` の `default_run_id`）で、`created` の既定は現在時刻。ローダーは同じ `run_id` の行を消して入れ直す（`pipeline/load.py` の `write_run`）。同じ run を後処理し直して読み込み直すと、候補 ID・件数が変わっても `run_id` は同じで、`created_at` だけが変わる。
    - 時刻は、文字列ではなく時刻として（`Date.parse` のミリ秒）比べる（表記が違いうるため）。
    - 回答に `provenance` があるのに `run_created_at` が null のときは、別の解析結果と見る（安全側）。`refusal` だけの回答は、run に依らないので、別の解析結果とは見ない。
    - 現在の run が分からない（health の取得に失敗）ときも、別の解析結果と見る（食い違いを見せない側に倒す）。
    - 残る穴: 後処理の `--created` で、同じ時刻を明示して入れ直した場合は見分けられない（ADR 0006 の未確認）。
 4. 別の解析結果の回答があるときは、会話の先頭に注意書き「この会話の一部は、いまとは別の解析結果に基づいています。件数や地図は、いまのデータと食い違うことがあります。」を 1 行出す。**その回答のカードの、拡大ビューへ進むボタンは、押せなくし、回答の中の図（地図・グラフ）は出さない**（ボタン: 地図の表示の「地図で見る」、候補の一覧の写真のカード。回答の下の「表示を切り替える」は出さない。図は、いまのデータで描くので、食い違った地図・グラフを見せない。押すと、いまのデータに無い地区・候補を開いてしまう。質問の例のボタン〔`ask`〕は、新しい質問を送るだけなので、そのまま使える）。カードの数字・文は、保存された値のまま読める。**検出画像のカードと候補の一覧は、写真も読み込まない**（検出画像は、写真を押すボタンも出さない。件数の回答は、写真のカードを出さない）〔J5〕（保存された画像の URL は、別の解析結果では、無い候補・別の建物を指しうるため。代わりに「別の解析結果の写真は表示しません」と出す。この 1 点は、ユーザー決定の「ボタンを無効にする」への、起草者の追加）。実装の目安: `ChatEntry` に印（例 `staleRun`）を足し、`ResultCard` へ渡して、ボタンの `disabled` と写真の抑止に使い、`ChatPanel` は図（`renderFigure`）を呼ばない（`frontend/components/chat/types.ts`・`ChatPanel.tsx`・`ResultCard.tsx`・`cards.tsx`）。
 
-**理由:** 回答の `results` は、その時点の run（`kind` が `synthetic` か `real` かも含む）の値で、候補 ID（`c-x-y-n`）・地区の `filter` も run ごとに違う。解析結果は、読み込み直すと入れ替わる（`python -m app.load`。表示するのは最新の run）。合成データで話した会話を、実データになってから開くと、カードの件数と地図が食い違う。TownScan は、「古い run の画面を作らない」とする（DocuNavi は、保存した検索範囲がいま見えないとき〔`scope_unavailable`〕、範囲を主張せず、続きは保存された範囲で探す）。
+**理由:** 回答の `results` は、その時点の run（`kind` が `synthetic` か `real` かも含む）の値で、候補 ID（`c-x-y-n`）・地区の `filter` も run ごとに違う。解析結果は、読み込み直すと入れ替わる（`python -m pipeline.load`。表示するのは最新の run）。合成データで話した会話を、実データになってから開くと、カードの件数と地図が食い違う。TownScan は、「古い run の画面を作らない」とする（DocuNavi は、保存した検索範囲がいま見えないとき〔`scope_unavailable`〕、範囲を主張せず、続きは保存された範囲で探す）。
 
 #### 7.1.6 削除（2 段階）
 
@@ -667,7 +639,7 @@ DocuNavi の `ThreadSidebar` と同じ。
 #### 7.1.8 そのほか
 
 - 狭い幅・細い帯・テーマ（ライト・ダーク）・キーボード操作（項目とゴミ箱が Tab の順に入る。確認の 2 つのボタンへフォーカスが移る）は、DocuNavi の `ThreadSidebar` に合わせて作り、実画面で確かめる（未確認）。
-- 画面の部品の置き場の案（新設の予定。いまは無い）: `frontend/lib/conversations-api.ts`（3 本の呼び出し）、`frontend/lib/auth-token.ts`（§2.3.6）、`frontend/lib/use-conversations.ts`（`frontend` に `hooks/` は無く、フックは `lib/use-api.ts` のように `lib/` に置く）、`frontend/components/ConversationList.tsx`（サイドパネルの中）。サイドパネルとチャットのつなぎは、既存の `NewConversation.tsx`（登録の仕組み）に、「開く」「いま開いている会話」「生成中」を足して広げる。
+- 画面の部品の置き場: `frontend/lib/conversations-api.ts`（3 本の呼び出し）、`frontend/lib/auth-token.ts`（§2.3.6）、`frontend/lib/use-conversations.ts`、`frontend/components/ConversationList.tsx`（サイドパネルの中）、`frontend/components/HistoryProvider.tsx`。
 - 画面に、件数の上限（50 件）を知らせる表示は、初版では作らない（古い会話が自動で消えることは、404 の文でだけ伝わる。ADR 0006 の未確認）。
 
 ## 8. 出口条件（実行して確かめる）
@@ -676,25 +648,25 @@ DocuNavi の `ThreadSidebar` と同じ。
 |---|---|---|
 | E1 | `scripts/verify.sh repo` が合格 | 統合 |
 | E2 | `pipeline` の単体テストが合格（タイル計算・ベクトル化・正解の建物データの読み込み・評価指標・分類・固定の値の経路・地区名を、合成データで） | pipeline |
-| E3 | `backend` のテストが合格（DB を使うもの、`guard_numbers`、範囲外の拒否、画像の切り出し、ローダーの冪等性） | backend |
+| E3 | `scripts/test-go.sh`（`guard_numbers`・範囲外の拒否・画像の切り出し・DB を使うもの）と、`scripts/verify.sh loader`（ローダーの冪等性）が合格 | api・loader |
 | E4 | `frontend` の型検査・lint・テスト・`next build` が合格 | frontend |
-| E5 | `scripts/dev-up.sh` で 3 つが起動し、`/api/health`・web の `/`・web 経由の `/api/candidates` が応答。3 つの使用メモリを実測して記録 | backend + 統合 |
+| E5 | `scripts/dev-up.sh` で 3 つが起動し、`/api/health`・web の `/`・web 経由の `/api/candidates` が応答。3 つの使用メモリを実測して記録 | 統合 |
 | E6 | 実データを読み込み、DB の件数 = `candidates.geojson` の件数 = UI の件数 | メイン |
 | E7 | Chrome で、質問 → 結果カード → 拡大ビュー（地図・グラフ）→ 詳細（2014/2024 の写真）→ 精度の画面、の一連を、**広い幅と狭い幅の両方**（どちらも 4 つのタブ）で操作して確認（スクリーンショット）。ライト・ダークも見る。VoiceOver での確認（タブの読み上げ・新着の知らせ・フォーカス）は、確かめられなければ「未確認」と書く | メイン |
-| E8 | `frontend` のテストが、回答の中の図と拡大ビュー（§7）を確かめる: ①最初の画面は、タブの帯（4 つ）が出て回答のタブが選ばれ、結果つきの回答が届いても、拡大ビューは開かず、画面は替わらない（図は回答の中に出る）。最初の画面で地図・グラフ・画像のタブを押すと、回答を持たない拡大ビューがその画面で開く ②**図の出る条件**: 順位が 1 位の結果が比較ならグラフ、地図の表示なら地図で、1 つの回答に多くても 1 つ。件数・一覧・検出画像・精度・お断り・壊れた結果は図を出さない。回答の中の図は分類で分けない（凡例なし。地図は 1 色の印・形、グラフは 1 色の棒）。件数のカードは、写真のカード（4 件と残りを開くボタン。分類の見出し・札は無い。数が件数と合わなければ出さない。候補 ID は画面に出さない）と出典の 1 行を持つ。回答に「根拠を見る」と「対象・条件」の行は無い ③図の「地図を拡大」「グラフを拡大」・写真・地図の表示の「地図で見る」・「表示を切り替える」で、その回答の画面（地図・グラフ・写真の比較）が、**全幅の 4 つのタブ**（`aria-modal`・`inert` なし）で開き、右上の ✕ か Esc で閉じて、開いたボタン（図の「拡大」・写真を含む）へフォーカスが戻る（詳細の中の Esc も同じ。詳細だけを閉じる操作は無い） ④回答ごとにタブ・絞り込み・選んだ候補を保ち、**図で変えた絞り込み・選択が拡大ビューに引き継がれ（逆も）**、鍵（回答）を渡す操作が別の回答の状態を壊さない ⑤「新しい会話」で拡大ビューを閉じ、図も回答ごとの状態も捨てる ⑥回答の下の表示は順位で 1 つで、2 位以下は「表示を切り替える」（2 つまで・最新の回答だけ・押しても API を呼ばない）。比較のカードは合計の 1 行で、地区の表は出さない ⑦**地図は、画面に近づくまでマウントしない**（`IntersectionObserver` が無い環境では、すぐマウントする）。一度マウントしたら保つ。図は名前つきの region（`aria-live="off"`）で、記録（`role="log"`）の中にあり、Tab で図の外へ抜けられる ⑧地図・グラフ・写真の比較・回答の条件の既存のテストが、拡大ビューの中で同じ振る舞いで通る ⑨**結果のタブ（[ADR 0008](decisions/0008-full-width-tabs.md)。ADR 0007 の受け入れ条件 1〜6 のうち、テストで確かめられるもの）**: `tablist`・`tab`・`tabpanel` の属性（`aria-label`・`aria-controls`・`aria-selected`・`aria-labelledby`）・矢印キーで端から反対側へ回る・非アクティブな画面が `hidden`・チャットを隠しても外れず入力中の文が残る・別のタブにいる間に回答が届いたとき回答のタブに文字の印が出て、**先に空で置いたライブ領域**へ 1 文が入る（フォーカスは動かない）。Esc で回答のタブへ戻り（タブの帯は残る）、開いたボタンへフォーカスが戻る・新しい回答が届いても画面は切り替わらない・拡大ビューの中の Esc（地図の選択の解除は閉じない）。幅の判定は無いので、窓の幅を変えても形も状態も変わらない（幅を替える検査は無い）。旧: 既存のテストの、モーダル（`dialog`・`aria-modal`・`inert`）を前提にした検査は、広い幅・狭い幅のそれぞれの形に置き換える。**VoiceOver での確認は、テストではなく実機の確認で、「未確認」から始める** | frontend |
-| E9 | 会話の履歴（§2.3・§4.3・§4.4・§7.1。**API（Go）・画面ともに実装済みで、①②③は合格した〔2026-11-25: 契約 660 件・Go のテスト 445 件・frontend の Vitest 1261 件〕。実機の通し確認は、Chrome で一部〔保存・一覧・開き直し・再読み込み・2 段階の削除〕**）。次の 3 つが、すべて合格する（内訳は下の「E9 の内訳」）: ①`scripts/test-contract.sh go` が、構成 `history` の H-系（26 行）と、既存の構成へ足す H-A5〜A7（3 行）に加えて、既存の検査（H-A3 = `contract/test_auth_independence.py`。変更しない）まで、全件合格する。**Python の API には H-系を流さない**: `scripts/test-contract.sh python` では、H-系が deselect され、落ちない ②`api/` の `go vet` と `go test -race -count=1` が、下の「契約にしない」項目（並行・巻き戻し・LLM を呼ぶ前の拒否・ログ・保守コマンドなど）を含めて合格する ③`frontend` の型検査・lint・Vitest が、下の「画面（Vitest）」の項目を含めて合格する | api（Go）・contract・frontend |
+| E8 | `frontend` のテストが、回答の中の図と拡大ビュー（§7）を確かめる: ①最初の画面は、タブの帯（4 つ）が出て回答のタブが選ばれ、結果つきの回答が届いても、拡大ビューは開かず、画面は替わらない（図は回答の中に出る）。最初の画面で地図・グラフ・画像のタブを押すと、回答を持たない拡大ビューがその画面で開く ②**図の出る条件**: 順位が 1 位の結果が比較ならグラフ、地図の表示なら地図で、1 つの回答に多くても 1 つ。件数・一覧・検出画像・精度・お断り・壊れた結果は図を出さない。回答の中の図は分類で分けない（凡例なし。地図は 1 色の印・形、グラフは 1 色の棒）。件数のカードは、写真のカード（4 件と残りを開くボタン。分類の見出し・札は無い。数が件数と合わなければ出さない。候補 ID は画面に出さない）と出典の 1 行を持つ。回答に「根拠を見る」と「対象・条件」の行は無い ③図の「地図を拡大」「グラフを拡大」・写真・地図の表示の「地図で見る」・「表示を切り替える」で、その回答の画面（地図・グラフ・写真の比較）が、**全幅の 4 つのタブ**（`aria-modal`・`inert` なし）で開き、右上の ✕ か Esc で閉じて、開いたボタン（図の「拡大」・写真を含む）へフォーカスが戻る（詳細の中の Esc も同じ。詳細だけを閉じる操作は無い） ④回答ごとにタブ・絞り込み・選んだ候補を保ち、**図で変えた絞り込み・選択が拡大ビューに引き継がれ（逆も）**、鍵（回答）を渡す操作が別の回答の状態を壊さない ⑤「新しい会話」で拡大ビューを閉じ、図も回答ごとの状態も捨てる ⑥回答の下の表示は順位で 1 つで、2 位以下は「表示を切り替える」（2 つまで・最新の回答だけ・押しても API を呼ばない）。比較のカードは合計の 1 行で、地区の表は出さない ⑦**地図は、画面に近づくまでマウントしない**（`IntersectionObserver` が無い環境では、すぐマウントする）。一度マウントしたら保つ。図は名前つきの region（`aria-live="off"`）で、記録（`role="log"`）の中にあり、Tab で図の外へ抜けられる ⑧地図・グラフ・写真の比較・回答の条件の既存のテストが、拡大ビューの中で同じ振る舞いで通る ⑨**結果のタブ（[ADR 0008](decisions/0008-full-width-tabs.md)。ADR 0007 の受け入れ条件 1〜6 のうち、テストで確かめられるもの）**: `tablist`・`tab`・`tabpanel` の属性（`aria-label`・`aria-controls`・`aria-selected`・`aria-labelledby`）・矢印キーで端から反対側へ回る・非アクティブな画面が `hidden`・チャットを隠しても外れず入力中の文が残る・別のタブにいる間に回答が届いたとき回答のタブに文字の印が出て、**先に空で置いたライブ領域**へ 1 文が入る（フォーカスは動かない）。Esc で回答のタブへ戻り（タブの帯は残る）、開いたボタンへフォーカスが戻る・新しい回答が届いても画面は切り替わらない・拡大ビューの中の Esc（地図の選択の解除は閉じない）。幅の判定は無いので、窓の幅を変えても形も状態も変わらない（幅を替える検査は無い）。**VoiceOver での確認は、テストではなく実機の確認で、「未確認」から始める** | frontend |
+| E9 | 会話の履歴（§2.3・§4.3・§4.4・§7.1。**API（Go）・画面ともに実装済みで、①②③は合格した〔2026-11-25: 契約 660 件・Go のテスト 445 件・frontend の Vitest 1261 件〕。実機の通し確認は、Chrome で一部〔保存・一覧・開き直し・再読み込み・2 段階の削除〕**）。次の 3 つが、すべて合格する（内訳は下の「E9 の内訳」）: ①`scripts/test-contract.sh go` が、構成 `history` の H-系（26 行）と、既存の構成へ足す H-A5〜A7（3 行）に加えて、既存の検査（H-A3 = `contract/test_auth_independence.py`。変更しない）まで、全件合格する。 ②`api/` の `go vet` と `go test -race -count=1` が、下の「契約にしない」項目（並行・巻き戻し・LLM を呼ぶ前の拒否・ログ・保守コマンドなど）を含めて合格する ③`frontend` の型検査・lint・Vitest が、下の「画面（Vitest）」の項目を含めて合格する | api（Go）・contract・frontend |
 
 **E9 の内訳**（契約の検査 `contract/` の H-系。**書き終えていて、Go の API が合格している**。DocuNavi の対応する検査は、`tests/test_threads.py` の関数名で示す）:
 
-**前提:** 契約の検査は、HTTP だけで叩く（アプリのコードを import しない）。履歴は、Python の API には入れない（ADR 0006 の D8）ので、新しい構成 **`history`**（環境は `main` と同じ。合成データ・偽の JWKS）を作り、`scripts/test-contract.sh` の既定の構成の並びには、**対象が `go` のときだけ**入れる。認証の設定が無い・JWKS に届かない・DB が止まる、の検査（H-A5〜A7）は、既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す。
+**前提:** 契約の検査は、HTTP だけで叩く（アプリのコードを import しない）。履歴は、構成 **`history`**（環境は `main` と同じ。合成データ・偽の JWKS）で流す。認証の設定が無い・JWKS に届かない・DB が止まる、の検査（H-A5〜A7）は、既存の構成（`noauth`・`badauth`・`jwksdown`・`dbdown`）に足す。
 
-**Python の API に流さない仕組み**〔J7〕: H-系の検査はすべて、機能の印 `@pytest.mark.history` を付ける（構成の印 `variant` とは別）。`contract/conftest.py` は、環境変数 `CONTRACT_FEATURES` に `history` が無いとき、この印の検査を deselect する。`scripts/test-contract.sh` は、対象が `go` のときだけ `CONTRACT_FEATURES=history` を検査のコンテナへ渡す。これが無いと、既存の構成に足す H-A5〜A7 が、履歴の経路を持たない Python の API（404）に流れて落ちる。`contract/conftest.py` の `VARIANTS`・`DATA_VARIANTS` と、`scripts/test-contract.sh` の構成の表（`phase_env`。`history` は `main` と同じ設定）にも `history` を足す。
+**機能の印**〔J7〕: H-系の検査は `@pytest.mark.history` を持ち、`contract/conftest.py` は、環境変数 `CONTRACT_FEATURES` に `history` が無いとき、この印の検査を deselect する（`scripts/test-contract.sh` はいつも渡す。Python の API があったころの仕組みで、外してもよい。未決）。
 
 **検査の数（構成ごとの内訳）:** 下の表は 30 行。`history` に新しく入るのが **26 行**（H-A1・A2・A4、L1〜L8、M1〜M5、D1〜D3、C1〜C7）、既存の構成に足すのが **3 行**（H-A5 は `noauth`・`badauth`、H-A6 は `jwksdown`、H-A7 は `dbdown`。H-A5 は 2 つの構成で流れる）、既存の検査（`main` の `test_auth_independence.py`。変更しない）が 1 行（H-A3）。
 
 **データの準備の追加（利用者の行）**〔J7〕: 偽の JWT の `sub` に対応する `auth_user` の行が要る（外部キー・LLM の前の存在の確認）。検査は互いの状態に依存してはならない（H-L1 の「一覧が空」や、H-L4・H-L5 の件数は、同じ利用者を別の検査が使うと順序で壊れる）ので、**検査ごとに別の利用者を使う**:
 
-- `scripts/test-contract.sh` の、データを読み込む段のあと（`auth_user` の表ができたあと）に、使い捨ての DB へ、**検査用の利用者を十分な人数（案: 200 人）**入れる（`docker exec` で `psql`。`INSERT INTO auth_user (id, name, email, "emailVerified") SELECT … FROM generate_series(1, 200) …`）。`id` は `ct_user_000001` の形（`sub` の規則 `[A-Za-z0-9_-]{8,64}` に合う）。契約の検査自身は DB に触れない。
+- `scripts/test-contract.sh` の、データを読み込む段のあと（`auth_user` の表ができたあと）に、使い捨ての DB へ、**検査用の利用者を十分な人数（既定 200 人。`CONTRACT_HISTORY_USERS`）**入れる（`docker exec` で `psql`。`INSERT INTO auth_user (id, name, email, "emailVerified") SELECT … FROM generate_series(1, 200) …`）。`id` は `ct_user_000001` の形（`sub` の規則 `[A-Za-z0-9_-]{8,64}` に合う）。契約の検査自身は DB に触れない。
 - 検査の側（`contract/support/fakes.py` と `contract/conftest.py`）に、`fresh_user()`（同じ実行の中で重ならない `sub` を返す。プールを使い切ったら、はっきり失敗する）を足す。`make_token(sub=…)` で別の利用者の JWT を作れる（`fakes.py` の `make_token(**overrides)` が `claims` の項目を上書きする）。**行の無い利用者**（H-A4）は、プールの外の固定の `sub`（例 `ct_nouser_000001`）。
 - 後始末はしない（DB は、実行ごとの使い捨て）。**`history` 構成は、使い捨ての DB 専用**（同じ DB に 2 回流すと、利用者が新しくならず、H-L1 などが落ちる）。`contract/README.md` の「データの準備」に、この制約と、手で用意するときの SQL を書く（`contract/README.md` の更新は、実装の段）。
 
